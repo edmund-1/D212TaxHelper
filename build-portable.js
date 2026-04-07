@@ -171,25 +171,14 @@ async function build() {
   // 5. Create Start.bat
   log('Creating launcher...');
   const startBat = `@echo off
-title D212TaxHelper
-echo.
-echo   ===================================
-echo    D212TaxHelper
-echo    Starting server...
-echo   ===================================
-echo.
-
 set "PORTABLE_DIR=%~dp0"
 set "NODE=%PORTABLE_DIR%node\\node.exe"
 set "APP=%PORTABLE_DIR%app\\server.js"
 
 cd /d "%PORTABLE_DIR%app"
-
-REM Start server hidden and open browser
-start /b "" "%NODE%" "%APP%" >nul 2>&1
+powershell -WindowStyle Hidden -Command "Start-Process '%NODE%' -ArgumentList '%APP%' -WindowStyle Hidden -WorkingDirectory '%PORTABLE_DIR%app'"
 timeout /t 2 /nobreak >nul
 start http://localhost:3000
-
 exit
 `;
   fs.writeFileSync(path.join(DIST, 'Start.bat'), startBat, 'utf8');
