@@ -1,5 +1,23 @@
 # D212 Tax Helper - Changelog
 
+## v2.2.0 (2026-04-07)
+
+### Upgrades
+- **Express 5.2.1** — upgraded from v4 (improved async error handling, Brotli encoding support)
+- **Tesseract.js 7.0.0** — upgraded from v5 (15-35% faster OCR via relaxedsimd WASM build)
+- **Multer 2.1.1** — upgraded from v1 (resolved deprecation warning)
+- Removed unused `xlsx` package (resolved high severity vulnerability)
+- Updated `path-to-regexp` (resolved high severity vulnerability)
+- **0 vulnerabilities, 0 deprecations, 0 outdated packages**
+
+### Fixes
+- OCR crash prevention — server no longer crashes on image-based PDFs
+- Hidden server window — Start.bat runs invisibly in background
+- Exchange rate chart hidden when no data
+- LICENSE included in portable build
+
+---
+
 ## v2.1.0 (2026-04-07)
 
 ### New Features

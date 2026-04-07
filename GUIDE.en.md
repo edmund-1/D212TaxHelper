@@ -1,6 +1,6 @@
 # D212 Tax Helper - User Guide
 
-**Guide version:** 1.1 | **App version:** 2.1.0 | **Last updated:** 2026-04-07
+**Guide version:** 1.2 | **App version:** 2.2.0 | **Last updated:** 2026-04-07
 
 ---
 
@@ -92,7 +92,7 @@ The application runs at **http://localhost:3000**.
 
 | Element | Description |
 |---------|-------------|
-| **App version** (e.g., v2.1.0) | Click to view the full changelog |
+| **App version** (e.g., v2.2.0) | Click to view the full changelog |
 | **Data source** | Shows where data comes from (ANAF, BNR, Fidelity, XTB) |
 | **Contact** | Email link to the author |
 | **Restart Server** | Restarts the Node.js server (page reloads automatically) |
@@ -574,18 +574,15 @@ See the full changelog by clicking the version number in the app footer, or view
 - [CHANGELOG.en.md](CHANGELOG.en.md) (English)
 - [CHANGELOG.ro.md](CHANGELOG.ro.md) (Romanian)
 
-### Current Version: v2.1.0 (2026-04-07)
+### Current Version: v2.2.0 (2026-04-07)
 
 **Major changes:**
-- Morgan Stanley Stock Plan Statement parser
-- Dynamic broker labels (auto-detected from uploads)
-- Broker selector in Add Data tab
-- BNR official exchange rates 2019-2025
-- Tax algorithm: stock withholding deducted from capital gains only
-- CASS base uses net income after withholding
-- 0 security vulnerabilities
+- Express 5, Tesseract.js 7, Multer 2 — all dependencies up to date
+- 0 vulnerabilities, 0 deprecations
+- OCR crash prevention, hidden server window
+- LICENSE included in portable build
 
-### Previous Version: v2.0.0 (2026-03-29)
+### Previous Version: v2.1.0 (2026-04-07)
 
 Initial release with full 6-tab interface, 8 document parsers, bilingual support, dark theme, and portable build.
 
