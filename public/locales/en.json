@@ -178,6 +178,7 @@
     "typeXtbDividends": "Romania (XTB) - Dividends & Interest Report",
     "typeXtbPortfolio": "Romania (XTB) - Portfolio (Capital Gains)",
     "typeFidelityStatement": "US (Fidelity) - Statement (Periodic Report)",
+    "typeMSStatement": "US (Morgan Stanley) - Stock Plan Statement (Yearly)",
     "file": "PDF or Image File",
     "chooseFiles": "Choose Files",
     "noFileChosen": "No file chosen",
