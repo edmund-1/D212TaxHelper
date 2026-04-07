@@ -185,6 +185,11 @@ app.delete('/api/raw/:filename', (req, res) => {
           if (type === 'fidelity_statement' && data.years[year].fidelityTransfers) {
             delete data.years[year].fidelityTransfers;
           }
+          if (type === 'ms_statement' && data.years[year].msStatement) {
+            delete data.years[year].msStatement;
+            delete data.years[year].msDividends;
+            delete data.years[year].msTaxWithheld;
+          }
           if (type === 'trade_confirmation' && data.years[year].fidelityTrades) {
             delete data.years[year].fidelityTrades;
           }
@@ -260,7 +265,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Invalid year' });
     }
-    const validTypes = ['declaratie', 'investment', 'adeverinta', 'stock_award', 'trade_confirmation', 'xtb_dividends', 'xtb_portfolio', 'fidelity_statement', 'form_1042s'];
+    const validTypes = ['declaratie', 'investment', 'adeverinta', 'stock_award', 'trade_confirmation', 'xtb_dividends', 'xtb_portfolio', 'fidelity_statement', 'form_1042s', 'ms_statement'];
     if (!validTypes.includes(type)) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Invalid type. Must be: ' + validTypes.join(', ') });
@@ -472,6 +477,72 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       }
       fs.writeFileSync(dataFile5, JSON.stringify(data5, null, 2), 'utf8');
       return res.json({ success: true, year: parsedYear, type, parsed, isDuplicate });
+    }
+
+    // Morgan Stanley Stock Plan Statement (yearly)
+    if (type === 'ms_statement') {
+      const parsed = parseMSStatement(text, parsedYear);
+
+      // Load existing trades for dedup
+      const tradesFile = path.join(DATA_DIR, 'trades.json');
+      let trades = { trades: [] };
+      if (fs.existsSync(tradesFile)) trades = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
+
+      // Add sales as trades (dedup by date + shares + netProceeds)
+      let newTradesAdded = 0;
+      let duplicatesSkipped = 0;
+      for (const sale of parsed.sales) {
+        const isDup = trades.trades.some(t =>
+          t.saleDate === sale.saleDate && Math.abs(t.shares - sale.shares) < 0.001 && Math.abs(t.netProceeds - sale.netProceeds) < 0.01
+        );
+        if (!isDup) {
+          trades.trades.push(sale);
+          newTradesAdded++;
+        } else {
+          duplicatesSkipped++;
+        }
+      }
+      fs.writeFileSync(tradesFile, JSON.stringify(trades, null, 2), 'utf8');
+
+      // Update parsed_data
+      const dataFile6 = path.join(DATA_DIR, 'parsed_data.json');
+      let data6 = { years: {} };
+      if (fs.existsSync(dataFile6)) data6 = JSON.parse(fs.readFileSync(dataFile6, 'utf8'));
+      if (!data6.years[parsedYear]) data6.years[parsedYear] = { year: parsedYear };
+
+      // Save MS statement summary
+      data6.years[parsedYear].msStatement = {
+        period: parsed.period,
+        dividends: parsed.dividends,
+        taxWithheld: parsed.taxWithheld,
+        releases: parsed.releases,
+        closingValue: parsed.closingValue,
+        closingShares: parsed.closingShares
+      };
+
+      // Update dividends if present
+      if (parsed.dividends > 0) {
+        data6.years[parsedYear].msDividends = parsed.dividends;
+        data6.years[parsedYear].msTaxWithheld = parsed.taxWithheld;
+      }
+
+      // Recalculate trade aggregates (include MS trades)
+      const yearTrades = trades.trades.filter(t => t.year === parsedYear);
+      data6.years[parsedYear].fidelityTrades = {
+        count: yearTrades.length,
+        totalProceeds: yearTrades.reduce((s, t) => s + (t.saleProceeds || 0), 0),
+        totalFees: yearTrades.reduce((s, t) => s + (t.fees || 0), 0),
+        totalNet: yearTrades.reduce((s, t) => s + (t.netProceeds || 0), 0),
+        totalShares: yearTrades.reduce((s, t) => s + (t.shares || 0), 0),
+        trades: yearTrades
+      };
+
+      fs.writeFileSync(dataFile6, JSON.stringify(data6, null, 2), 'utf8');
+      return res.json({
+        success: true, year: parsedYear, type, parsed,
+        newTradesAdded, duplicatesSkipped,
+        totalTrades: yearTrades.length
+      });
     }
 
     // Update parsed data
@@ -846,6 +917,133 @@ function parseFidelityStatement(text, year) {
   // MSFT holdings quantity
   const msftMatch = text.match(/MICROSOFT CORP \(MSFT\)\s+\$[\d.,]+\s+([\d.]+)/);
   if (msftMatch) result.holdingsQuantity = parseFloat(msftMatch[1]);
+
+  return result;
+}
+
+// Parse Morgan Stanley Stock Plan Statement (yearly summary)
+function parseMSStatement(text, year) {
+  const result = {
+    year,
+    source: 'ms_statement',
+    period: '',
+    sales: [],
+    releases: [],
+    dividends: 0,
+    taxWithheld: 0,
+    closingValue: 0,
+    closingShares: 0
+  };
+
+  // Period
+  const periodMatch = text.match(/Summary Period:\s*(.+)/);
+  if (periodMatch) result.period = periodMatch[1].trim();
+
+  // Parse Activity section for releases, sales, dividends, tax withholding
+  const activitySection = text.split(/\bActivity\b/)[1]?.split(/\bWithdrawal on\b/)[0] || '';
+  const lines = activitySection.split('\n').map(l => l.trim()).filter(l => l);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Release: $marketValue $price+shares MSFTRelease DD-Mon-YYYY
+    const releaseMatch = line.match(/\$([\d.,]+)\$(\d+\.\d{2})(\d+\.\d+)MSFTRelease(\d{2}-\w{3}-\d{4})/);
+    if (releaseMatch) {
+      result.releases.push({
+        date: releaseMatch[4],
+        shares: parseFloat(releaseMatch[3]),
+        pricePerShare: parseNumber(releaseMatch[2]),
+        value: parseNumber(releaseMatch[1])
+      });
+      continue;
+    }
+
+    // Dividend (Cash): $amount MSFTDividend (Cash) DD-Mon-YYYY
+    const divMatch = line.match(/\$([\d.,]+)MSFTDividend \(Cash\)(\d{2}-\w{3}-\d{4})/);
+    if (divMatch) {
+      result.dividends += parseNumber(divMatch[1]);
+      continue;
+    }
+
+    // IRS Nonresident Alien Withholding: $-amount MSFTIRS Nonresident Alien
+    const taxMatch = line.match(/\$-?([\d.,]+)MSFTIRS Nonresident Alien/);
+    if (taxMatch) {
+      result.taxWithheld += parseNumber(taxMatch[1]);
+      continue;
+    }
+
+    // Sale in Activity: $-amount $price -shares MSFTSale DD-Mon-YYYY
+    const saleMatch = line.match(/\$-?([\d.,]+)\$([\d.,]+)-?([\d.]+)MSFTSale(\d{2}-\w{3}-\d{4})/);
+    if (saleMatch) {
+      // This is the activity-level sale entry; detailed breakdown parsed below
+      continue;
+    }
+
+    // Closing Value: $value $costBasis $price+shares $cash Closing Value DD-Mon-YYYY
+    const closeMatch = line.match(/\$([\d.,]+)\$([\d.,]+)\$(\d+\.\d{2})(\d+\.\d+)\$[\d.,]+Closing Value/);
+    if (closeMatch) {
+      result.closingValue = parseNumber(closeMatch[1]);
+      result.closingShares = parseFloat(closeMatch[4]);
+    }
+  }
+
+  // Parse Withdrawal sections for detailed sale breakdowns
+  const withdrawalSections = text.split(/Withdrawal on\s+/);
+  for (let w = 1; w < withdrawalSections.length; w++) {
+    const section = withdrawalSections[w];
+
+    // Settlement Date: DD-Mon-YYYY
+    const dateMatch = section.match(/(\d{2}-\w{3}-\d{4})Settlement Date/);
+    const settlementDate = dateMatch ? dateMatch[1] : '';
+
+    // Market Price Per Unit: $price USD
+    const priceMatch = section.match(/\$([\d.,]+)\s*(?:\d*\s*)?USDMarket Price Per Unit/);
+    const pricePerShare = priceMatch ? parseNumber(priceMatch[1]) : 0;
+
+    // Shares Sold
+    const sharesMatch = section.match(/([\d.]+)Shares Sold/);
+    const shares = sharesMatch ? parseFloat(sharesMatch[1]) : 0;
+
+    // Gross Proceeds
+    const grossMatch = section.match(/\$([\d.,]+)\s*USDGross Proceeds/);
+    const grossProceeds = grossMatch ? parseNumber(grossMatch[1]) : 0;
+
+    // Fees: EFT Fee + commission + Supplemental Transaction Fee
+    let totalFees = 0;
+    const feeMatches = section.matchAll(/\$-?([\d.,]+)\s*USD(?:EFT Fee|commission|Supplemental Transaction Fee)/g);
+    for (const fm of feeMatches) {
+      totalFees += parseNumber(fm[1]);
+    }
+
+    // Net Proceeds
+    const netMatch = section.match(/Net Proceeds:\s*\$([\d.,]+)\s*USD/);
+    const netProceeds = netMatch ? parseNumber(netMatch[1]) : 0;
+
+    if (shares > 0 && settlementDate) {
+      // Convert DD-Mon-YYYY to a format consistent with other trades
+      const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      let saleDateFormatted = settlementDate;
+      const dateParts = settlementDate.match(/(\d{2})-(\w{3})-(\d{4})/);
+      if (dateParts) {
+        const mon = dateParts[2].toUpperCase().substring(0, 3);
+        saleDateFormatted = `${mon}/${dateParts[1]}/${dateParts[3]}`;
+      }
+
+      result.sales.push({
+        year,
+        symbol: 'MSFT',
+        company: 'MICROSOFT CORP',
+        shares,
+        pricePerShare,
+        saleProceeds: grossProceeds,
+        fees: totalFees,
+        netProceeds,
+        saleDate: saleDateFormatted,
+        gainType: 'short-term',
+        source: 'ms_statement'
+      });
+    }
+  }
 
   return result;
 }
