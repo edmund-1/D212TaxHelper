@@ -1077,24 +1077,36 @@ const App = (() => {
     if (foreignTbody) {
       const usDivRON = (data.dividendsRON || data.dividendsUSD * data.exchangeRate);
       const usGainsRON = data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate;
+      const usGainsGrossUSD = data.tradeProceedsUSD || data.capitalGainsSaleUSD || 0;
+      const usGainsGrossRON = usGainsGrossUSD * data.exchangeRate;
+      const esppCost = data.capitalGainsCostUSD || 0;
+      const esppCostRON = esppCost * data.exchangeRate;
+      const stockWH = data.stockWithholding || 0;
+      const usNetGainsRON = Math.max(0, usGainsGrossRON - esppCostRON - stockWH);
+      const usCapGainsTax = usNetGainsRON * (data.capGainsTaxRate || 0.10);
+      const usDivTaxDue = usDivRON * data.divTaxRate;
+      const usTaxPaidRON = data.usDivForeignTaxRON || 0;
+      const usDivDiff = Math.max(0, usDivTaxDue - usTaxPaidRON);
 
       foreignTbody.innerHTML = [
-        [I18n.t('dcl.sourceCountry'), I18n.t('dcl.usa')],
+        [I18n.t('dcl.sourceCountry'), 'S.U.A.'],
         [I18n.t('dcl.exchangeRateLabel'), data.exchangeRate?.toFixed(4)],
         ['--- ' + I18n.t('dcl.sepCapitalGains') + ' ---', ''],
-        [I18n.t('dcl.saleValueUSD'), fmtD(data.tradeProceedsUSD || data.capitalGainsSaleUSD || 0)],
-        [I18n.t('dcl.saleValueRON'), fmtR(usGainsRON)],
-        [I18n.t('dcl.alreadyTaxedSalary'), fmtR(data.salaryDeduction || 0)],
-        [I18n.t('dcl.taxableCapitalGains'), fmtR(usGainsRON - (data.salaryDeduction || 0))],
-        [I18n.t('dcl.incomeTaxDue10'), fmtR((usGainsRON - (data.salaryDeduction || 0)) * (data.capGainsTaxRate || 0.10))],
+        [I18n.t('dcl.saleValueUSD'), fmtD(usGainsGrossUSD) + ' USD'],
+        [I18n.t('dcl.saleValueRON'), fmtR(usGainsGrossRON) + ' RON'],
+        [I18n.t('dcl.esppCostUSD'), fmtD(esppCost) + ' USD'],
+        [I18n.t('dcl.esppCostRON'), fmtR(esppCostRON) + ' RON'],
+        [I18n.t('dcl.alreadyTaxedSalary'), fmtR(stockWH) + ' RON'],
+        [I18n.t('dcl.taxableCapitalGains'), '<strong>' + fmtR(usNetGainsRON) + ' RON</strong>'],
+        [I18n.t('dcl.incomeTaxDue10').replace('10%', (data.capGainsTaxRate * 100) + '%'), '<strong>' + fmtR(usCapGainsTax) + ' RON</strong>'],
         ['--- ' + I18n.t('dcl.sepDividends') + ' ---', ''],
-        [I18n.t('dcl.grossDividendsUSD'), fmtD(data.dividendsUSD)],
-        [I18n.t('dcl.grossDividendsRON'), fmtD(data.dividendsUSD * data.exchangeRate)],
-        [I18n.t('dcl.declaredDividendsRON'), fmtR(usDivRON)],
-        [I18n.t('dcl.divTaxDueRO10'), fmtR(usDivRON * data.divTaxRate)],
+        [I18n.t('dcl.grossDividendsUSD'), fmtD(data.dividendsUSD) + ' USD'],
+        [I18n.t('dcl.grossDividendsRON'), fmtR(usDivRON) + ' RON'],
+        [I18n.t('dcl.divTaxDueRO10').replace('10%', data.divTaxRateLabel), fmtR(usDivTaxDue) + ' RON'],
         [I18n.t('dcl.usTaxWithheldUSD'), fmtD(data.usDivForeignTaxUSD || 0) + ' USD'],
-        [I18n.t('dcl.usTaxWithheldRON'), fmtR(data.usDivForeignTaxRON || 0) + ' RON'],
-        [I18n.t('dcl.divDiffToPay'), '\u2705 0 RON (' + I18n.t('dcl.noRoTaxTreaty') + ')'],
+        [I18n.t('dcl.usTaxWithheldRON'), fmtR(usTaxPaidRON) + ' RON'],
+        [I18n.t('dcl.divCreditRecognized'), fmtR(Math.min(usDivTaxDue, usTaxPaidRON)) + ' RON'],
+        [I18n.t('dcl.divDiffToPay'), '<strong>' + fmtR(usDivDiff) + ' RON</strong>'],
       ].map(([f, v]) => {
         const isSep = f.startsWith('---');
         return `<tr${isSep ? ' style="background:var(--bg-secondary)"' : ''}><td>${isSep ? '<strong>' + f.replace(/---/g, '').trim() + '</strong>' : f}</td><td>${v}</td></tr>`;
@@ -1138,13 +1150,30 @@ const App = (() => {
     // Romania section
     const xtbTbody = document.getElementById('dcl-ro-tbody');
     if (xtbTbody) {
-      const roInterestTax = data.roInterestRON * 0.10;
+      const roLongGain = data.roLongTermGainRON || 0;
+      const roShortGain = data.roShortTermGainRON || 0;
+      const roDivGrossVal = data.dividendsRON_ro || 0;
+      const roDivTaxWH = data.roDivTaxWithheld || 0;
+      const roCapTaxWH = data.roPortTaxWithheld || 0;
+      const roInterestVal = data.roInterestRON || 0;
+      const roInterestTax = roInterestVal * 0.10;
+      const adeverintaInterest = data.interestIncomeRON - roInterestVal;
+      const adeverintaInterestTax = data.interestTaxPaid || 0;
+
       xtbTbody.innerHTML = [
         [I18n.t('dcl.roFinalTaxNote'), ''],
-        ['', ''],
+        ['--- ' + I18n.t('dcl.sepRoCapGains') + ' ---', ''],
+        [I18n.t('dcl.roCapGainsLong'), fmtR(roLongGain) + ' RON'],
+        [I18n.t('dcl.roCapGainsTaxLong'), fmtR(roLongGain * 0.01) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
+        [I18n.t('dcl.roCapGainsShort'), fmtR(roShortGain) + ' RON'],
+        [I18n.t('dcl.roCapGainsTaxShort'), fmtR(roShortGain * 0.03) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
+        [I18n.t('dcl.roCapGainsTaxTotal'), fmtR(roCapTaxWH) + ' RON'],
+        ['--- ' + I18n.t('dcl.sepRoDividends') + ' ---', ''],
+        [I18n.t('dcl.roDivGross'), fmtR(roDivGrossVal) + ' RON'],
+        [I18n.t('dcl.roDivTaxWithheld'), fmtR(roDivTaxWH) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
         ['--- ' + I18n.t('dcl.sepInterestRO') + ' ---', ''],
-        [I18n.t('dcl.grossInterestRON'), fmtR(data.roInterestRON)],
-        [I18n.t('dcl.interestTax10'), fmtR(roInterestTax)],
+        [I18n.t('dcl.grossInterestRON'), fmtR(data.interestIncomeRON) + ' RON'],
+        [I18n.t('dcl.interestTax10'), fmtR(adeverintaInterestTax) + ' RON (' + I18n.t('dcl.withheldAtSource') + ')'],
       ].map(([f, v]) => {
         const isSep = f.startsWith('---');
         const isNote = f === I18n.t('dcl.roFinalTaxNote');
