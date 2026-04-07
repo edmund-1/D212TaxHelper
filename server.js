@@ -1387,13 +1387,18 @@ app.post('/api/restart', (req, res) => {
 });
 
 // Serve the main page for all non-API routes
-app.get('*', (req, res) => {
+app.get('/{*splat}', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, (err) => {
+  if (err) {
+    log('ERROR', 'Failed to start server', { error: err.message });
+    console.error(`  Error: ${err.message}`);
+    process.exit(1);
+  }
   log('INFO', 'Server started', { port: PORT, url: `http://localhost:${PORT}` });
   console.log(`\n  D212 Tax Helper running at http://localhost:${PORT}\n`);
 });
