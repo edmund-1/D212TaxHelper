@@ -64,6 +64,7 @@
     "roNote": "Începând cu 2025, acțiunile au fost transferate la brokerul din România. Brokerul din România reține impozitul pe câștiguri (1%/3%) dar NU reține CASS. CAS (pensie 25%) NU se aplică pentru venituri din investiții. Dividende SUA: SUA reține 10% la sursă (Convenția RO-SUA), România nu mai impozitează, dar dividendele intră la plafon CASS.",
     "dclTitle": "Declarație Unică D212 - Asistent Completare",
     "dclSubtitle": "Utilizați aceste valori pentru a completa formularul Declarație Unică D212 pe portalul ANAF.",
+    "dclOpenANAF": "🔗 Deschide formularul D212 pe ANAF",
     "dclVersion": "Versiune formular: A1.0.6/08.12.2025",
     "dclChapter1": "CAPITOLUL I - Impozit pe Venit și Contribuții Sociale pentru Anul {year}",
     "dclForeignSection": "Adaugă venit străinătate: Broker SUA (Fidelity / Morgan Stanley)",
