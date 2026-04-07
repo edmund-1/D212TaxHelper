@@ -685,11 +685,11 @@ const App = (() => {
     tbody.innerHTML = rows.map(r => `
       <tr>
         <td>${esc(r.cat)}</td>
-        <td>${r.usd === '-' ? '-' : fmt(r.usd)}</td>
+        <td>${r.usd === '-' ? '-' : fmtUSD(r.usd)}</td>
         <td>${r.rate === '-' ? '-' : r.rate.toFixed(4)}</td>
         <td>${fmt(r.ron)}</td>
         <td>${r.usTaxRate}</td>
-        <td>${fmt(r.usTaxPaid)}</td>
+        <td>${fmtUSD(r.usTaxPaid)}</td>
         <td>${r.taxRate}</td>
         <td>${r.paid !== undefined ? fmt(r.paid) : '-'}</td>
         <td>${fmt(r.tax)}</td>
@@ -833,9 +833,9 @@ const App = (() => {
           <td>${esc(t.symbol || '-')}</td>
           <td>${t.shares || '-'}</td>
           <td>${t.pricePerShare ? t.pricePerShare.toFixed(4) : '-'}</td>
-          <td>${fmt(t.saleProceeds)}</td>
-          <td>${fmt(t.fees)}</td>
-          <td>${fmt(t.netProceeds)}</td>
+          <td>${fmtUSD(t.saleProceeds)}</td>
+          <td>${fmtUSD(t.fees)}</td>
+          <td>${fmtUSD(t.netProceeds)}</td>
         </tr>
       `).join('');
       tfoot.innerHTML = `
@@ -843,9 +843,9 @@ const App = (() => {
           <td colspan="3"><strong>${I18n.t('income.total')} (${data.count} trades)</strong></td>
           <td><strong>${parseFloat(data.totalShares.toFixed(6))}</strong></td>
           <td></td>
-          <td><strong>${fmt(data.totalProceeds)}</strong></td>
+          <td><strong>${fmtUSD(data.totalProceeds)}</strong></td>
           <td></td>
-          <td><strong>${fmt(data.totalNet)}</strong></td>
+          <td><strong>${fmtUSD(data.totalNet)}</strong></td>
         </tr>
       `;
     } catch {
@@ -1798,11 +1798,16 @@ const App = (() => {
   // ============ HELPERS ============
   function fmt(num) {
     if (num === null || num === undefined || isNaN(num)) return '-';
-    if (num === 0 || Object.is(num, -0)) return '0';
+    const rounded = Math.round(num);
+    if (rounded === 0 || Object.is(rounded, -0)) return '0';
     const locale = (typeof I18n !== 'undefined' && I18n.getLang?.()) === 'ro' ? 'ro-RO' : 'en-US';
-    // Show 2 decimals for values with meaningful fractional part, 0 for whole numbers
-    const hasDecimals = Math.abs(num - Math.round(num)) >= 0.005;
-    return new Intl.NumberFormat(locale, { minimumFractionDigits: hasDecimals ? 2 : 0, maximumFractionDigits: 2 }).format(num);
+    return new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(rounded);
+  }
+
+  function fmtUSD(num) {
+    if (num === null || num === undefined || isNaN(num)) return '-';
+    if (num === 0 || Object.is(num, -0)) return '0';
+    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
   }
 
   function esc(str) {
