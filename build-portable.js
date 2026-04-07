@@ -28,6 +28,7 @@ const APP_ITEMS = [
   'package-lock.json',
   'public',
   'scripts',
+  'LICENSE',
 ];
 
 // Traineddata files for Tesseract OCR
@@ -225,6 +226,9 @@ Your financial data is stored in \`app/data/\`. Back up this folder to preserve 
 ## Requirements
 - Windows 10/11 (64-bit)
 - No installation needed
+
+## License
+Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). See \`app/LICENSE\` for details.
 `;
   fs.writeFileSync(path.join(DIST, 'README.md'), readme, 'utf8');
 
