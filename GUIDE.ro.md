@@ -1,6 +1,6 @@
 # D212 Asistent Fiscal - Ghid de Utilizare
 
-**Versiune ghid:** 1.1 | **Versiune aplicație:** 2.1.0 | **Ultima actualizare:** 07.04.2026
+**Versiune ghid:** 1.2 | **Versiune aplicație:** 2.2.0 | **Ultima actualizare:** 07.04.2026
 
 ---
 
@@ -92,7 +92,7 @@ Aplicația rulează la **http://localhost:3000**.
 
 | Element | Descriere |
 |---------|-----------|
-| **Versiunea aplicației** (ex: v2.1.0) | Click pentru a vedea istoricul complet de versiuni |
+| **Versiunea aplicației** (ex: v2.2.0) | Click pentru a vedea istoricul complet de versiuni |
 | **Sursa datelor** | Arată de unde provin datele (ANAF, BNR, Fidelity, XTB) |
 | **Contact** | Link email către autor |
 | **Repornire Server** | Repornește serverul Node.js (pagina se reîncarcă automat) |
@@ -568,18 +568,15 @@ Vezi istoricul complet făcând click pe numărul versiunii din footer-ul aplica
 - [CHANGELOG.en.md](CHANGELOG.en.md) (Engleză)
 - [CHANGELOG.ro.md](CHANGELOG.ro.md) (Română)
 
-### Versiunea curentă: v2.1.0 (07.04.2026)
+### Versiunea curentă: v2.2.0 (07.04.2026)
 
 **Modificări majore:**
-- Parser Morgan Stanley Stock Plan Statement
-- Etichete dinamice broker (auto-detectate din documente)
-- Selector broker în tab-ul Adăugare Date
-- Cursuri BNR oficiale 2019-2025
-- Algoritm fiscal: reținerea stock awards se deduce doar din câștiguri de capital
-- Baza CASS folosește venitul net după deducere
-- 0 vulnerabilități de securitate
+- Express 5, Tesseract.js 7, Multer 2 — toate dependențele actualizate
+- 0 vulnerabilități, 0 deprecieri
+- Prevenire crash OCR, fereastră server ascunsă
+- LICENȚA inclusă în versiunea portabilă
 
-### Versiunea anterioară: v2.0.0 (29.03.2026)
+### Versiunea anterioară: v2.1.0 (07.04.2026)
 
 Versiune inițială cu interfața completă pe 6 tab-uri, 8 parsere de documente, suport bilingv, temă întunecată și versiune portabilă.
 

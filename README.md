@@ -94,10 +94,10 @@ D212TaxHelper/
 
 ## Tech Stack
 
-- **Backend:** Node.js, Express
+- **Backend:** Node.js, Express 5
 - **Frontend:** Vanilla JS, HTML, CSS
 - **PDF parsing:** pdf-parse-new
-- **OCR:** Tesseract.js
+- **OCR:** Tesseract.js 7
 
 ## Privacy
 

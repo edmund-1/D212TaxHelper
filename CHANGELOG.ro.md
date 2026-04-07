@@ -1,5 +1,23 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v2.2.0 (2026-04-07)
+
+### Actualizări
+- **Express 5.2.1** — actualizat de la v4 (gestionare îmbunătățită erori async, suport Brotli)
+- **Tesseract.js 7.0.0** — actualizat de la v5 (OCR cu 15-35% mai rapid via relaxedsimd WASM)
+- **Multer 2.1.1** — actualizat de la v1 (rezolvat avertisment depreciere)
+- Eliminat pachetul neutilizat `xlsx` (rezolvat vulnerabilitate de severitate mare)
+- Actualizat `path-to-regexp` (rezolvat vulnerabilitate de severitate mare)
+- **0 vulnerabilități, 0 deprecieri, 0 pachete învechite**
+
+### Corecturi
+- Prevenire crash OCR — serverul nu mai cade la PDF-uri bazate pe imagini
+- Fereastră server ascunsă — Start.bat rulează invizibil în fundal
+- Graficul cursului de schimb ascuns când nu există date
+- LICENȚA inclusă în versiunea portabilă
+
+---
+
 ## v2.1.0 (2026-04-07)
 
 ### Funcționalități noi
