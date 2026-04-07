@@ -185,15 +185,12 @@ set "APP=%PORTABLE_DIR%app\\server.js"
 
 cd /d "%PORTABLE_DIR%app"
 
-REM Start server and open browser
-start "" "%NODE%" "%APP%"
+REM Start server hidden and open browser
+start /b "" "%NODE%" "%APP%" >nul 2>&1
 timeout /t 2 /nobreak >nul
 start http://localhost:3000
 
-echo   Server running at http://localhost:3000
-echo   Use Stop.bat to stop the server.
-echo.
-timeout /t 10 /nobreak >nul
+exit
 `;
   fs.writeFileSync(path.join(DIST, 'Start.bat'), startBat, 'utf8');
 
