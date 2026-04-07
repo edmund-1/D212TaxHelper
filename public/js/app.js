@@ -443,7 +443,8 @@ const App = (() => {
     const usNetIncomeRON = usNetGainsRON + dividendsRON;
 
     const capitalGainsTaxRON = fd.capitalGains?.taxPaidRON || decl.capitalGains?.taxDueRON || (usNetGainsRON * capGainsTaxRate + roGainsTaxNet);
-    const interestTaxGross = interestIncomeRON * 0.10;
+    const interestTaxRate = (tr.roInterestRate != null ? tr.roInterestRate / 100 : (year >= 2026 ? 0.16 : 0.10));
+    const interestTaxGross = interestIncomeRON * interestTaxRate;
     const interestTaxPaid = adv.interestTax || 0;
     const interestTax = Math.max(0, interestTaxGross - interestTaxPaid);
 
@@ -459,7 +460,7 @@ const App = (() => {
     const totalAlreadyPaid = withholding + (roPortTaxWithheld || 0) + (roDivTaxWithheld || 0) + interestTaxPaid;
     const usNetCapGainsRON_cass = Math.max(0, capitalGainsTaxableRON - withholding);
     const totalInvestmentIncome_cass = Math.max(0, totalDividendsRON_cass + usNetCapGainsRON_cass + capitalGainsRON_ro + interestNetRON);
-    const totalInvestmentIncome = totalDividendsRON + totalCapitalGainsRON + interestIncomeRON;
+    const totalInvestmentIncome = totalDividendsRON + totalCapitalGainsRON + interestIncomeRON + (adv.gamblingIncome || 0);
     const savedMinSalary = (yd.minSalary !== undefined && yd.minSalary !== '') ? parseFloat(yd.minSalary) : null;
     const cassResult = calculateCASS(totalInvestmentIncome_cass, year, savedMinSalary);
     let cassTax = usCassTax || decl.cassContribution || cassResult.amount;
@@ -485,6 +486,9 @@ const App = (() => {
       divTaxRate,
       divTaxRateLabel,
       capGainsTaxRate,
+      interestTaxRate,
+      roLongRate,
+      roShortRate,
       dividendTaxRON,
       capitalGainsTaxRON,
       interestTax,
@@ -632,8 +636,8 @@ const App = (() => {
         ron: data.roLongTermGainRON,
         usTaxRate: '-',
         usTaxPaid: 0,
-        taxRate: '1%',
-        paid: data.roLongTermGainRON * 0.01,
+        taxRate: (data.roLongRate * 100) + '%',
+        paid: data.roLongTermGainRON * data.roLongRate,
         tax: 0
       },
       {
@@ -643,8 +647,8 @@ const App = (() => {
         ron: data.roShortTermGainRON,
         usTaxRate: '-',
         usTaxPaid: 0,
-        taxRate: '3%',
-        paid: data.roShortTermGainRON * 0.03,
+        taxRate: (data.roShortRate * 100) + '%',
+        paid: data.roShortTermGainRON * data.roShortRate,
         tax: 0
       },
       {
@@ -654,7 +658,7 @@ const App = (() => {
         ron: data.interestIncomeRON,
         usTaxRate: '-',
         usTaxPaid: 0,
-        taxRate: '10%',
+        taxRate: (data.interestTaxRate * 100) + '%',
         paid: data.interestTaxPaid || 0,
         tax: data.interestTax
       }
@@ -877,10 +881,10 @@ const App = (() => {
     // Tax computations
     const usGainsTax = usGainsRON > 0 ? (usGainsRON - (data.salaryDeduction || 0)) * (data.capGainsTaxRate || 0.10) : 0;
     const usDivTax = data.usDivToPayRON ?? 0;
-    const roLongTax = roLong * 0.01;
-    const roShortTax = roShort * 0.03;
+    const roLongTax = roLong * (data.roLongRate || 0.01);
+    const roShortTax = roShort * (data.roShortRate || 0.03);
     const roDivTaxDue = roDivGross * data.divTaxRate;
-    const interestTaxAll = data.interestIncomeRON * 0.10;
+    const interestTaxAll = data.interestIncomeRON * (data.interestTaxRate || 0.10);
     const gamblingTax = data.gamblingTax || 0;
 
     // Already paid
@@ -1164,9 +1168,9 @@ const App = (() => {
         [I18n.t('dcl.roFinalTaxNote'), ''],
         ['--- ' + I18n.t('dcl.sepRoCapGains') + ' ---', ''],
         [I18n.t('dcl.roCapGainsLong'), fmtR(roLongGain) + ' RON'],
-        [I18n.t('dcl.roCapGainsTaxLong'), fmtR(roLongGain * 0.01) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
+        [I18n.t('dcl.roCapGainsTaxLong'), fmtR(roLongGain * (data.roLongRate || 0.01)) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
         [I18n.t('dcl.roCapGainsShort'), fmtR(roShortGain) + ' RON'],
-        [I18n.t('dcl.roCapGainsTaxShort'), fmtR(roShortGain * 0.03) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
+        [I18n.t('dcl.roCapGainsTaxShort'), fmtR(roShortGain * (data.roShortRate || 0.03)) + ' RON (' + I18n.t('dcl.withheldByBroker') + ')'],
         [I18n.t('dcl.roCapGainsTaxTotal'), fmtR(roCapTaxWH) + ' RON'],
         ['--- ' + I18n.t('dcl.sepRoDividends') + ' ---', ''],
         [I18n.t('dcl.roDivGross'), fmtR(roDivGrossVal) + ' RON'],
@@ -1227,13 +1231,20 @@ const App = (() => {
     // Summary section
     const summaryTbody = document.getElementById('dcl-summary-tbody');
     if (summaryTbody) {
-      const usGainsRON = data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate;
+      const usGainsGrossRON = data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate;
       const usDivRON = (data.dividendsRON || data.dividendsUSD * data.exchangeRate);
-      const usGainsTax = (usGainsRON - (data.salaryDeduction || 0)) * (data.capGainsTaxRate || 0.10);
-      const usDivTax = data.usDivToPayRON ?? (usDivRON * data.divTaxRate);
-      // XTB: only interest tax needs to be declared (stocks & dividends are final/withheld)
-      const roInterestTax = data.roInterestRON * 0.10;
-      const interestTax = data.interestIncomeRON * 0.10;
+      const esppCostRON = (data.capitalGainsCostUSD || 0) * data.exchangeRate;
+      const usNetGains = Math.max(0, usGainsGrossRON - esppCostRON - (data.stockWithholding || 0));
+      const usGainsTax = usNetGains * (data.capGainsTaxRate || 0.10);
+      // US dividends: RO tax - US credit = difference
+      const usDivTaxDue = usDivRON * data.divTaxRate;
+      const usTaxPaidRON = data.usDivForeignTaxRON || 0;
+      const usDivTax = Math.max(0, usDivTaxDue - usTaxPaidRON);
+      // Interest: use dynamic rate, don't double-count
+      const interestTax = data.interestTax; // already computed correctly in computeYearData
+
+      const incomeTaxTotal = Math.max(0, usGainsTax) + usDivTax + Math.max(0, interestTax);
+      const totalToPay = incomeTaxTotal + data.cassTax;
 
       const totalToPayLabel = I18n.t('dcl.totalToPay');
       const totalIncomeTaxLabel = I18n.t('dcl.totalIncomeTax');
@@ -1243,16 +1254,14 @@ const App = (() => {
         [I18n.t('dcl.usDivTaxToPay'), fmtR(usDivTax)],
         [I18n.t('dcl.roCapGainsTaxGross'), I18n.t('dcl.roFinalTaxShort')],
         [I18n.t('dcl.roDivTaxGross').replace('{rate}', data.divTaxRateLabel), I18n.t('dcl.roFinalTaxShort')],
-        [I18n.t('dcl.interestTax'), fmtR(interestTax + roInterestTax)],
-        [totalIncomeTaxLabel, '<strong>' + fmtR(Math.max(0, usGainsTax) + usDivTax + interestTax + roInterestTax) + '</strong>'],
+        [I18n.t('dcl.interestTax'), fmtR(Math.max(0, interestTax))],
+        [totalIncomeTaxLabel, '<strong>' + fmtR(incomeTaxTotal) + '</strong>'],
         [I18n.t('dcl.cassDue'), fmtR(data.cassTax)],
-        [I18n.t('dcl.stockWithholdingDeduction'), '-' + fmtR(data.stockWithholding)],
         ['', ''],
-        [totalToPayLabel, '<strong style="color:var(--warning);font-size:1.1rem;">' + fmtR(data.netTax) + ' RON</strong>'],
+        [totalToPayLabel, '<strong style="color:var(--warning);font-size:1.1rem;">' + fmtR(totalToPay) + ' RON</strong>'],
       ].map(([f, v]) => {
         const isTotal = f === totalToPayLabel || f === totalIncomeTaxLabel;
-        const isIndent = f.startsWith('  \u2192');
-        return `<tr${isTotal ? ' style="border-top:2px solid var(--border)"' : ''}${isIndent ? ' style="font-size:0.8rem;color:var(--text-muted)"' : ''}><td>${isTotal ? '<strong>' + f + '</strong>' : f}</td><td>${v}</td></tr>`;
+        return `<tr${isTotal ? ' style="border-top:2px solid var(--border)"' : ''}><td>${isTotal ? '<strong>' + f + '</strong>' : f}</td><td>${v}</td></tr>`;
       }).join('');
     }
 
