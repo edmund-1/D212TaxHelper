@@ -880,6 +880,7 @@ const App = (() => {
     const roInterest = data.roInterestRON;
     const interestAdv = data.interestIncomeRON - roInterest; // adeverinta interest only
     const gamblingIncome = data.gamblingIncome || 0;
+    const stockWithholding = data.stockWithholding || 0;
 
     // Tax computations
     const usGainsTax = usGainsRON > 0 ? Math.max(0, usGainsRON - stockWithholding) * (data.capGainsTaxRate || 0.10) : 0;
@@ -895,7 +896,6 @@ const App = (() => {
     const roCapTaxWithheld = data.roPortTaxWithheld || 0;
     const roDivTaxWithheld = data.roDivTaxWithheld || 0;
     const interestTaxPaid = data.interestTaxPaid || 0;
-    const stockWithholding = data.stockWithholding || 0;
 
     // Section helper
     const sectionRow = (label) => `<tr style="background:var(--bg-secondary);"><td colspan="2"><strong>${label}</strong></td></tr>`;
