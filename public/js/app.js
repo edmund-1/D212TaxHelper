@@ -911,8 +911,9 @@ const App = (() => {
     html += dataRow(I18n.t('taxes.earnUsDiv') + data.usDivBrokerLabel, fmtR(usDivRON) + ' RON', { indent: true });
     if (stockWithholding > 0) {
       html += dataRow(I18n.t('taxes.earnStockDeduction'), '-' + fmtR(stockWithholding) + ' RON', { indent: true, green: true });
-      html += dataRow(I18n.t('taxes.earnUsNet'), fmtR(data.usNetIncomeRON) + ' RON', { indent: true, bold: true });
     }
+    const usSubtotalIncome = usGainsRON + usDivRON - stockWithholding;
+    html += dataRow(I18n.t('taxes.subtotalUS'), fmtR(usSubtotalIncome) + ' RON', { indent: true, bold: true, topBorder: true });
 
     // -- Romania income --
     html += dataRow('<strong>' + I18n.t('taxes.subsectionRO') + '</strong>', '', { indent: false });
@@ -923,7 +924,10 @@ const App = (() => {
     if (gamblingIncome > 0) {
       html += dataRow(I18n.t('taxes.earnGambling'), fmtR(gamblingIncome) + ' RON', { indent: true });
     }
-    html += dataRow(I18n.t('taxes.earnTotal'), fmtR(data.totalIncome + gamblingIncome) + ' RON', { bold: true, topBorder: true });
+    const roSubtotalIncome = roLong + roShort + roDivGross + data.interestIncomeRON + gamblingIncome;
+    html += dataRow(I18n.t('taxes.subtotalRO'), fmtR(roSubtotalIncome) + ' RON', { indent: true, bold: true, topBorder: true });
+
+    html += dataRow(I18n.t('taxes.earnTotal'), fmtR(usSubtotalIncome + roSubtotalIncome) + ' RON', { bold: true, topBorder: true });
 
     html += emptyRow();
 
@@ -931,32 +935,32 @@ const App = (() => {
     html += sectionRow('\u2705 ' + I18n.t('taxes.sectionPaid'));
 
     // -- US taxes paid --
-    if (usForeignTaxRON > 0 || stockWithholding > 0) {
-      html += dataRow('<strong>' + I18n.t('taxes.subsectionUS') + '</strong>', '', { indent: false });
-      if (usForeignTaxRON > 0) {
-        html += dataRow(I18n.t('taxes.paidUsDivUS'), fmtR(usForeignTaxRON) + ' RON', { indent: true, green: true });
-      }
-      if (stockWithholding > 0) {
-        html += dataRow(I18n.t('taxes.paidStockWithholding'), fmtR(stockWithholding) + ' RON', { indent: true, green: true });
-      }
+    const usPaidSubtotal = usForeignTaxRON + stockWithholding;
+    html += dataRow('<strong>' + I18n.t('taxes.subsectionUS') + '</strong>', '', { indent: false });
+    if (usForeignTaxRON > 0) {
+      html += dataRow(I18n.t('taxes.paidUsDivUS'), fmtR(usForeignTaxRON) + ' RON', { indent: true, green: true });
     }
+    if (stockWithholding > 0) {
+      html += dataRow(I18n.t('taxes.paidStockWithholding'), fmtR(stockWithholding) + ' RON', { indent: true, green: true });
+    }
+    html += dataRow(I18n.t('taxes.subtotalUS'), fmtR(usPaidSubtotal) + ' RON', { indent: true, bold: true, topBorder: true, green: true });
 
     // -- Romania taxes paid --
-    if (roCapTaxWithheld > 0 || roDivTaxWithheld > 0 || interestTaxPaid > 0 || gamblingTax > 0) {
-      html += dataRow('<strong>' + I18n.t('taxes.subsectionRO') + '</strong>', '', { indent: false });
-      if (roCapTaxWithheld > 0) {
-        html += dataRow(I18n.t('taxes.paidRoCapGains'), fmtR(roCapTaxWithheld) + ' RON', { indent: true, green: true });
-      }
-      if (roDivTaxWithheld > 0) {
-        html += dataRow(I18n.t('taxes.paidRoDiv'), fmtR(roDivTaxWithheld) + ' RON', { indent: true, green: true });
-      }
-      if (interestTaxPaid > 0) {
-        html += dataRow(I18n.t('taxes.paidInterest'), fmtR(interestTaxPaid) + ' RON', { indent: true, green: true });
-      }
-      if (gamblingTax > 0) {
-        html += dataRow(I18n.t('taxes.paidGambling'), fmtR(gamblingTax) + ' RON', { indent: true, green: true });
-      }
+    const roPaidSubtotal = roCapTaxWithheld + roDivTaxWithheld + interestTaxPaid + gamblingTax;
+    html += dataRow('<strong>' + I18n.t('taxes.subsectionRO') + '</strong>', '', { indent: false });
+    if (roCapTaxWithheld > 0) {
+      html += dataRow(I18n.t('taxes.paidRoCapGains'), fmtR(roCapTaxWithheld) + ' RON', { indent: true, green: true });
     }
+    if (roDivTaxWithheld > 0) {
+      html += dataRow(I18n.t('taxes.paidRoDiv'), fmtR(roDivTaxWithheld) + ' RON', { indent: true, green: true });
+    }
+    if (interestTaxPaid > 0) {
+      html += dataRow(I18n.t('taxes.paidInterest'), fmtR(interestTaxPaid) + ' RON', { indent: true, green: true });
+    }
+    if (gamblingTax > 0) {
+      html += dataRow(I18n.t('taxes.paidGambling'), fmtR(gamblingTax) + ' RON', { indent: true, green: true });
+    }
+    html += dataRow(I18n.t('taxes.subtotalRO'), fmtR(roPaidSubtotal) + ' RON', { indent: true, bold: true, topBorder: true, green: true });
 
     const totalPaid = usForeignTaxRON + roCapTaxWithheld + roDivTaxWithheld + interestTaxPaid + gamblingTax + stockWithholding;
     html += dataRow(I18n.t('taxes.paidTotal'), fmtR(totalPaid) + ' RON', { bold: true, topBorder: true, green: true });
