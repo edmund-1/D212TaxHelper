@@ -105,4 +105,4 @@ All data stays on your machine. The application runs a local server on `localhos
 
 ## License
 
-Private use.
+This work is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). You may share and adapt it for non-commercial purposes with attribution.
