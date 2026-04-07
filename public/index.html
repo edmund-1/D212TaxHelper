@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D212 Tax Helper</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <button id="nav-toggle" class="nav-toggle" type="button" aria-label="Toggle navigation menu">&#9776;</button>
+      <h1 id="app-title" data-i18n="dashboard.appTitle">D212 Tax Helper</h1>
+      <nav id="main-nav">
+        <button class="nav-btn active" data-tab="dashboard" data-i18n="nav.dashboard">Dashboard</button>
+        <button class="nav-btn" data-tab="income" data-i18n="nav.income">Income Details</button>
+        <button class="nav-btn" data-tab="taxes" data-i18n="nav.taxes">Tax Calculation</button>
+        <button class="nav-btn" data-tab="input" data-i18n="nav.input">Add Data</button>
+        <button class="nav-btn" data-tab="import" data-i18n="nav.import">Import Document</button>
+        <button class="nav-btn" data-tab="raw" data-i18n="nav.raw">Raw Data</button>
+      </nav>
+      <div class="header-controls">
+        <label for="lang-select" class="sr-only">Language</label>
+        <select id="lang-select" title="Language">
+          <option value="ro">RO</option>
+          <option value="en">EN</option>
+        </select>
+        <label for="year-select" class="sr-only">Year</label>
+        <select id="year-select" title="Year"></select>
+      </div>
+    </div>
+  </header>
+
+  <main id="app-content">
+    <!-- Dashboard Tab -->
+    <section id="tab-dashboard" class="tab-content active">
+      <div class="dashboard-grid">
+        <div class="card summary-card" id="card-total-income">
+          <h3 data-i18n="dashboard.totalIncome">Total Income</h3>
+          <p class="card-value" id="total-income-value">-</p>
+          <span class="card-currency">RON</span>
+        </div>
+        <div class="card summary-card" id="card-total-tax">
+          <h3 data-i18n="dashboard.totalTax">Total Tax Due</h3>
+          <p class="card-value" id="total-tax-value">-</p>
+          <span class="card-currency">RON</span>
+        </div>
+        <div class="card summary-card" id="card-withholding">
+          <h3 data-i18n="dashboard.withholding">Stock Withholding</h3>
+          <p class="card-value" id="withholding-value">-</p>
+          <span class="card-currency">RON</span>
+        </div>
+        <div class="card summary-card" id="card-net-tax">
+          <h3 data-i18n="dashboard.netTax">Net Tax to Pay</h3>
+          <p class="card-value" id="net-tax-value">-</p>
+          <span class="card-currency">RON</span>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card chart-card">
+          <h3 data-i18n="dashboard.incomeBreakdown">Income Breakdown</h3>
+          <canvas id="chart-income-breakdown" aria-label="Income breakdown chart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3 data-i18n="dashboard.taxBreakdown">Tax Breakdown</h3>
+          <canvas id="chart-tax-breakdown" aria-label="Tax breakdown chart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3 data-i18n="dashboard.yearComparison">Year Comparison</h3>
+          <canvas id="chart-year-comparison" aria-label="Year comparison chart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3 data-i18n="dashboard.exchangeRates">Exchange Rates (USD/RON)</h3>
+          <canvas id="chart-exchange-rates" aria-label="Exchange rates chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Income Details Tab -->
+    <section id="tab-income" class="tab-content">
+      <div class="card">
+        <h2 data-i18n="income.title">Income Details</h2>
+        <div class="table-responsive">
+          <table id="income-table">
+            <thead>
+              <tr>
+                <th data-i18n="income.category">Category</th>
+                <th data-i18n="income.grossUSD">Gross (USD)</th>
+                <th data-i18n="income.exchangeRate">Rate</th>
+                <th data-i18n="income.grossRON">Gross (RON)</th>
+                <th data-i18n="income.usTaxRate">US Tax Rate</th>
+                <th data-i18n="income.usTaxPaid">US Tax Paid (USD)</th>
+                <th data-i18n="income.taxRate">RO Tax Rate</th>
+                <th data-i18n="income.paidRON">Paid (RON)</th>
+                <th data-i18n="income.taxRON">Tax (RON)</th>
+              </tr>
+            </thead>
+            <tbody id="income-tbody"></tbody>
+            <tfoot id="income-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="income.stockWithholding">Stock Withholding Deductions</h2>
+        <p class="subtitle" data-i18n="income.stockUploadHint">Upload your Stock Award Document in the Import Document tab to populate this table.</p>
+        <div class="table-responsive">
+          <table id="withholding-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th data-i18n="income.date">Date</th>
+                <th data-i18n="income.description">Description</th>
+                <th data-i18n="income.amountRON">Amount (RON)</th>
+              </tr>
+            </thead>
+            <tbody id="withholding-tbody"></tbody>
+            <tfoot id="withholding-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="income.roTrades">Romania Stock Sales</h2>
+        <p class="subtitle" data-i18n="income.roTradesHint">Data from Romania broker portfolio imported in the Import Document tab.</p>
+        <div class="table-responsive">
+          <table id="ro-trades-table">
+            <thead>
+              <tr>
+                <th data-i18n="income.category">Category</th>
+                <th data-i18n="income.country">Country</th>
+                <th data-i18n="income.grossRON">Gross (RON)</th>
+                <th data-i18n="income.taxRate">Tax Rate</th>
+                <th data-i18n="income.paidRON">Withheld (RON)</th>
+                <th data-i18n="income.taxRON">Net Tax (RON)</th>
+              </tr>
+            </thead>
+            <tbody id="ro-trades-tbody"></tbody>
+            <tfoot id="ro-trades-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="income.usTrades">US Stock Sales (Trade Confirmations)</h2>
+        <p class="subtitle" data-i18n="income.tradesUploadHint">Upload Trade Confirmation PDFs in the Import Document tab. Multiple files are supported.</p>
+        <div class="table-responsive">
+          <table id="trades-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th data-i18n="income.date">Date</th>
+                <th data-i18n="income.symbol">Symbol</th>
+                <th data-i18n="income.shares">Shares</th>
+                <th data-i18n="income.price">Price/Share</th>
+                <th data-i18n="income.proceeds">Proceeds (USD)</th>
+                <th data-i18n="income.fees">Fees (USD)</th>
+                <th data-i18n="income.netProceeds">Net Proceeds (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="trades-tbody"></tbody>
+            <tfoot id="trades-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tax Calculation Tab -->
+    <section id="tab-taxes" class="tab-content">
+      <div class="card">
+        <h2 data-i18n="taxes.title">Tax Calculation Summary</h2>
+        <div class="tax-info-box">
+          <h4 data-i18n="taxes.ratesTitle">Romanian Tax Rates (ANAF)</h4>
+          <ul id="tax-rates-list"></ul>
+          <p class="tax-note" data-i18n="taxes.roNote">
+            Starting 2025, stocks transferred to Romania broker. Romania broker withholds capital gains tax (1%/3%) but NOT CASS. CAS does NOT apply for investment income.
+          </p>
+        </div>
+        <div class="table-responsive">
+          <table id="tax-table">
+            <thead>
+              <tr>
+                <th data-i18n="taxes.item">Item</th>
+                <th data-i18n="taxes.amount">Amount (RON)</th>
+              </tr>
+            </thead>
+            <tbody id="tax-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2 data-i18n="taxes.cassTitle">CASS (Health Insurance Contribution)</h2>
+        <div id="cass-details"></div>
+      </div>
+
+      <div class="card declaratie-helper">
+        <h2 data-i18n="taxes.dclTitle">Declarație Unică D212 - Form Helper</h2>
+        <p class="subtitle" data-i18n="taxes.dclSubtitle">Use these values to fill in the Declarație Unică D212 form on ANAF portal.</p>
+        <p class="subtitle" style="font-size:0.75rem;color:var(--text-muted);" data-i18n="taxes.dclVersion">Version: A1.0.6/08.12.2025</p>
+
+        <div class="dcl-section">
+          <h3 id="dcl-ch1-header">CHAPTER I - Income Tax &amp; Social Contributions for Year</h3>
+        </div>
+
+        <div class="dcl-section">
+          <h3 data-i18n="taxes.dclForeignSection">Subsection I.2.1: Foreign Income (US - Fidelity / Morgan Stanley)</h3>
+          <div class="table-responsive">
+            <table id="dcl-foreign-table">
+              <thead>
+                <tr>
+                  <th data-i18n="taxes.dclField">Field</th>
+                  <th data-i18n="taxes.dclValue">Value</th>
+                </tr>
+              </thead>
+              <tbody id="dcl-foreign-tbody"></tbody>
+            </table>
+          </div>
+          <div id="dcl-capgains-method" class="tax-info-box" style="margin-top:0.75rem;"></div>
+        </div>
+
+        <div class="dcl-section">
+          <h3 data-i18n="taxes.dclRoSection">Romania Income - Only Interest (stocks & dividends: final tax, not declared)</h3>
+          <div class="table-responsive">
+            <table id="dcl-ro-table">
+              <thead>
+                <tr>
+                  <th data-i18n="taxes.dclField">Field</th>
+                  <th data-i18n="taxes.dclValue">Value</th>
+                </tr>
+              </thead>
+              <tbody id="dcl-ro-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="dcl-section">
+          <h3 data-i18n="taxes.dclCassSection">Subsection I.3.2: CASS Due</h3>
+          <div class="table-responsive">
+            <table id="dcl-cass-table">
+              <thead>
+                <tr>
+                  <th data-i18n="taxes.dclField">Field</th>
+                  <th data-i18n="taxes.dclValue">Value</th>
+                </tr>
+              </thead>
+              <tbody id="dcl-cass-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="dcl-section">
+          <h3 data-i18n="taxes.dclSummarySection">Section I.7: Obligations Summary</h3>
+          <div class="table-responsive">
+            <table id="dcl-summary-table">
+              <thead>
+                <tr>
+                  <th data-i18n="taxes.dclField">Field</th>
+                  <th data-i18n="taxes.dclValueRon">Value (RON)</th>
+                </tr>
+              </thead>
+              <tbody id="dcl-summary-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="dcl-section">
+          <h3 id="dcl-ch2-header">CHAPTER II - CASS Payment Option for Year</h3>
+          <div class="table-responsive">
+            <table id="dcl-ch2-table">
+              <thead>
+                <tr>
+                  <th data-i18n="taxes.dclField">Field</th>
+                  <th data-i18n="taxes.dclValue">Value</th>
+                </tr>
+              </thead>
+              <tbody id="dcl-ch2-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Add Data Tab (for 2025+) -->
+    <section id="tab-input" class="tab-content">
+      <h2 data-i18n="input.title">Add/Edit Financial Data</h2>
+        <p class="subtitle" data-i18n="input.subtitle">Enter amounts for the selected year. For 2025+, input dividends and stock sale proceeds from both US (Fidelity / Morgan Stanley) and Romania broker.</p>
+      <div class="input-year-banner" id="input-year-banner"></div>
+
+      <div class="card">
+        <form id="data-form">
+          <fieldset class="form-grid-2">
+            <legend data-i18n="input.dividends">Dividends</legend>
+            <div class="form-row">
+              <label data-i18n="input.usDividends">US Dividends (USD)</label>
+              <input type="number" step="0.01" id="input-us-dividends" name="usDividends">
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roDividends">Romania Dividends (RON)</label>
+              <input type="number" step="0.01" id="input-ro-dividends" name="roDividends">
+            </div>
+          </fieldset>
+
+          <fieldset class="form-grid-3">
+            <legend data-i18n="input.capitalGains">Capital Gains (Stock Sales)</legend>
+            <div class="form-row">
+              <label data-i18n="input.usGains">US Stock Sales (USD)</label>
+              <input type="number" step="0.01" id="input-us-gains" name="usGains">
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.usCost">ESPP Purchase Cost (USD)</label>
+              <input type="number" step="0.01" id="input-us-cost" name="usCost">
+              <small data-i18n="input.usCostHint">Cost of ESPP shares purchased at preferential price. Stock awards (free) = 0.</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roGains">Romania Stock Sales (RON)</label>
+              <input type="number" step="0.01" id="input-ro-gains" name="roGains">
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="input.interestIncome">Interest Income</legend>
+            <div class="form-row">
+              <label data-i18n="input.interestRON">Interest Income (RON)</label>
+              <input type="number" step="0.01" id="input-interest" name="interestIncome">
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="input.deductions">Deductions</legend>
+            <div class="form-row">
+              <label data-i18n="input.stockWithholding">Stock Withholding Already Paid (RON)</label>
+              <input type="number" step="0.01" id="input-stock-withholding" name="stockWithholdingPaid">
+            </div>
+          </fieldset>
+
+          <button type="submit" class="btn-primary" id="btn-save-data">Save Data</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <form id="rates-form">
+          <fieldset id="fieldset-rates" class="form-grid-3">
+            <legend id="legend-rates" data-i18n="input.exchangeRate">Exchange Rate & Minimum Salary</legend>
+            <div class="form-row">
+              <label data-i18n="input.usdRon">USD/RON Rate</label>
+              <input type="number" step="0.0001" id="input-exchange-rate" name="exchangeRate">
+              <small data-i18n="input.bnrSource">Source: BNR annual average</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.minSalary">Minimum Gross Salary (RON/month)</label>
+              <input type="number" step="1" id="input-min-salary" name="minSalary">
+              <small data-i18n="input.minSalarySource">Used for CASS tier calculation</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.d212Deadline">D212 Filing & Payment Deadline</label>
+              <input type="date" id="input-d212-deadline" name="d212Deadline" onclick="this.showPicker?.()" style="color-scheme:dark;">
+              <small data-i18n="input.d212DeadlineHint">Deadline for filing D212 and paying income tax + CASS</small>
+            </div>
+          </fieldset>
+          <button type="submit" class="btn-primary" id="btn-save-rates">Save Rates</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <form id="tax-rates-form">
+          <fieldset class="form-grid-2">
+            <legend data-i18n="input.taxRatesTitle">Tax Rates by Country</legend>
+            <h4 style="color:var(--accent);margin-bottom:0.5rem;" data-i18n="input.usTaxRatesTitle">United States (US) - Withholding at Source</h4>
+            <div class="form-row">
+              <label data-i18n="input.usDividendRate">US Dividend Tax Rate (%)</label>
+              <input type="number" step="0.1" id="input-us-div-rate" name="usDividendRate" placeholder="10">
+              <small data-i18n="input.usDividendRateHint">RO-US Treaty: 10% withheld at source by US</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.usCapGainsRate">US Capital Gains Tax Rate (%)</label>
+              <input type="number" step="0.1" id="input-us-capgains-rate" name="usCapGainsRate" placeholder="0">
+              <small data-i18n="input.usCapGainsRateHint">US does not withhold tax on stock sales for non-residents</small>
+            </div>
+          </fieldset>
+          <fieldset class="form-grid-3">
+            <legend data-i18n="input.roTaxRatesTitle">Romania (RO) - Tax Rates</legend>
+            <div class="form-row">
+              <label data-i18n="input.roDividendRate">RO Dividend Tax Rate (%)</label>
+              <input type="number" step="0.1" id="input-ro-div-rate" name="roDividendRate" placeholder="10">
+              <small data-i18n="input.roDividendRateHint">10% from 2025, 8% for 2024 and earlier</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roCapGainsRate">Capital Gains Tax Rate - Foreign / US (%)</label>
+              <input type="number" step="0.1" id="input-ro-capgains-rate" name="roCapGainsRate" placeholder="10">
+              <small data-i18n="input.roCapGainsRateHint">10% for 2025, 16% from 2026 (non-Romania brokers: Fidelity, Morgan Stanley)</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roCapGainsLongRate">RO Capital Gains - Domestic ≥1yr (%)</label>
+              <input type="number" step="0.1" id="input-ro-capgains-long-rate" name="roCapGainsLongRate" placeholder="1">
+              <small data-i18n="input.roCapGainsLongRateHint">1% for 2025, 3% from 2026 (Romania broker, final tax)</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roCapGainsShortRate">RO Capital Gains - Domestic &lt;1yr (%)</label>
+              <input type="number" step="0.1" id="input-ro-capgains-short-rate" name="roCapGainsShortRate" placeholder="3">
+              <small data-i18n="input.roCapGainsShortRateHint">3% for 2025, 6% from 2026 (Romania broker, final tax)</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roInterestRate">RO Interest Income Tax Rate (%)</label>
+              <input type="number" step="0.1" id="input-ro-interest-rate" name="roInterestRate" placeholder="10">
+              <small data-i18n="input.roInterestRateHint">10% on interest income</small>
+            </div>
+          </fieldset>
+          <button type="submit" class="btn-primary" id="btn-save-tax-rates">Save Tax Rates</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Import PDF Tab -->
+    <section id="tab-import" class="tab-content">
+      <div class="card">
+        <h2 data-i18n="import.title">Import Document</h2>
+        <p class="subtitle" data-i18n="import.subtitle">Upload a PDF or image (screenshot) of your declarations, investment reports, or income certificates. Images will be processed with OCR.</p>
+
+        <form id="upload-form" enctype="multipart/form-data">
+          <div class="import-grid">
+            <div class="import-col">
+              <label data-i18n="import.year">Year</label>
+              <input type="hidden" id="upload-year" name="year" required>
+              <div class="year-picker" id="year-picker"></div>
+            </div>
+            <div class="import-col">
+              <label data-i18n="import.type">Document Type</label>
+              <select id="upload-type" name="type" required>
+                <option value="" disabled selected data-i18n="import.selectType">-- Select Document Type --</option>
+                <option value="investment" data-i18n="import.typeInvestment">Investment Report</option>
+                <option value="adeverinta" data-i18n="import.typeAdeverinta">Income Certificate</option>
+                <option value="stock_award" data-i18n="import.typeStockAward">Stock Award Document</option>
+                <option value="trade_confirmation" data-i18n="import.typeTradeConfirmation">Fidelity Trade Confirmation</option>
+                <option value="xtb_dividends" data-i18n="import.typeXtbDividends">XTB Dividends Report</option>
+                <option value="xtb_portfolio" data-i18n="import.typeXtbPortfolio">XTB Portfolio</option>
+                <option value="fidelity_statement" data-i18n="import.typeFidelityStatement">Fidelity Statement</option>
+                <option value="declaratie" data-i18n="import.typeDeclaratie">Tax Declaration</option>
+                <option value="form_1042s" data-i18n="import.typeForm1042S">Tax Form - 1042-S</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <label data-i18n="import.file">PDF or Image File</label>
+            <div class="custom-file-input">
+              <input type="file" id="upload-file" name="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" multiple required>
+              <button type="button" class="file-btn" onclick="document.getElementById('upload-file').click()" data-i18n="import.chooseFiles">Choose Files</button>
+              <span id="file-label" data-i18n="import.noFileChosen">No file chosen</span>
+            </div>
+          </div>
+          <div id="image-preview" class="hidden">
+            <img id="preview-img" style="max-width:100%;max-height:300px;border-radius:var(--radius);margin-bottom:0.75rem;" />
+          </div>
+          <button type="submit" class="btn-primary" data-i18n="import.upload">Upload & Process</button>
+        </form>
+        <div id="upload-result" class="hidden"></div>
+      </div>
+    </section>
+
+    <!-- Raw Data Tab -->
+    <section id="tab-raw" class="tab-content">
+      <div class="card">
+        <h2 data-i18n="raw.title">Raw Extracted Data</h2>
+        <div style="display:flex;gap:0.75rem;align-items:flex-end;">
+          <div class="form-row" style="flex:1;margin-bottom:0;">
+            <label data-i18n="raw.selectFile">Select File</label>
+            <select id="raw-file-select"></select>
+          </div>
+          <button type="button" id="raw-edit-btn" class="btn-primary hidden" style="height:fit-content;" data-i18n="raw.edit">Edit</button>
+          <button type="button" id="raw-save-btn" class="btn-primary hidden" style="background:var(--success);height:fit-content;" data-i18n="raw.saveFile">Save</button>
+          <button type="button" id="raw-cancel-btn" class="btn-primary hidden" style="background:var(--text-muted);height:fit-content;" data-i18n="raw.cancel">Cancel</button>
+          <button type="button" id="raw-purge-btn" class="btn-primary hidden" style="background:var(--danger);height:fit-content;" data-i18n="raw.purge">Purge</button>
+        </div>
+        <pre id="raw-content" class="raw-text-box"></pre>
+        <textarea id="raw-editor" class="raw-text-box hidden" rows="20"></textarea>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p><span data-i18n="footer.appName">D212 Tax Helper</span> &copy; 2026 | <a href="#" id="app-version-link" title="View changelog" style="color:var(--accent);text-decoration:none;">v<span id="app-version">...</span></a> | <span data-i18n="footer.source">Data source: ANAF, BNR, Fidelity, XTB</span>
+      | <span data-i18n="footer.contact">Contact</span>: <a href="mailto:edmund.spatariu@microsoft.com?subject=About%20D212%20Tax%20Helper" style="color:var(--accent);">Edmund Spatariu</a>
+      <button type="button" id="restart-btn" class="restart-btn" data-i18n="footer.restart">Restart Server</button>
+    </p>
+  </footer>
+
+  <div id="toast" class="toast hidden"></div>
+  <button id="scroll-top-btn" class="scroll-top-btn hidden"><span>&uarr;</span><small id="scroll-top-label" data-i18n="footer.backToTop">Top</small></button>
+
+  <!-- Changelog Modal -->
+  <div id="changelog-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="changelog-title">Changelog</h3>
+        <button type="button" id="changelog-close" class="modal-close">&times;</button>
+      </div>
+      <div id="changelog-body" class="changelog-body"></div>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/charts.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
