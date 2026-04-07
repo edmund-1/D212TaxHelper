@@ -416,12 +416,14 @@ const App = (() => {
 
     // Tax from declaration or US broker data (source of truth)
     // US dividends: US withholds 10% at source per RO-US treaty.
-    // Romania does NOT tax US dividends again (no double taxation).
-    // BUT dividends still count toward CASS income threshold.
+    // Romania taxes at divTaxRate. Credit fiscal = min(RO tax, US tax paid).
+    // Difference to pay = max(0, RO tax - US credit).
     const usForeignTaxUSD = fd.dividends?.foreignTaxUSD || f1042sTaxUSD || inv.taxesWithheld || 0;
     const usForeignTaxRON = fd.dividends?.foreignTaxRON || (usForeignTaxUSD * rate);
-    // US dividends: RO tax = 0 for US-source dividends (treaty covers it)
-    const usDivTax = fd.dividends?.toPayRON ?? (fd.dividends?.taxDueRON || decl.dividends?.taxDueRON || 0);
+    // US dividends: RO tax due minus credit for US tax already paid
+    const usDivTaxDueRON = dividendsRON * divTaxRate;
+    const usDivCreditRON = Math.min(usDivTaxDueRON, usForeignTaxRON);
+    const usDivTax = fd.dividends?.toPayRON ?? Math.max(0, usDivTaxDueRON - usDivCreditRON);
     // Romania dividends: rate due but Romania broker withholds tax at source (credit fiscal covers it)
     const roDivTaxDue = dividendsRON_ro * divTaxRate;
     const roDivTaxNet = Math.max(0, roDivTaxDue - (roDivTaxWithheld || 0));
@@ -448,18 +450,19 @@ const App = (() => {
     const interestTaxPaid = adv.interestTax || 0;
     const interestTax = Math.max(0, interestTaxGross - interestTaxPaid);
 
-    // CASS calculation (tiered system 2025+)
-    // CASS base: total investment income minus total already paid (taxes withheld)
+    // CASS base: NET investment income
+    // Per art. 174 Cod Fiscal — use net income (gross minus deductible expenses/taxes)
     const usDivNetRON = dividendsRON - usForeignTaxRON;
     const roDivNetRON = dividendsRON_ro - (roDivTaxWithheld || 0);
     const totalDividendsRON_cass = Math.max(0, usDivNetRON) + Math.max(0, roDivNetRON);
     const totalDividendsRON = dividendsRON + dividendsRON_ro;
     const totalCapitalGainsRON = capitalGainsTaxableRON + capitalGainsRON_ro;
     const interestNetRON = Math.max(0, interestIncomeRON - interestTaxPaid);
-    // Subtract stock withholding from CASS base (only from capital gains)
+    // Subtract stock withholding and RO broker tax from CASS base
     const totalAlreadyPaid = withholding + (roPortTaxWithheld || 0) + (roDivTaxWithheld || 0) + interestTaxPaid;
     const usNetCapGainsRON_cass = Math.max(0, capitalGainsTaxableRON - withholding);
-    const totalInvestmentIncome_cass = Math.max(0, totalDividendsRON_cass + usNetCapGainsRON_cass + capitalGainsRON_ro + interestNetRON);
+    const roNetCapGainsRON_cass = Math.max(0, capitalGainsRON_ro - (roPortTaxWithheld || 0));
+    const totalInvestmentIncome_cass = Math.max(0, totalDividendsRON_cass + usNetCapGainsRON_cass + roNetCapGainsRON_cass + interestNetRON);
     const totalInvestmentIncome = totalDividendsRON + totalCapitalGainsRON + interestIncomeRON + (adv.gamblingIncome || 0);
     const savedMinSalary = (yd.minSalary !== undefined && yd.minSalary !== '') ? parseFloat(yd.minSalary) : null;
     const cassResult = calculateCASS(totalInvestmentIncome_cass, year, savedMinSalary);
@@ -752,9 +755,9 @@ const App = (() => {
         cat: I18n.t('income.roGainsLong'),
         country: xtbPort.country || 'USA',
         gross: xtbPort.longTerm.gainRON,
-        rate: '1%',
+        rate: (data.roLongRate * 100) + '%',
         withheld: xtbPort.longTerm.taxWithheldRON || 0,
-        net: Math.max(0, xtbPort.longTerm.gainRON * 0.01 - (xtbPort.longTerm.taxWithheldRON || 0))
+        net: Math.max(0, xtbPort.longTerm.gainRON * data.roLongRate - (xtbPort.longTerm.taxWithheldRON || 0))
       });
     }
     if (xtbPort.shortTerm?.gainRON) {
@@ -762,9 +765,9 @@ const App = (() => {
         cat: I18n.t('income.roGainsShort'),
         country: xtbPort.country || 'USA',
         gross: xtbPort.shortTerm.gainRON,
-        rate: '3%',
+        rate: (data.roShortRate * 100) + '%',
         withheld: xtbPort.shortTerm.taxWithheldRON || 0,
-        net: Math.max(0, xtbPort.shortTerm.gainRON * 0.03 - (xtbPort.shortTerm.taxWithheldRON || 0))
+        net: Math.max(0, xtbPort.shortTerm.gainRON * data.roShortRate - (xtbPort.shortTerm.taxWithheldRON || 0))
       });
     }
     if (xtbDiv.dividends?.grossRON) {
@@ -782,9 +785,9 @@ const App = (() => {
         cat: I18n.t('income.interestIncome') + ' (Romania)',
         country: 'RO',
         gross: xtbDiv.interest.grossRON,
-        rate: '10%',
+        rate: (data.interestTaxRate * 100) + '%',
         withheld: xtbDiv.interest.taxWithheldRON || 0,
-        net: xtbDiv.interest.grossRON * 0.10 - (xtbDiv.interest.taxWithheldRON || 0)
+        net: xtbDiv.interest.grossRON * data.interestTaxRate - (xtbDiv.interest.taxWithheldRON || 0)
       });
     }
 
@@ -879,7 +882,7 @@ const App = (() => {
     const gamblingIncome = data.gamblingIncome || 0;
 
     // Tax computations
-    const usGainsTax = usGainsRON > 0 ? (usGainsRON - (data.salaryDeduction || 0)) * (data.capGainsTaxRate || 0.10) : 0;
+    const usGainsTax = usGainsRON > 0 ? Math.max(0, usGainsRON - stockWithholding) * (data.capGainsTaxRate || 0.10) : 0;
     const usDivTax = data.usDivToPayRON ?? 0;
     const roLongTax = roLong * (data.roLongRate || 0.01);
     const roShortTax = roShort * (data.roShortRate || 0.03);
