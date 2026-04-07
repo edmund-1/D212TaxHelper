@@ -352,7 +352,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       const tradesFile = path.join(DATA_DIR, 'trades.json');
       let trades = { trades: [] };
       if (fs.existsSync(tradesFile)) {
-        trades = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
+        const raw = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
+        trades = { trades: Array.isArray(raw.trades) ? raw.trades : [] };
       }
       // Avoid duplicates by checking ref number
       const isDuplicate = trade.refNumber && trades.trades.some(t => t.refNumber === trade.refNumber);
@@ -412,7 +413,10 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       // Load existing trades for dedup
       const tradesFile = path.join(DATA_DIR, 'trades.json');
       let trades = { trades: [] };
-      if (fs.existsSync(tradesFile)) trades = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
+      if (fs.existsSync(tradesFile)) {
+        const raw = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
+        trades = { trades: Array.isArray(raw.trades) ? raw.trades : [] };
+      }
 
       // Dedup sales: match by date + shares + netProceeds (or refNumber)
       let newTradesAdded = 0;
