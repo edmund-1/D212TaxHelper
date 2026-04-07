@@ -1,5 +1,38 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v2.3.0 (2026-04-08)
+
+### Corecturi calcul (Audit conformitate ANAF)
+- Impozit dividende SUA: calculează corect creditul fiscal pentru 2026+ (RO 16% - SUA 10% = 6% de plată)
+- Rata impozit dobânzi: dinamică 10%/16% în funcție de an
+- Rate câștiguri broker RO: dinamice 1%/3% sau 3%/6% în toate tabelele
+- Baza CASS: tratament net consistent pentru toate tipurile de venit
+- Variabila stock withholding: utilizare consistentă
+- Sumar D212: nu mai dublează impozitul pe dobânzi
+- Sume RON: rotunjite la lei întregi conform cerințelor ANAF
+
+### Asistent completare D212
+- Adăugat cost ESPP și detalii credit fiscal la secțiunea venituri străinătate
+- Adăugat câștiguri capital broker România (≥1 an / <1 an) cu impozit reținut
+- Adăugat dividende broker România cu impozit reținut
+- Secțiune nouă "Venituri cu reținere la sursă" pentru CASS
+- Titluri secțiuni corelate cu formularul ANAF D212
+
+### Îmbunătățiri UI
+- Calcul impozit grupat în subsecțiuni SUA/România cu subtotaluri
+- Dropdown tipuri documente reordonat logic
+- Butonul "Se procesează" nu mai rămâne blocat
+- Graficul cursului de schimb afișat doar când există date financiare
+
+### Corecturi bug-uri
+- Purge șterge complet datele 1042-S
+- Purge curăță tranzacțiile din trades.json
+- Obiectele an goale șterse după purge
+- Eroare stockWithholding temporal dead zone rezolvată
+- Scripturi migrație obsolete șterse
+
+---
+
 ## v2.2.0 (2026-04-07)
 
 ### Actualizări

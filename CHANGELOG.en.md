@@ -1,5 +1,38 @@
 # D212 Tax Helper - Changelog
 
+## v2.3.0 (2026-04-08)
+
+### Calculation Fixes (ANAF Compliance Audit)
+- US dividend tax: correctly computes credit fiscal difference for 2026+ (RO 16% - US 10% = 6% to pay)
+- Interest tax rate: dynamic 10%/16% based on year (was hardcoded 10%)
+- RO broker capital gains rates: dynamic 1%/3% or 3%/6% based on year in all tables
+- CASS base: consistent net treatment for all income types including RO capital gains
+- Stock withholding variable: consistent usage across tax calculation and display
+- D212 summary: no longer double-counts interest tax or shows mismatched totals
+- RON amounts: rounded to integers per ANAF requirements (lei întregi)
+
+### D212 Form Helper
+- Added ESPP cost and credit fiscal detail to foreign income section
+- Added Romania broker capital gains (≥1yr / <1yr) with tax withheld detail
+- Added Romania broker dividends with tax withheld detail
+- New "Venituri cu reținere la sursă" section for CASS (maps directly to ANAF form)
+- Section headers correlate with ANAF D212 form buttons
+
+### UI Improvements
+- Tax Calculation grouped into US/Romania subsections with subtotals
+- Document type dropdown reordered: US brokers → RO broker → ANAF/Tax
+- Upload button no longer stuck on "Processing" when render errors occur
+- Exchange rate chart only shown when actual financial data exists
+
+### Bug Fixes
+- Purge now fully deletes 1042-S data (was broken due to key mismatch)
+- Purge cleans up fidelity/MS/trade trades from trades.json
+- Empty year objects removed after purge
+- stockWithholding temporal dead zone error fixed
+- Removed obsolete migration scripts
+
+---
+
 ## v2.2.0 (2026-04-07)
 
 ### Upgrades
