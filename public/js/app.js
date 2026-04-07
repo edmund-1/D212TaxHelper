@@ -1181,6 +1181,34 @@ const App = (() => {
       }).join('');
     }
 
+    // Withholding income section (for CASS calculation)
+    const whTbody = document.getElementById('dcl-withholding-tbody');
+    if (whTbody) {
+      const roLongGainWH = data.roLongTermGainRON || 0;
+      const roShortGainWH = data.roShortTermGainRON || 0;
+      const roDivWH = data.dividendsRON_ro || 0;
+      const interestWH = data.interestIncomeRON || 0;
+      const gamblingWH = data.gamblingIncome || 0;
+      const totalWH = roLongGainWH + roShortGainWH + roDivWH + interestWH + gamblingWH;
+
+      const rows = [
+        [I18n.t('dcl.whCapGainsLong'), fmtR(roLongGainWH)],
+        [I18n.t('dcl.whCapGainsShort'), fmtR(roShortGainWH)],
+        [I18n.t('dcl.whDividends'), fmtR(roDivWH)],
+        [I18n.t('dcl.whInterest'), fmtR(interestWH)],
+      ];
+      if (gamblingWH > 0) {
+        rows.push([I18n.t('dcl.whGambling'), fmtR(gamblingWH)]);
+      }
+      rows.push([I18n.t('dcl.whNote'), '']);
+      rows.push(['<strong>' + I18n.t('dcl.whTotal') + '</strong>', '<strong>' + fmtR(totalWH) + '</strong>']);
+
+      whTbody.innerHTML = rows.map(([f, v]) => {
+        const isNote = f === I18n.t('dcl.whNote');
+        return `<tr${isNote ? ' style="color:var(--text-muted);font-size:0.8rem"' : ''}><td>${f}</td><td>${v}</td></tr>`;
+      }).join('');
+    }
+
     // CASS section
     const cassTbody = document.getElementById('dcl-cass-tbody');
     if (cassTbody) {
