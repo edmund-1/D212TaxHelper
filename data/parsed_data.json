@@ -2,16 +2,6 @@
   "years": {
     "2025": {
       "year": 2025,
-      "adeverinta": {
-        "year": 2025,
-        "interestIncome": 79,
-        "interestTax": 8,
-        "gamblingIncome": 270,
-        "gamblingTax": 10,
-        "salaryIncome": 0,
-        "salaryTax": 0,
-        "sections": []
-      },
       "xtbDividendsReport": {
         "year": 2025,
         "source": "XTB Romania",
@@ -63,17 +53,6 @@
           "accountNumber": "I01-850253"
         }
       ],
-      "investment": {
-        "year": 2025,
-        "accountValue": 5959.05,
-        "beginningValue": 9055.15,
-        "dividends": {
-          "total": 46.69
-        },
-        "taxesWithheld": 4.52,
-        "totalDividends": 46.69,
-        "netGains": 0
-      },
       "fidelityTrades": {
         "count": 1,
         "totalProceeds": 863,
