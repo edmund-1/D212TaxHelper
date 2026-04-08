@@ -1467,25 +1467,29 @@ const App = (() => {
     const row = document.createElement('div');
     row.className = 'ro-gains-row';
     row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:0.75rem;align-items:end;margin-bottom:0.75rem;';
-    const countryOpts = RO_COUNTRIES.map(c => `<option value="${c}"${data?.country === c ? ' selected' : ''}>${c}</option>`).join('');
+    const countryOpts = `<option value="" disabled ${!data?.country ? 'selected' : ''}>${I18n.t('input.selectCountry')}</option>` + RO_COUNTRIES.map(c => `<option value="${c}"${data?.country === c ? ' selected' : ''}>${c}</option>`).join('');
     row.innerHTML = `
       <div class="form-row" style="margin-bottom:0;">
         <label>${I18n.t('input.country')}</label>
         <select class="ro-country">${countryOpts}</select>
+        <small style="color:var(--text-muted);font-size:0.7rem;">${I18n.t('input.countryHint')}</small>
       </div>
       <div class="form-row" style="margin-bottom:0;">
         <label>${I18n.t('input.roGainsLong')}</label>
         <input type="number" step="0.01" class="ro-long" value="${data?.longGain || ''}">
+        <small style="color:var(--text-muted);font-size:0.7rem;">${I18n.t('input.roGainsLongHint')}</small>
       </div>
       <div class="form-row" style="margin-bottom:0;">
         <label>${I18n.t('input.roGainsShort')}</label>
         <input type="number" step="0.01" class="ro-short" value="${data?.shortGain || ''}">
+        <small style="color:var(--text-muted);font-size:0.7rem;">${I18n.t('input.roGainsShortHint')}</small>
       </div>
       <div class="form-row" style="margin-bottom:0;">
         <label>${I18n.t('input.roGainsTaxWithheld')}</label>
         <input type="number" step="0.01" class="ro-tax" value="${data?.taxWithheld || ''}">
+        <small style="color:var(--text-muted);font-size:0.7rem;">${I18n.t('input.roGainsTaxHintShort')}</small>
       </div>
-      <div style="padding-bottom:0.2rem;">
+      <div style="padding-bottom:1.5rem;">
         <button type="button" class="btn-primary ro-remove-btn" style="background:var(--danger);font-size:0.85rem;padding:0.45rem 0.7rem;">✕</button>
       </div>
     `;
