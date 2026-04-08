@@ -1492,8 +1492,15 @@ const App = (() => {
       </div>
     `;
     row.querySelector('.ro-remove-btn').addEventListener('click', () => {
-      row.remove();
-      if (!container.children.length) addRoGainsRow(container);
+      if (container.children.length <= 1) {
+        // Last row: clear values instead of removing
+        row.querySelector('.ro-country').selectedIndex = 0;
+        row.querySelector('.ro-long').value = '';
+        row.querySelector('.ro-short').value = '';
+        row.querySelector('.ro-tax').value = '';
+      } else {
+        row.remove();
+      }
     });
     container.appendChild(row);
   }
