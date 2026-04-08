@@ -1652,89 +1652,136 @@ const App = (() => {
   }
 
   // ============ RAW DATA ============
+  let _rawSelectedFile = null;
+
   async function loadRawFiles() {
-    const select = document.getElementById('raw-file-select');
+    const listDiv = document.getElementById('raw-file-list');
+    const viewerCard = document.getElementById('raw-viewer-card');
+    const viewerTitle = document.getElementById('raw-viewer-title');
     const content = document.getElementById('raw-content');
     const editor = document.getElementById('raw-editor');
     const editBtn = document.getElementById('raw-edit-btn');
     const saveBtn = document.getElementById('raw-save-btn');
     const cancelBtn = document.getElementById('raw-cancel-btn');
-    const purgeBtn = document.getElementById('raw-purge-btn');
 
-    // Reset to view mode
-    content.classList.remove('hidden');
+    // Reset viewer
+    viewerCard.classList.add('hidden');
+    content.textContent = '';
     editor.classList.add('hidden');
-    editBtn.classList.add('hidden');
+    content.classList.remove('hidden');
+    editBtn.classList.remove('hidden');
     saveBtn.classList.add('hidden');
     cancelBtn.classList.add('hidden');
-    purgeBtn.classList.add('hidden');
-    content.textContent = '';
 
-    // Fetch available raw files from server
+    // Fetch file list
+    let files = [];
     try {
       const resp = await fetch('/api/raw');
-      const files = await resp.json();
-      // Default empty option
-      let opts = `<option value="">${I18n.t('raw.selectFile')}...</option>`;
-      if (files.length > 0) {
-        opts += files.map(f => {
-          const label = f.replace('_raw.txt', '');
-          return `<option value="${f}">${label}</option>`;
-        }).join('');
-      }
-      select.innerHTML = opts;
-    } catch {
-      select.innerHTML = `<option value="">${I18n.t('raw.noData')}</option>`;
+      files = await resp.json();
+    } catch {}
+
+    if (!files.length) {
+      listDiv.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:1rem;">${I18n.t('raw.noData')}</p>`;
       return;
     }
 
-    select.onchange = async () => {
-      // Reset edit mode
-      content.classList.remove('hidden');
-      editor.classList.add('hidden');
-      saveBtn.classList.add('hidden');
-      cancelBtn.classList.add('hidden');
+    // Render file list as table
+    const locale = I18n.getLang?.() === 'ro' ? 'ro-RO' : 'en-US';
+    listDiv.innerHTML = `
+      <table style="width:100%;font-size:0.85rem;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:0.5rem;">${I18n.t('raw.fileName')}</th>
+            <th style="text-align:left;padding:0.5rem;">${I18n.t('raw.uploadDate')}</th>
+            <th style="text-align:right;padding:0.5rem;">${I18n.t('raw.actions')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${files.map(f => {
+            const label = f.name.replace('_raw.txt', '');
+            const date = new Date(f.date).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            return `<tr>
+              <td style="padding:0.5rem;"><strong>${esc(label)}</strong></td>
+              <td style="padding:0.5rem;color:var(--text-muted);">${date}</td>
+              <td style="padding:0.5rem;text-align:right;">
+                <button class="btn-primary raw-view-btn" data-file="${esc(f.name)}" style="font-size:0.75rem;padding:0.3rem 0.6rem;margin-right:0.3rem;" data-i18n="raw.view">${I18n.t('raw.view')}</button>
+                <button class="btn-primary raw-purge-btn" data-file="${esc(f.name)}" style="font-size:0.75rem;padding:0.3rem 0.6rem;background:var(--danger);" data-i18n="raw.purge">${I18n.t('raw.purge')}</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
 
-      if (!select.value) {
-        content.textContent = '';
-        editBtn.classList.add('hidden');
-        purgeBtn.classList.add('hidden');
-        return;
-      }
-      editBtn.classList.remove('hidden');
-      purgeBtn.classList.remove('hidden');
-      try {
-        const resp = await fetch(`/api/raw/${select.value}`);
-        if (resp.ok) {
-          const text = await resp.text();
-          // If tab-separated, render as table
-          const lines = text.split('\n').filter(l => l.trim());
-          const hasTab = lines.some(l => l.includes('\t'));
-          if (hasTab) {
-            const dataLines = lines.filter(l => l.includes('\t'));
-            let html = '<table style="width:100%;font-size:0.8rem;">';
-            dataLines.forEach((line, i) => {
-              const cells = line.split('\t');
-              const tag = i === 0 ? 'th' : 'td';
-              html += '<tr>' + cells.map(c => `<${tag} style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);text-align:left;">${esc(c)}</${tag}>`).join('') + '</tr>';
-            });
-            html += '</table>';
-            // Show non-tab lines (like title) above
-            const titleLines = lines.filter(l => !l.includes('\t'));
-            content.innerHTML = (titleLines.length ? '<p style="margin-bottom:0.5rem;color:var(--text-muted);">' + titleLines.map(esc).join('<br>') + '</p>' : '') + html;
+    // View buttons
+    listDiv.querySelectorAll('.raw-view-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const file = btn.dataset.file;
+        _rawSelectedFile = file;
+        const label = file.replace('_raw.txt', '');
+        viewerTitle.textContent = label;
+        viewerCard.classList.remove('hidden');
+        editBtn.classList.remove('hidden');
+        saveBtn.classList.add('hidden');
+        cancelBtn.classList.add('hidden');
+        content.classList.remove('hidden');
+        editor.classList.add('hidden');
+
+        try {
+          const resp = await fetch(`/api/raw/${file}`);
+          if (resp.ok) {
+            const text = await resp.text();
+            const lines = text.split('\n').filter(l => l.trim());
+            const hasTab = lines.some(l => l.includes('\t'));
+            if (hasTab) {
+              const dataLines = lines.filter(l => l.includes('\t'));
+              let html = '<table style="width:100%;font-size:0.8rem;">';
+              dataLines.forEach((line, i) => {
+                const cells = line.split('\t');
+                const tag = i === 0 ? 'th' : 'td';
+                html += '<tr>' + cells.map(c => `<${tag} style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);text-align:left;">${esc(c)}</${tag}>`).join('') + '</tr>';
+              });
+              html += '</table>';
+              const titleLines = lines.filter(l => !l.includes('\t'));
+              content.innerHTML = (titleLines.length ? '<p style="margin-bottom:0.5rem;color:var(--text-muted);">' + titleLines.map(esc).join('<br>') + '</p>' : '') + html;
+            } else {
+              content.textContent = text;
+            }
+            content._rawText = text;
           } else {
-            content.textContent = text;
+            content.textContent = I18n.t('raw.noData');
           }
-          content._rawText = text;
-        } else {
+        } catch {
           content.textContent = I18n.t('raw.noData');
-          content._rawText = '';
         }
-      } catch {
-        content.textContent = I18n.t('raw.noData');
-        content._rawText = '';
-      }
-    };
+
+        viewerCard.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    // Purge buttons
+    listDiv.querySelectorAll('.raw-purge-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const file = btn.dataset.file;
+        const label = file.replace('_raw.txt', '');
+        const msg = I18n.t('raw.confirmPurge').replace('{file}', label);
+        if (!confirm(msg)) return;
+        try {
+          const resp = await fetch(`/api/raw/${file}`, { method: 'DELETE' });
+          const result = await resp.json();
+          if (result.success) {
+            showToast(I18n.t('raw.purged').replace('{file}', label), 'success');
+            await loadAllData();
+            render();
+            loadRawFiles();
+          } else {
+            showToast(result.error, 'error');
+          }
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    });
 
     // Edit button
     editBtn.onclick = () => {
@@ -1744,7 +1791,6 @@ const App = (() => {
       editBtn.classList.add('hidden');
       saveBtn.classList.remove('hidden');
       cancelBtn.classList.remove('hidden');
-      purgeBtn.classList.add('hidden');
     };
 
     // Cancel button
@@ -1754,15 +1800,13 @@ const App = (() => {
       editBtn.classList.remove('hidden');
       saveBtn.classList.add('hidden');
       cancelBtn.classList.add('hidden');
-      purgeBtn.classList.remove('hidden');
     };
 
     // Save button
     saveBtn.onclick = async () => {
-      const file = select.value;
-      if (!file) return;
+      if (!_rawSelectedFile) return;
       try {
-        const resp = await fetch(`/api/raw/${file}`, {
+        const resp = await fetch(`/api/raw/${_rawSelectedFile}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: editor.value })
@@ -1770,31 +1814,9 @@ const App = (() => {
         const result = await resp.json();
         if (result.success) {
           content.textContent = editor.value;
+          content._rawText = editor.value;
           cancelBtn.click();
           showToast(I18n.t('raw.fileSaved'), 'success');
-        } else {
-          showToast(result.error, 'error');
-        }
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
-    };
-
-    // Purge button
-    purgeBtn.onclick = async () => {
-      const file = select.value;
-      if (!file) return;
-      const label = file.replace('_raw.txt', '');
-      const msg = I18n.t('raw.confirmPurge').replace('{file}', label);
-      if (!confirm(msg)) return;
-      try {
-        const resp = await fetch(`/api/raw/${file}`, { method: 'DELETE' });
-        const result = await resp.json();
-        if (result.success) {
-          showToast(I18n.t('raw.purged').replace('{file}', label), 'success');
-          await loadAllData();
-          render();
-          loadRawFiles();
         } else {
           showToast(result.error, 'error');
         }

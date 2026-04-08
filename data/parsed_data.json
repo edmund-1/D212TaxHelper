@@ -1,1 +1,17 @@
-{ "years": {} }
+{
+  "years": {
+    "2025": {
+      "year": 2025,
+      "adeverinta": {
+        "year": 2025,
+        "interestIncome": 79,
+        "interestTax": 8,
+        "gamblingIncome": 270,
+        "gamblingTax": 10,
+        "salaryIncome": 0,
+        "salaryTax": 0,
+        "sections": []
+      }
+    }
+  }
+}

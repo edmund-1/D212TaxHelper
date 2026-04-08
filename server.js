@@ -141,11 +141,15 @@ app.put('/api/data/:year', (req, res) => {
   }
 });
 
-// GET /api/raw - List available raw files
+// GET /api/raw - List available raw files with metadata
 app.get('/api/raw', (req, res) => {
   try {
     const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('_raw.txt')).sort();
-    res.json(files);
+    const result = files.map(f => {
+      const stat = fs.statSync(path.join(DATA_DIR, f));
+      return { name: f, date: stat.mtime.toISOString(), size: stat.size };
+    });
+    res.json(result);
   } catch (err) {
     res.json([]);
   }
