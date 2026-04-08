@@ -1458,9 +1458,7 @@ const App = (() => {
   function renderRoGainsRows(rows) {
     const container = document.getElementById('ro-gains-rows');
     container.innerHTML = '';
-    if (!rows || rows.length === 0) {
-      addRoGainsRow(container);
-    } else {
+    if (rows && rows.length > 0) {
       rows.forEach(r => addRoGainsRow(container, r));
     }
   }
@@ -1492,15 +1490,7 @@ const App = (() => {
       </div>
     `;
     row.querySelector('.ro-remove-btn').addEventListener('click', () => {
-      if (container.children.length <= 1) {
-        // Last row: clear values instead of removing
-        row.querySelector('.ro-country').selectedIndex = 0;
-        row.querySelector('.ro-long').value = '';
-        row.querySelector('.ro-short').value = '';
-        row.querySelector('.ro-tax').value = '';
-      } else {
-        row.remove();
-      }
+      row.remove();
     });
     container.appendChild(row);
   }
