@@ -1769,7 +1769,7 @@ const App = (() => {
         allResultsHtml += resultHtml;
       } else if (result.ocrLowQuality) {
         const catList = (result.categories || []).map(c => `<li>${esc(c)}</li>`).join('');
-        const hintMsg = result.message || I18n.t('import.ocrManualHint');
+        const hintMsg = result.messageKey ? I18n.t(result.messageKey) : (result.message || I18n.t('import.ocrManualHint'));
         allResultsHtml += `<div style="color: var(--warning)">
           <p><strong>⚠ ${I18n.t('import.ocrLowQuality')}</strong></p>
           ${catList ? `<p>${I18n.t('import.ocrCategoriesFound')}:</p><ul>${catList}</ul>` : ''}
