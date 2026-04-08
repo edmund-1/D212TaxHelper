@@ -213,6 +213,10 @@
   },
   "raw": {
     "title": "Raw Extracted Data",
+    "fileName": "File Name",
+    "uploadDate": "Upload Date",
+    "actions": "Actions",
+    "view": "View",
     "selectFile": "Select File",
     "purge": "Purge",
     "edit": "Edit",

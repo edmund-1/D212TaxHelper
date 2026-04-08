@@ -211,6 +211,10 @@
   },
   "raw": {
     "title": "Date Brute Extrase",
+    "fileName": "Nume Fișier",
+    "uploadDate": "Data Încărcării",
+    "actions": "Acțiuni",
+    "view": "Vizualizează",
     "selectFile": "Selectează Fișier",
     "purge": "Șterge",
     "edit": "Editare",

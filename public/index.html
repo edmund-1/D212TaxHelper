@@ -500,15 +500,16 @@
     <section id="tab-raw" class="tab-content">
       <div class="card">
         <h2 data-i18n="raw.title">Raw Extracted Data</h2>
-        <div style="display:flex;gap:0.75rem;align-items:flex-end;">
-          <div class="form-row" style="flex:1;margin-bottom:0;">
-            <label data-i18n="raw.selectFile">Select File</label>
-            <select id="raw-file-select"></select>
+        <div id="raw-file-list"></div>
+      </div>
+      <div class="card hidden" id="raw-viewer-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+          <h3 id="raw-viewer-title" style="margin:0;"></h3>
+          <div style="display:flex;gap:0.5rem;">
+            <button type="button" id="raw-edit-btn" class="btn-primary" style="font-size:0.8rem;padding:0.4rem 0.8rem;" data-i18n="raw.edit">Edit</button>
+            <button type="button" id="raw-save-btn" class="btn-primary hidden" style="background:var(--success);font-size:0.8rem;padding:0.4rem 0.8rem;" data-i18n="raw.saveFile">Save</button>
+            <button type="button" id="raw-cancel-btn" class="btn-primary hidden" style="background:var(--text-muted);font-size:0.8rem;padding:0.4rem 0.8rem;" data-i18n="raw.cancel">Cancel</button>
           </div>
-          <button type="button" id="raw-edit-btn" class="btn-primary hidden" style="height:fit-content;" data-i18n="raw.edit">Edit</button>
-          <button type="button" id="raw-save-btn" class="btn-primary hidden" style="background:var(--success);height:fit-content;" data-i18n="raw.saveFile">Save</button>
-          <button type="button" id="raw-cancel-btn" class="btn-primary hidden" style="background:var(--text-muted);height:fit-content;" data-i18n="raw.cancel">Cancel</button>
-          <button type="button" id="raw-purge-btn" class="btn-primary hidden" style="background:var(--danger);height:fit-content;" data-i18n="raw.purge">Purge</button>
         </div>
         <pre id="raw-content" class="raw-text-box"></pre>
         <textarea id="raw-editor" class="raw-text-box hidden" rows="20"></textarea>
