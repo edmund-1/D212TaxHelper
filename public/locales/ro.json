@@ -222,7 +222,9 @@
     "ocrCategoriesFound": "Categorii de venituri detectate în document",
     "ocrManualHint": "Vă rugăm să introduceți datele manual în tab-ul Adăugare Date, sau încărcați versiunea PDF text de pe ANAF.",
     "ocrTradevilleHint": "OCR nu a putut extrage datele din tabel. Fișa de Portofoliu Tradeville folosește un format de tabel complex pe care OCR nu îl poate citi. Vă rugăm să introduceți datele manual în tab-ul Adăugare Date → 'Câștiguri capital broker România (pe țară)'.",
-    "processing": "Se procesează... OCR pe imagini poate dura câteva momente."
+    "processing": "Se procesează... OCR pe imagini poate dura câteva momente.",
+    "ocrEnginePaddle": "Motor OCR: PaddleOCR (PP-StructureV3)",
+    "ocrEngineTesseract": "Motor OCR: Tesseract.js (Lite)"
   },
   "raw": {
     "title": "Date Brute Extrase",

@@ -44,13 +44,16 @@ Open http://localhost:3000 in your browser.
 
 ## Portable Version
 
-A fully self-contained build (includes Node.js) that requires no installation:
+Two fully self-contained builds (include Node.js) that require no installation:
 
-```bash
-node build-portable.js
-```
+| Variant | Command | Size | OCR Engine |
+|---------|---------|------|------------|
+| **Lite** | `npm run build` | ~174 MB | Tesseract.js only |
+| **Full** | `npm run build:full` | ~1.9 GB | PaddleOCR + Tesseract.js |
 
-Output is created in `../D212TaxHelper-Portable/`. Just double-click `Start.bat` to run.
+Output is created alongside the source folder. Just double-click `Start.bat` to run.
+
+The **Full** build includes PaddleOCR for superior text extraction from scanned documents (especially Tradeville portfolio tables that Tesseract cannot read).
 
 ## Supported Documents
 
@@ -65,13 +68,15 @@ Output is created in `../D212TaxHelper-Portable/`. Just double-click `Start.bat`
 | Calcul declarație unică | Tax consultant |
 | Dividends report | XTB |
 | Portfolio report | XTB |\n| Portfolio (Fișă Portofoliu) | Tradeville |
-| Images (OCR) | Any (via Tesseract.js) |
+| Images (OCR) | Any (via PaddleOCR / Tesseract.js) |
 
 ## Project Structure
 
 ```
 D212TaxHelper/
 ├── server.js            # Express server & API routes
+├── ocr_service.py       # PaddleOCR subprocess (Python)
+├── setup_paddleocr.js   # PaddleOCR setup script
 ├── public/              # Frontend (HTML, CSS, JS)
 │   ├── index.html
 │   ├── css/styles.css
@@ -84,7 +89,7 @@ D212TaxHelper/
 │   └── check-i18n.js    # Translation completeness checker
 ├── data/                # Parsed financial data (gitignored)
 ├── uploads/             # Uploaded PDFs (gitignored)
-├── build-portable.js    # Portable version builder
+├── build-portable.js    # Portable version builder (--full for PaddleOCR)
 ├── GUIDE.en.md          # User guide (English)
 ├── GUIDE.ro.md          # User guide (Romanian)
 ├── CHANGELOG.en.md      # Changelog (English)
@@ -96,7 +101,9 @@ D212TaxHelper/
 - **Backend:** Node.js, Express 5
 - **Frontend:** Vanilla JS, HTML, CSS
 - **PDF parsing:** pdf-parse-new
-- **OCR:** Tesseract.js 7
+- **OCR (primary):** PaddleOCR 3.x via Python subprocess (PP-StructureV3)
+- **OCR (fallback):** Tesseract.js 7
+- **Python:** Embeddable 3.12 (optional, for PaddleOCR Full build)
 
 ## Privacy
 

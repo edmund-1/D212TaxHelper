@@ -224,7 +224,9 @@
     "ocrCategoriesFound": "Income categories detected in document",
     "ocrManualHint": "Please enter the data manually in the Add Data tab, or upload the text-based PDF version from ANAF.",
     "ocrTradevilleHint": "OCR could not extract table data from this document. The Tradeville Portfolio Statement uses a complex table format that OCR cannot parse reliably. Please enter the data manually in the Add Data tab \u2192 'Romania Broker Capital Gains (per country)'.",
-    "processing": "Processing... OCR on images may take a moment."
+    "processing": "Processing... OCR on images may take a moment.",
+    "ocrEnginePaddle": "OCR Engine: PaddleOCR (PP-StructureV3)",
+    "ocrEngineTesseract": "OCR Engine: Tesseract.js (Lite)"
   },
   "raw": {
     "title": "Raw Extracted Data",

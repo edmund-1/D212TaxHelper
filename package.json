@@ -1,12 +1,15 @@
 {
   "name": "d212-tax-helper",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "description": "D212 Tax Helper - Investment tax calculator for Romanian tax declarations",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "check-i18n": "node scripts/check-i18n.js"
+    "check-i18n": "node scripts/check-i18n.js",
+    "build": "node build-portable.js",
+    "build:full": "node build-portable.js --full",
+    "setup:paddleocr": "node setup_paddleocr.js"
   },
   "dependencies": {
     "express": "^5.2.1",

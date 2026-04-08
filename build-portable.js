@@ -4,7 +4,9 @@
  * Downloads a portable Node.js binary and packages the entire app
  * into a self-contained folder with a Start.bat launcher.
  *
- * Usage: node build-portable.js
+ * Usage: node build-portable.js [--full]
+ *   --full    Include Python + PaddleOCR (~1.9 GB total)
+ *   (default) Lite build with Tesseract.js only (~174 MB)
  */
 
 const fs = require('fs');
@@ -17,13 +19,17 @@ const NODE_ARCH = 'win-x64';
 const NODE_ZIP = `node-${NODE_VERSION}-${NODE_ARCH}.zip`;
 const NODE_URL = `https://nodejs.org/dist/${NODE_VERSION}/${NODE_ZIP}`;
 
+// Parse --full flag
+const BUILD_FULL = process.argv.includes('--full');
+
 const SRC = path.resolve(__dirname);
-const DIST = path.resolve(__dirname, '..', 'D212TaxHelper-Portable');
+const DIST = path.resolve(__dirname, '..', BUILD_FULL ? 'D212TaxHelper-Portable-Full' : 'D212TaxHelper-Portable');
 const TEMP = path.resolve(__dirname, '..', '_portable_temp');
 
 // Files/folders to copy from the app
 const APP_ITEMS = [
   'server.js',
+  'ocr_service.py', // PaddleOCR service (used if Python available)
   'package.json',
   'package-lock.json',
   'public',
@@ -173,6 +179,16 @@ async function build() {
     { cwd: appDir, stdio: 'inherit', env: { ...process.env, PATH: nodeDir + ';' + process.env.PATH } }
   );
 
+  // 4b. Install Python + PaddleOCR (Full build only)
+  if (BUILD_FULL) {
+    log('Setting up Python + PaddleOCR (Full build)...');
+    const { setup } = require('./setup_paddleocr');
+    await setup(appDir);
+    log('PaddleOCR setup complete');
+  } else {
+    log('Lite build - skipping PaddleOCR (Tesseract.js only)');
+  }
+
   // 5. Create Start.bat
   log('Creating launcher...');
   const startBat = `@echo off
@@ -198,7 +214,8 @@ timeout /t 2 /nobreak >nul
   fs.writeFileSync(path.join(DIST, 'Stop.bat'), stopBat, 'utf8');
 
   // 7. Create README
-  const readme = `# D212TaxHelper - Portable
+  const variant = BUILD_FULL ? ' (Full - PaddleOCR)' : ' (Lite - Tesseract)';
+  const readme = `# D212TaxHelper - Portable${variant}
 
 ## Quick Start
 1. Double-click **Start.bat** to launch the application
@@ -207,9 +224,14 @@ timeout /t 2 /nobreak >nul
 
 ## Contents
 - \`node/\` - Portable Node.js ${NODE_VERSION} runtime
-- \`app/\` - Application files and data
+- \`app/\` - Application files and data${BUILD_FULL ? '\n- `app/python/` - Portable Python + PaddleOCR (PP-StructureV3)' : ''}
 - \`Start.bat\` - Launch the application
 - \`Stop.bat\` - Stop the server
+
+## OCR Engine
+${BUILD_FULL
+  ? 'This is the **Full** build with PaddleOCR (PP-StructureV3) for superior table extraction from scanned documents (e.g., Tradeville portfolio statements). Tesseract.js is available as fallback.'
+  : 'This is the **Lite** build using Tesseract.js for OCR. For better table extraction from scanned documents, use the Full build with PaddleOCR.'}
 
 ## Data
 Your financial data is stored in \`app/data/\`. Back up this folder to preserve your data.
@@ -229,7 +251,7 @@ Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). 
 
   // Summary
   const size = getDirSize(DIST);
-  console.log('\n  === Build Complete ===');
+  console.log(`\n  === Build Complete (${BUILD_FULL ? 'Full' : 'Lite'}) ===`);
   console.log(`  Output: ${DIST}`);
   console.log(`  Size:   ${(size / 1024 / 1024).toFixed(1)} MB`);
   console.log(`  Run:    Start.bat\n`);

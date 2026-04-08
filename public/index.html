@@ -457,6 +457,10 @@
       <div class="card">
         <h2 data-i18n="import.title">Import Document</h2>
         <p class="subtitle" data-i18n="import.subtitle">Upload a PDF or image (screenshot) of your declarations, investment reports, or income certificates. Images will be processed with OCR.</p>
+        <div id="ocr-engine-badge" class="ocr-badge" style="display:none;">
+          <span class="ocr-badge-icon">⚙</span>
+          <span id="ocr-engine-label"></span>
+        </div>
 
         <form id="upload-form" enctype="multipart/form-data">
           <div class="import-grid">
