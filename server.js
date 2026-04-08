@@ -615,7 +615,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
           ocrLowQuality: true,
           year: parsedYear,
           type,
-          message: 'OCR could not extract table data from this document. The Tradeville Fișă de Portofoliu uses a complex table format that OCR cannot parse reliably. Please enter the data manually in the Add Data tab → "Câștiguri capital broker România (pe țară)".'
+          messageKey: 'import.ocrTradevilleHint'
         });
       }
       const dataFile7 = path.join(DATA_DIR, 'parsed_data.json');
