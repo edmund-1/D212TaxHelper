@@ -1,6 +1,6 @@
 # D212 Tax Helper - User Guide
 
-**Guide version:** 1.4 | **App version:** 2.4.0 | **Last updated:** 2026-04-08
+**Guide version:** 1.5 | **App version:** 3.0.0 | **Last updated:** 2026-04-08
 
 ---
 
@@ -41,7 +41,8 @@ This application is specifically designed for:
 - Anyone filing a D212 for investment income in Romania
 
 ### Key features
-- **10 document parsers** — automatically extracts data from PDFs and images
+- **11 document parsers** — automatically extracts data from PDFs and images
+- **PaddleOCR** — superior OCR for scanned documents (including Tradeville portfolio tables)
 - **Bilingual** — full Romanian (RO) and English (EN) interface
 - **Offline & private** — runs entirely on your computer, no data is sent anywhere
 - **Dark theme** — easy on the eyes, responsive design
@@ -304,7 +305,9 @@ The extracted data is parsed and saved automatically. A success/error message ap
 | **Tax Form - 1042-S** | IRS form | Gross income, federal tax withheld, income code. For dividends (code 06), takes precedence over investment report. |
 
 ### Tips
-- **Images** (screenshots, photos) are processed using OCR (Tesseract.js). This takes a few seconds.
+- **OCR Engine:** The app auto-detects PaddleOCR (Full build) or falls back to Tesseract.js (Lite build). The active engine is shown as a badge at the top of the Import tab.
+- **PaddleOCR** provides much better results for scanned documents, especially complex tables like Tradeville Portfolio Statements.
+- **Images** (screenshots, photos) are processed using OCR. This takes a few seconds.
 - If OCR quality is too low, the app will tell you to enter data manually in the Add Data tab.
 - **Trade confirmations** support uploading multiple files at once — each file is parsed separately and appended (with dedup).
 - **1042-S forms** are deduplicated by their unique form identifier — re-uploading the same form won't create duplicates.
@@ -484,7 +487,7 @@ To start fresh:
 ```
 PDF/Image upload
     ↓
-Text extraction (pdf-parse or Tesseract OCR)
+Text extraction (pdf-parse or PaddleOCR / Tesseract OCR)
     ↓
 Raw text saved (data/*_raw.txt)
     ↓
@@ -501,12 +504,22 @@ Frontend computes taxes and renders tables/charts
 
 The portable version is a self-contained folder that runs on any Windows 10/11 (64-bit) machine without installing anything.
 
+### Two build variants
+
+| Variant | Command | Size | OCR Engine |
+|---------|---------|------|------------|
+| **Lite** | `npm run build` | ~174 MB | Tesseract.js only |
+| **Full** | `npm run build:full` | ~1.9 GB | PaddleOCR + Tesseract.js fallback |
+
+The **Full** build includes Python Embeddable 3.12 and PaddleOCR for superior OCR on scanned documents (especially Tradeville portfolio tables).
+
 ### Contents
 
 | Item | Description |
 |------|-------------|
 | `node/` | Portable Node.js v22 LTS runtime |
 | `app/` | Application files (server, frontend, scripts) |
+| `app/python/` | *(Full build only)* Python 3.12 + PaddleOCR |
 | `Start.bat` | Launch the application (opens browser automatically) |
 | `Stop.bat` | Stop the server |
 | `README.md` | Quick start instructions |
@@ -515,13 +528,15 @@ The portable version is a self-contained folder that runs on any Windows 10/11 (
 
 From the source project:
 ```bash
-node build-portable.js
+npm run build          # Lite build (Tesseract only)
+npm run build:full     # Full build (PaddleOCR + Tesseract)
 ```
 
-This creates `D212TaxHelper-Portable/` (~172 MB) alongside the source folder. The portable version:
+The portable version:
 - Downloads Node.js v22 LTS automatically
 - Copies all application files (no personal data)
 - Installs production dependencies
+- *(Full build)* Downloads Python Embeddable 3.12 and installs PaddleOCR
 - Creates launcher scripts
 
 ### Important notes
@@ -544,8 +559,8 @@ This creates `D212TaxHelper-Portable/` (~172 MB) alongside the source folder. Th
 
 | Problem | Solution |
 |---------|----------|
-| "OCR quality too low" | Upload the text-based PDF version (not a scanned/photo version) |
-| Image takes too long | OCR (Tesseract.js) is CPU-intensive. Wait 10-30 seconds for images. |
+| "OCR quality too low" | Use the Full build with PaddleOCR, or upload the text-based PDF version (not a scanned version) |
+| Image takes too long | OCR processing requires CPU time. Wait 10-30 seconds. PaddleOCR is faster than Tesseract for most documents. |
 | Wrong data extracted | Check the Raw Data tab, edit if needed, or purge & re-import |
 | Duplicate trades | Trade confirmations are deduplicated by reference number — duplicates are skipped automatically |
 

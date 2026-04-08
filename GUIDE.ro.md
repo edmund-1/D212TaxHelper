@@ -1,6 +1,6 @@
 # D212 Asistent Fiscal - Ghid de Utilizare
 
-**Versiune ghid:** 1.4 | **Versiune aplicație:** 2.4.0 | **Ultima actualizare:** 08.04.2026
+**Versiune ghid:** 1.5 | **Versiune aplicație:** 3.0.0 | **Ultima actualizare:** 08.04.2026
 
 ---
 
@@ -41,7 +41,8 @@ Aplicația este concepută special pentru:
 - Oricine depune D212 pentru venituri din investiții în România
 
 ### Funcționalități principale
-- **10 parsere de documente** — extrage automat datele din PDF-uri și imagini
+- **11 parsere de documente** — extrage automat datele din PDF-uri și imagini
+- **PaddleOCR** — OCR superior pentru documente scanate (inclusiv tabele Fișă de Portofoliu Tradeville)
 - **Bilingv** — interfață completă în Română (RO) și Engleză (EN)
 - **Offline și privat** — rulează în totalitate pe calculatorul tău, nicio dată nu este trimisă nicăieri
 - **Temă întunecată** — confortabilă pentru ochi, design responsiv
@@ -299,7 +300,9 @@ Datele extrase sunt parsate și salvate automat. Un mesaj de succes/eroare apare
 | **Tax Form - 1042-S** | Formular IRS | Venit brut, impozit federal reținut, cod venit. Pentru dividende (cod 06), are prioritate față de raportul de investiții. |
 
 ### Sfaturi
-- **Imaginile** (capturi de ecran, fotografii) sunt procesate cu OCR (Tesseract.js). Durează câteva secunde.
+- **Motor OCR:** Aplicația detectează automat PaddleOCR (versiunea Full) sau revine la Tesseract.js (versiunea Lite). Motorul activ este afișat ca insignă în partea de sus a tab-ului Import.
+- **PaddleOCR** oferă rezultate mult mai bune pentru documente scanate, în special tabele complexe precum Fișa de Portofoliu Tradeville.
+- **Imaginile** (capturi de ecran, fotografii) sunt procesate cu OCR. Durează câteva secunde.
 - Dacă calitatea OCR este prea scăzută, aplicația te va îndruma să introduci datele manual în tab-ul Adaugă Date.
 - **Confirmările de tranzacție** suportă încărcarea mai multor fișiere simultan — fiecare fișier este parsat separat și adăugat (cu deduplicare).
 - **Formularele 1042-S** sunt deduplicate după identificatorul unic — reîncărcarea aceluiași formular nu creează duplicate.
@@ -495,12 +498,22 @@ Frontend-ul calculează impozitele și afișează tabele/grafice
 
 Versiunea portabilă este un folder independent care rulează pe orice Windows 10/11 (64-bit) fără a instala nimic.
 
+### Două variante de build
+
+| Variantă | Comandă | Dimensiune | Motor OCR |
+|----------|---------|------------|------------|
+| **Lite** | `npm run build` | ~174 MB | Doar Tesseract.js |
+| **Full** | `npm run build:full` | ~1,9 GB | PaddleOCR + Tesseract.js fallback |
+
+Varianta **Full** include Python Embeddable 3.12 și PaddleOCR pentru OCR superior pe documente scanate (mai ales tabele Fișă de Portofoliu Tradeville).
+
 ### Conținut
 
 | Element | Descriere |
-|---------|-----------|
+|---------|----------|
 | `node/` | Runtime Node.js v22 LTS portabil |
 | `app/` | Fișierele aplicației (server, frontend, scripturi) |
+| `app/python/` | *(doar Full build)* Python 3.12 + PaddleOCR |
 | `Start.bat` | Lansează aplicația (deschide browserul automat) |
 | `Stop.bat` | Oprește serverul |
 | `README.md` | Instrucțiuni de pornire rapidă |
@@ -509,13 +522,15 @@ Versiunea portabilă este un folder independent care rulează pe orice Windows 1
 
 Din proiectul sursă:
 ```bash
-node build-portable.js
+npm run build          # Build Lite (doar Tesseract)
+npm run build:full     # Build Full (PaddleOCR + Tesseract)
 ```
 
-Aceasta creează `D212TaxHelper-Portable/` (~172 MB) lângă folderul sursă. Versiunea portabilă:
+Versiunea portabilă:
 - Descarcă Node.js v22 LTS automat
 - Copiază toate fișierele aplicației (fără date personale)
 - Instalează dependențele de producție
+- *(Full build)* Descarcă Python Embeddable 3.12 și instalează PaddleOCR
 - Creează scripturile de lansare
 
 ### Note importante
@@ -538,8 +553,8 @@ Aceasta creează `D212TaxHelper-Portable/` (~172 MB) lângă folderul sursă. Ve
 
 | Problemă | Soluție |
 |----------|---------|
-| „Calitate OCR prea scăzută" | Încarcă versiunea PDF text (nu o versiune scanată/fotografie) |
-| Imaginea durează prea mult | OCR-ul (Tesseract.js) consumă CPU. Așteaptă 10-30 secunde. |
+| „Calitate OCR prea scăzută” | Folosește varianta Full cu PaddleOCR, sau încarcă versiunea PDF text (nu o versiune scanată/fotografie) |
+| Imaginea durează prea mult | Procesarea OCR consumă CPU. Așteaptă 10-30 secunde. PaddleOCR este mai rapid decât Tesseract pentru majoritatea documentelor. |
 | Date extrase greșit | Verifică în tab-ul Date Brute, editează dacă e nevoie, sau șterge și reimportează |
 | Tranzacții duplicate | Confirmările de tranzacție sunt deduplicate după numărul de referință — duplicatele sunt ignorate automat |
 

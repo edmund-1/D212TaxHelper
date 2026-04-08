@@ -3,7 +3,92 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const pdfParse = require('pdf-parse-new');
+const { execFile } = require('child_process');
 let Tesseract = null; // lazy-loaded on first OCR use
+
+// ============ PaddleOCR CONFIGURATION ============
+const PADDLEOCR_SCRIPT = path.join(__dirname, 'ocr_service.py');
+// Search for Python in portable layout first, then system PATH
+const PYTHON_PATHS = [
+  path.join(__dirname, 'python', 'python.exe'),       // portable (app/python/)
+  path.join(__dirname, '..', 'python', 'python.exe'), // portable (python/ sibling)
+  'python',                                            // system PATH
+  'python3',                                           // system PATH (linux/mac)
+];
+
+let _paddleOcrAvailable = null; // cached detection result
+
+function findPython() {
+  for (const p of PYTHON_PATHS) {
+    try {
+      const resolved = path.isAbsolute(p) ? p : p;
+      if (path.isAbsolute(p) && !fs.existsSync(p)) continue;
+      require('child_process').execFileSync(resolved, ['--version'], { stdio: 'pipe', timeout: 5000 });
+      return resolved;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+function checkPaddleOcrAvailable() {
+  if (_paddleOcrAvailable !== null) return _paddleOcrAvailable;
+
+  if (!fs.existsSync(PADDLEOCR_SCRIPT)) {
+    _paddleOcrAvailable = { available: false, reason: 'ocr_service.py not found' };
+    return _paddleOcrAvailable;
+  }
+
+  const pythonExe = findPython();
+  if (!pythonExe) {
+    _paddleOcrAvailable = { available: false, reason: 'Python not found' };
+    return _paddleOcrAvailable;
+  }
+
+  try {
+    require('child_process').execFileSync(pythonExe, ['-c', 'from paddleocr import PaddleOCR; print("OK")'], {
+      stdio: 'pipe', timeout: 30000,
+      env: { ...process.env, PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True', GLOG_minloglevel: '2' }
+    });
+    _paddleOcrAvailable = { available: true, python: pythonExe };
+  } catch (err) {
+    _paddleOcrAvailable = { available: false, reason: 'PaddleOCR not installed', python: pythonExe };
+  }
+
+  return _paddleOcrAvailable;
+}
+
+function runPaddleOcr(filePath, mode = 'auto') {
+  return new Promise((resolve, reject) => {
+    const status = checkPaddleOcrAvailable();
+    if (!status.available) {
+      return reject(new Error('PaddleOCR not available: ' + status.reason));
+    }
+
+    const args = [PADDLEOCR_SCRIPT, filePath, '--mode', mode];
+
+    execFile(status.python, args, {
+      timeout: 120000, // 2 min per document
+      maxBuffer: 50 * 1024 * 1024, // 50 MB for large table results
+      cwd: __dirname,
+      env: { ...process.env, PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True', GLOG_minloglevel: '2' },
+    }, (err, stdout, stderr) => {
+      if (err) {
+        log('ERROR', 'PaddleOCR subprocess failed', { error: err.message, stderr });
+        return reject(err);
+      }
+      try {
+        const result = JSON.parse(stdout);
+        if (result.error) {
+          return reject(new Error(result.error));
+        }
+        resolve(result);
+      } catch (parseErr) {
+        log('ERROR', 'PaddleOCR JSON parse failed', { stdout: stdout.slice(0, 500) });
+        reject(new Error('Failed to parse PaddleOCR output'));
+      }
+    });
+  });
+}
 
 const ALLOWED_MIMES = new Set([
   'application/pdf',
@@ -35,6 +120,17 @@ function log(level, msg, meta) {
   if (level === 'ERROR') console.error(entry.trim());
 }
 log('INFO', 'Server starting', { pid: process.pid, node: process.version, cwd: __dirname });
+
+// Detect PaddleOCR availability at startup (non-blocking)
+setImmediate(() => {
+  const status = checkPaddleOcrAvailable();
+  log('INFO', 'OCR engine detection', {
+    paddleocr: status.available,
+    detail: status.reason || 'ready',
+    python: status.python || null,
+  });
+  console.log(`  OCR Engine: ${status.available ? 'PaddleOCR (PP-StructureV3)' : 'Tesseract.js (PaddleOCR not available: ' + (status.reason || 'unknown') + ')'}`);
+});
 
 process.on('uncaughtException', (err) => {
   log('ERROR', 'Uncaught exception: ' + err.message, { stack: err.stack });
@@ -74,6 +170,17 @@ const upload = multer({
 });
 
 // ============ API ROUTES ============
+
+// GET /api/ocr-status - Return OCR engine availability
+app.get('/api/ocr-status', (req, res) => {
+  const paddle = checkPaddleOcrAvailable();
+  res.json({
+    paddleocr: paddle.available,
+    paddleocrDetail: paddle.reason || null,
+    tesseract: true, // always available (bundled via tesseract.js)
+    engine: paddle.available ? 'paddleocr' : 'tesseract',
+  });
+});
 
 // GET /api/data - Return all financial data
 app.get('/api/data', (req, res) => {
@@ -323,31 +430,92 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const buffer = fs.readFileSync(req.file.path);
     let text;
     let usedOcrFallback = false;
+    let ocrEngine = 'pdf-parse'; // track which engine produced the text
+    let paddleResult = null; // store full PaddleOCR result for table-aware parsers
     const isImage = IMAGE_MIMES.has(req.file.mimetype);
+
+    // PaddleOCR needs a file with the correct extension to detect format
+    const mimeToExt = { 'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/bmp': '.bmp', 'image/tiff': '.tiff', 'image/webp': '.webp' };
+    const ext = mimeToExt[req.file.mimetype] || '';
+    const paddleFilePath = req.file.path + ext;
+    if (ext && !req.file.path.endsWith(ext)) {
+      fs.copyFileSync(req.file.path, paddleFilePath);
+    }
+
+    // Types that benefit from PaddleOCR table extraction
+    const TABLE_TYPES = ['tradeville_portfolio', 'investment', 'declaratie', 'fidelity_statement', 'ms_statement'];
+    const preferPaddleOcr = TABLE_TYPES.includes(type);
+    const paddleStatus = checkPaddleOcrAvailable();
+
     if (isImage) {
-      if (!Tesseract) Tesseract = require('tesseract.js');
-      const { data } = await Tesseract.recognize(buffer, 'eng+ron');
-      text = data.text;
+      // For images: try PaddleOCR first if available, else Tesseract
+      if (paddleStatus.available) {
+        try {
+          paddleResult = await runPaddleOcr(paddleFilePath, preferPaddleOcr ? 'auto' : 'text');
+          text = paddleResult.combinedText || paddleResult.text || '';
+          ocrEngine = 'paddleocr';
+          log('INFO', 'PaddleOCR extracted text from image', { chars: text.length });
+        } catch (paddleErr) {
+          log('ERROR', 'PaddleOCR failed for image, falling back to Tesseract', { error: paddleErr.message });
+        }
+      }
+      if (!text) {
+        if (!Tesseract) Tesseract = require('tesseract.js');
+        const { data } = await Tesseract.recognize(buffer, 'eng+ron');
+        text = data.text;
+        ocrEngine = 'tesseract';
+      }
     } else {
+      // For PDFs: extract text first, then OCR if needed
       const pdfData = await pdfParse(buffer);
       text = pdfData.text;
-      // Fallback: if PDF is image-based (scanned), OCR it
+
+      // Check if PDF is image-based (scanned) or has very little text
       if (text.replace(/\s/g, '').length < 50) {
         console.log('PDF appears to be image-based (extracted only ' + text.trim().length + ' chars), falling back to OCR...');
+
+        // Try PaddleOCR first for scanned PDFs (superior table extraction)
+        if (paddleStatus.available) {
+          try {
+            paddleResult = await runPaddleOcr(paddleFilePath, preferPaddleOcr ? 'auto' : 'text');
+            text = paddleResult.combinedText || paddleResult.text || '';
+            ocrEngine = 'paddleocr';
+            usedOcrFallback = true;
+            log('INFO', 'PaddleOCR extracted text from scanned PDF', { chars: text.length });
+          } catch (paddleErr) {
+            log('ERROR', 'PaddleOCR failed for PDF, trying Tesseract', { error: paddleErr.message });
+          }
+        }
+
+        // Fall back to Tesseract if PaddleOCR didn't produce results
+        if (!text || text.replace(/\s/g, '').length < 50) {
+          try {
+            if (!Tesseract) Tesseract = require('tesseract.js');
+            const { data } = await Tesseract.recognize(buffer, 'eng+ron');
+            text = data.text;
+            ocrEngine = 'tesseract';
+            usedOcrFallback = true;
+          } catch (ocrErr) {
+            log('ERROR', 'OCR fallback failed', { error: ocrErr.message });
+            // Continue with whatever text we have
+          }
+        }
+      } else if (preferPaddleOcr && paddleStatus.available) {
+        // Even for text-based PDFs, run PaddleOCR in table mode for table-heavy documents
         try {
-          if (!Tesseract) Tesseract = require('tesseract.js');
-          const { data } = await Tesseract.recognize(buffer, 'eng+ron');
-          text = data.text;
-          usedOcrFallback = true;
-        } catch (ocrErr) {
-          log('ERROR', 'OCR fallback failed', { error: ocrErr.message });
-          // Continue with whatever text we have
+          paddleResult = await runPaddleOcr(paddleFilePath, 'table');
+          log('INFO', 'PaddleOCR table extraction on text PDF');
+          // Keep original pdf-parse text but add table data
+        } catch (paddleErr) {
+          log('ERROR', 'PaddleOCR table extraction failed (non-critical)', { error: paddleErr.message });
         }
       }
     }
 
-    // If OCR fallback was used, check quality: if no 'Realizat' lines with numbers, warn user
-    if (usedOcrFallback) {
+    // If OCR fallback was used, check quality for generic document types
+    // Types with their own quality checks (tradeville, trade_confirmation, fidelity, etc.) are handled downstream
+    const SELF_VALIDATED_TYPES = ['tradeville_portfolio', 'trade_confirmation', 'fidelity_statement', 'form_1042s', 'ms_statement', 'xtb_dividends', 'xtb_portfolio', 'stock_award'];
+    if (usedOcrFallback && !SELF_VALIDATED_TYPES.includes(type)) {
       const realizatMatches = text.match(/Realizat\s+\d+/gi) || [];
       if (realizatMatches.length === 0) {
         console.log('OCR quality too low - no parseable data rows found. Asking user to enter manually.');
@@ -355,6 +523,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const rawFile = `${type}_${parsedYear}_raw.txt`;
         fs.writeFileSync(path.join(DATA_DIR, rawFile), '[OCR - low quality]\n' + text, 'utf8');
         fs.unlinkSync(req.file.path);
+        if (paddleFilePath !== req.file.path && fs.existsSync(paddleFilePath)) fs.unlinkSync(paddleFilePath);
         // Extract category hints from OCR text for user guidance
         const categories = [];
         if (/dobanzi/i.test(text)) categories.push('Venituri din dobânzi');
@@ -380,8 +549,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.writeFileSync(rawPath, text, 'utf8');
     }
 
-    // Clean up uploaded file
+    // Clean up uploaded file (and PaddleOCR extension copy if created)
     fs.unlinkSync(req.file.path);
+    if (paddleFilePath !== req.file.path && fs.existsSync(paddleFilePath)) {
+      fs.unlinkSync(paddleFilePath);
+    }
 
     // Stock award documents get special handling
     if (type === 'stock_award') {
@@ -607,7 +779,16 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     // Tradeville Portfolio (Capital Gains)
     if (type === 'tradeville_portfolio') {
-      const parsed = parseTradevillePortfolio(text, parsedYear);
+      // Try PaddleOCR table data first for structured extraction
+      let parsed;
+      if (paddleResult && paddleResult.tables && paddleResult.tables.length > 0) {
+        parsed = parseTradevilleFromTables(paddleResult.tables, parsedYear);
+        log('INFO', 'Tradeville parsed via PaddleOCR tables', { countries: parsed.countries.length });
+      }
+      // Fall back to regex-based text parsing
+      if (!parsed || (parsed.countries.length === 0 && parsed.totalGainNetRON === 0)) {
+        parsed = parseTradevillePortfolio(text, parsedYear);
+      }
       // Check if OCR produced usable data
       if (parsed.countries.length === 0 && parsed.totalGainNetRON === 0) {
         return res.json({
@@ -623,8 +804,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       if (fs.existsSync(dataFile7)) data7 = JSON.parse(fs.readFileSync(dataFile7, 'utf8'));
       if (!data7.years[parsedYear]) data7.years[parsedYear] = { year: parsedYear };
       data7.years[parsedYear].tradevillePortfolio = parsed;
+      data7.years[parsedYear].tradevillePortfolio.ocrEngine = ocrEngine;
       fs.writeFileSync(dataFile7, JSON.stringify(data7, null, 2), 'utf8');
-      return res.json({ success: true, year: parsedYear, type, parsed });
+      return res.json({ success: true, year: parsedYear, type, parsed, ocrEngine });
     }
 
     // Update parsed data
@@ -642,7 +824,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     data.years[parsedYear][type] = parsed;
     fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf8');
 
-    res.json({ success: true, year: parsedYear, type, parsed });
+    res.json({ success: true, year: parsedYear, type, parsed, ocrEngine });
   } catch (err) {
     log('ERROR', 'Upload processing failed', { error: err.message, type: req.body?.type, year: req.body?.year });
     res.status(500).json({ error: err.message });
@@ -1325,6 +1507,120 @@ function parseTradevillePortfolio(text, year) {
 
   result.totalTaxWithheldRON = result.longTerm.taxWithheldRON + result.shortTerm.taxWithheldRON;
 
+  return result;
+}
+
+// Parse Tradeville from PaddleOCR structured table data
+function parseTradevilleFromTables(tables, year) {
+  const result = {
+    year,
+    source: 'Tradeville',
+    ocrEngine: 'paddleocr',
+    longTerm: { gainRON: 0, lossRON: 0, taxWithheldRON: 0 },
+    shortTerm: { gainRON: 0, lossRON: 0, taxWithheldRON: 0 },
+    countries: [],
+    totalGainImpozabilRON: 0,
+    totalGainNetRON: 0,
+    totalTaxWithheldRON: 0
+  };
+
+  for (const table of tables) {
+    const rows = table.cells || [];
+    if (rows.length < 2) continue;
+
+    // Find header row to identify columns
+    const header = rows[0].map(h => (h || '').toLowerCase().replace(/\s+/g, ' ').trim());
+
+    // Look for Tradeville's expected columns:
+    // Nr.crt | Tara | Moneda | >=365 castig | >=365 pierdere | >=365 impozit | <365 castig | <365 pierdere | <365 impozit | Total impozabil | Total net
+    const countryIdx = header.findIndex(h => /tara|country|țară/i.test(h));
+    const currencyIdx = header.findIndex(h => /moneda|currency|moned/i.test(h));
+
+    // Find gain/loss columns by pattern (>=365 and <365 sections)
+    let longGainIdx = -1, longLossIdx = -1, longTaxIdx = -1;
+    let shortGainIdx = -1, shortLossIdx = -1, shortTaxIdx = -1;
+    let totalImpozabilIdx = -1, totalNetIdx = -1;
+
+    for (let i = 0; i < header.length; i++) {
+      const h = header[i];
+      if (/>=\s*365.*castig|>=\s*365.*gain/i.test(h)) longGainIdx = i;
+      else if (/>=\s*365.*pierdere|>=\s*365.*loss/i.test(h)) longLossIdx = i;
+      else if (/>=\s*365.*impozit|>=\s*365.*tax/i.test(h)) longTaxIdx = i;
+      else if (/<\s*365.*castig|<\s*365.*gain/i.test(h)) shortGainIdx = i;
+      else if (/<\s*365.*pierdere|<\s*365.*loss/i.test(h)) shortLossIdx = i;
+      else if (/<\s*365.*impozit|<\s*365.*tax/i.test(h)) shortTaxIdx = i;
+      else if (/total.*impozabil|impozabil/i.test(h)) totalImpozabilIdx = i;
+      else if (/total.*net|net$/i.test(h)) totalNetIdx = i;
+    }
+
+    // If headers weren't matched, try positional (Tradeville standard: 11 columns)
+    if (countryIdx === -1 && rows[0].length >= 10) {
+      // Positional fallback: 0=Nr, 1=Country, 2=Currency, 3-5=long, 6-8=short, 9=impozabil, 10=net
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        if (row.length < 10) continue;
+        const country = (row[1] || '').trim();
+        if (!/^[A-Z]{2,3}$/.test(country) && !/TOTAL/i.test(country)) continue;
+        if (/TOTAL/i.test(country)) continue;
+
+        const entry = {
+          country,
+          currency: (row[2] || 'RON').trim(),
+          longGain: parseNumber(row[3]),
+          longLoss: parseNumber(row[4]),
+          longTax: parseNumber(row[5]),
+          shortGain: parseNumber(row[6]),
+          shortLoss: parseNumber(row[7]),
+          shortTax: parseNumber(row[8]),
+          totalImpozabil: parseNumber(row[9]),
+          totalNet: parseNumber(row[10] || '0'),
+        };
+        result.countries.push(entry);
+        result.longTerm.gainRON += entry.longGain;
+        result.longTerm.lossRON += entry.longLoss;
+        result.longTerm.taxWithheldRON += entry.longTax;
+        result.shortTerm.gainRON += entry.shortGain;
+        result.shortTerm.lossRON += entry.shortLoss;
+        result.shortTerm.taxWithheldRON += entry.shortTax;
+        result.totalGainImpozabilRON += entry.totalImpozabil;
+        result.totalGainNetRON += entry.totalNet;
+      }
+      continue;
+    }
+
+    // Parse data rows using identified column indices
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const country = countryIdx >= 0 ? (row[countryIdx] || '').trim() : '';
+      if (!country || /TOTAL/i.test(country)) continue;
+      if (!/^[A-Z]{2,3}$/.test(country)) continue;
+
+      const entry = {
+        country,
+        currency: currencyIdx >= 0 ? (row[currencyIdx] || 'RON').trim() : 'RON',
+        longGain: longGainIdx >= 0 ? parseNumber(row[longGainIdx]) : 0,
+        longLoss: longLossIdx >= 0 ? parseNumber(row[longLossIdx]) : 0,
+        longTax: longTaxIdx >= 0 ? parseNumber(row[longTaxIdx]) : 0,
+        shortGain: shortGainIdx >= 0 ? parseNumber(row[shortGainIdx]) : 0,
+        shortLoss: shortLossIdx >= 0 ? parseNumber(row[shortLossIdx]) : 0,
+        shortTax: shortTaxIdx >= 0 ? parseNumber(row[shortTaxIdx]) : 0,
+        totalImpozabil: totalImpozabilIdx >= 0 ? parseNumber(row[totalImpozabilIdx]) : 0,
+        totalNet: totalNetIdx >= 0 ? parseNumber(row[totalNetIdx]) : 0,
+      };
+
+      result.countries.push(entry);
+      result.longTerm.gainRON += entry.longGain;
+      result.longTerm.lossRON += entry.longLoss;
+      result.longTerm.taxWithheldRON += entry.longTax;
+      result.shortTerm.gainRON += entry.shortGain;
+      result.shortTerm.lossRON += entry.shortLoss;
+      result.shortTerm.taxWithheldRON += entry.shortTax;
+      result.totalGainImpozabilRON += entry.totalImpozabil;
+      result.totalGainNetRON += entry.totalNet;
+    }
+  }
+
+  result.totalTaxWithheldRON = result.longTerm.taxWithheldRON + result.shortTerm.taxWithheldRON;
   return result;
 }
 

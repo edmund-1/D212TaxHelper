@@ -730,3 +730,28 @@ footer {
   #main-nav { order: 3; width: 100%; justify-content: flex-start; }
   .header-controls { width: auto; }
 }
+
+/* OCR Engine Badge */
+.ocr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: 0.5rem;
+}
+.ocr-badge.paddle {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+.ocr-badge.tesseract {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+.ocr-badge-icon {
+  font-size: 0.9rem;
+}

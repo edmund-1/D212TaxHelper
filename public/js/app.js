@@ -118,6 +118,9 @@ const App = (() => {
     document.getElementById('rates-form').addEventListener('submit', handleRatesSubmit);
     document.getElementById('tax-rates-form').addEventListener('submit', handleTaxRatesSubmit);
 
+    // Fetch OCR engine status
+    fetchOcrStatus();
+
     // Image preview on file select
     document.getElementById('upload-file').addEventListener('change', (e) => {
       const files = e.target.files;
@@ -1682,6 +1685,26 @@ const App = (() => {
     };
   }
 
+  // ============ OCR ENGINE STATUS ============
+  async function fetchOcrStatus() {
+    try {
+      const resp = await fetch('/api/ocr-status');
+      const status = await resp.json();
+      const badge = document.getElementById('ocr-engine-badge');
+      const label = document.getElementById('ocr-engine-label');
+      if (badge && label) {
+        badge.style.display = 'inline-flex';
+        if (status.paddleocr) {
+          badge.className = 'ocr-badge paddle';
+          label.textContent = I18n.t('import.ocrEnginePaddle');
+        } else {
+          badge.className = 'ocr-badge tesseract';
+          label.textContent = I18n.t('import.ocrEngineTesseract');
+        }
+      }
+    } catch { /* non-critical */ }
+  }
+
   // ============ PDF UPLOAD ============
   async function handleUpload(e) {
     e.preventDefault();
@@ -1765,6 +1788,11 @@ const App = (() => {
           </div>`;
         } else {
           resultHtml += `<pre>${JSON.stringify(result.parsed, null, 2)}</pre>`;
+        }
+        // Show OCR engine used
+        if (result.ocrEngine && result.ocrEngine !== 'pdf-parse') {
+          const engineLabel = result.ocrEngine === 'paddleocr' ? 'PaddleOCR' : 'Tesseract';
+          resultHtml += `<p style="margin-top:0.5rem;color:var(--text-secondary);font-size:0.85rem;">OCR: ${engineLabel}</p>`;
         }
         allResultsHtml += resultHtml;
       } else if (result.ocrLowQuality) {

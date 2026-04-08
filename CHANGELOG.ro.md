@@ -1,5 +1,27 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v3.0.0 (2026-04-08)
+
+### Funcționalitate nouă: Integrare PaddleOCR
+- **PaddleOCR (PP-StructureV3)** — înlocuiește Tesseract.js ca motor OCR principal pentru extragere superioară de text din documente scanate
+- **Arhitectură Python subprocess** — PaddleOCR rulează prin Python Embeddable 3.12 inclus, apelat din Node.js via `child_process`
+- **Extragere Tradeville Portfolio** — PDF-urile scanate Fișă de Portofoliu se parsează corect acum (anterior imposibil cu Tesseract)
+- **Auto-detectare motor OCR** — serverul detectează disponibilitatea PaddleOCR la pornire, revine automat la Tesseract.js
+- **Insignă status OCR** — tab-ul Importă Document arată ce motor OCR este activ (verde = PaddleOCR, galben = Tesseract)
+- **Motor OCR în rezultate** — răspunsurile la upload includ ce motor a procesat documentul
+- **Două variante portabile** — `npm run build` (Lite ~174 MB, doar Tesseract) și `npm run build:full` (Full ~1,9 GB, cu PaddleOCR)
+
+### Detalii tehnice
+- `ocr_service.py` — serviciu CLI Python folosind API-ul PaddleOCR 3.x `predict()`
+- `setup_paddleocr.js` — descarcă Python Embeddable + instalează pachetele PaddleOCR
+- PaddlePaddle fixat la v3.0.0 (v3.3.1 are crash OneDNN pe Windows)
+- `paddlex[ocr]` extra necesar pentru pipeline-ul complet OCR
+- Fișierele temporare Multer redenumite cu extensia corectă (.pdf/.jpg) pentru detectarea formatului PaddleOCR
+- Tipurile de documente auto-validate ocolesc verificarea generică de calitate OCR
+- `GET /api/ocr-status` — endpoint nou pentru detectarea motorului OCR din frontend
+
+---
+
 ## v2.4.0 (2026-04-08)
 
 ### Funcționalități noi

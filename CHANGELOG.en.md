@@ -1,5 +1,28 @@
 # D212 Tax Helper - Changelog
 
+## v3.0.0 (2026-04-08)
+
+### New Feature: PaddleOCR Integration
+- **PaddleOCR (PP-StructureV3)** — replaced Tesseract.js as primary OCR engine for superior text extraction from scanned documents
+- **Python subprocess architecture** — PaddleOCR runs via bundled Python Embeddable 3.12, called from Node.js via `child_process`
+- **Tradeville Portfolio extraction** — scanned Fișă de Portofoliu PDFs now parse correctly (was previously impossible with Tesseract)
+- **OCR engine auto-detection** — server detects PaddleOCR availability at startup, falls back to Tesseract.js automatically
+- **OCR status badge** — Import Document tab shows which OCR engine is active (green = PaddleOCR, yellow = Tesseract)
+- **OCR engine in results** — upload responses include which engine processed the document
+- **Two portable builds** — `npm run build` (Lite ~174 MB, Tesseract only) and `npm run build:full` (Full ~1.9 GB, with PaddleOCR)
+
+### Technical Details
+- `ocr_service.py` — Python CLI service using PaddleOCR 3.x `predict()` API
+- `setup_paddleocr.js` — downloads Python Embeddable + installs PaddleOCR packages
+- PaddlePaddle pinned to v3.0.0 (v3.3.1 has OneDNN crash on Windows)
+- `paddlex[ocr]` extra required for full OCR pipeline
+- Multer temp files renamed with correct extension (.pdf/.jpg) for PaddleOCR format detection
+- Self-validated document types skip generic OCR quality gate
+- Environment: `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK`, `GLOG_minloglevel` suppress verbose logs
+- `GET /api/ocr-status` — new endpoint for frontend OCR engine detection
+
+---
+
 ## v2.4.0 (2026-04-08)
 
 ### New Features

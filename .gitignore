@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Python (PaddleOCR portable environment)
+python/
+
 # Uploads (user PDFs)
 uploads/
 
