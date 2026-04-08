@@ -369,6 +369,7 @@ const App = (() => {
     // Romania broker label
     const roSources = new Set();
     if (yd.xtbDividendsReport || yd.xtbPortfolio) roSources.add('XTB');
+    if (yd.tradevillePortfolio) roSources.add('Tradeville');
     if (yd.roBroker) roSources.add(yd.roBroker);
     const roBrokerLabel = roSources.size > 0 ? ' (' + [...roSources].join(' & ') + ')' : '';
     if (!capitalGainsSaleUSD && tradeProceedsUSD > 0) {
@@ -379,14 +380,15 @@ const App = (() => {
       capitalGainsTaxableRON = (tradeProceedsUSD - costUSD) * rate;
     }
 
-    // Romania broker data from imported reports
+    // Romania broker data from imported reports (XTB + Tradeville)
+    const tvPort = yd.tradevillePortfolio || {};
     let dividendsRON_ro = xtbDiv.dividends?.grossRON || 0;
-    let roLongTermGainRON = xtbPort.longTerm?.gainRON || 0;
-    let roShortTermGainRON = xtbPort.shortTerm?.gainRON || 0;
+    let roLongTermGainRON = (xtbPort.longTerm?.gainRON || 0) + (tvPort.longTerm?.gainRON || 0);
+    let roShortTermGainRON = (xtbPort.shortTerm?.gainRON || 0) + (tvPort.shortTerm?.gainRON || 0);
     let capitalGainsRON_ro = roLongTermGainRON + roShortTermGainRON;
     let roDivTaxWithheld = xtbDiv.dividends?.taxWithheldRON || 0;
     let roInterestRON = xtbDiv.interest?.grossRON || 0;
-    let roPortTaxWithheld = xtbPort.totalTaxWithheldRON || 0;
+    let roPortTaxWithheld = (xtbPort.totalTaxWithheldRON || 0) + (tvPort.totalTaxWithheldRON || 0);
     let withholding = withholdingData.total || 0;
 
     // Manual overrides
@@ -744,17 +746,19 @@ const App = (() => {
     const yd = appData.years?.[selectedYear] || {};
     const xtbPort = yd.xtbPortfolio || {};
     const xtbDiv = yd.xtbDividendsReport || {};
+    const tvPort = yd.tradevillePortfolio || {};
 
-    if (!xtbPort.longTerm && !xtbPort.shortTerm && !xtbDiv.dividends) {
+    if (!xtbPort.longTerm && !xtbPort.shortTerm && !xtbDiv.dividends && !tvPort.longTerm && !tvPort.shortTerm) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.noRoData') + '</td></tr>';
       tfoot.innerHTML = '';
       return;
     }
 
     const rows = [];
+    // XTB data
     if (xtbPort.longTerm?.gainRON) {
       rows.push({
-        cat: I18n.t('income.roGainsLong'),
+        cat: I18n.t('income.roGainsLong') + ' (XTB)',
         country: xtbPort.country || 'USA',
         gross: xtbPort.longTerm.gainRON,
         rate: (data.roLongRate * 100) + '%',
@@ -764,13 +768,38 @@ const App = (() => {
     }
     if (xtbPort.shortTerm?.gainRON) {
       rows.push({
-        cat: I18n.t('income.roGainsShort'),
+        cat: I18n.t('income.roGainsShort') + ' (XTB)',
         country: xtbPort.country || 'USA',
         gross: xtbPort.shortTerm.gainRON,
         rate: (data.roShortRate * 100) + '%',
         withheld: xtbPort.shortTerm.taxWithheldRON || 0,
         net: Math.max(0, xtbPort.shortTerm.gainRON * data.roShortRate - (xtbPort.shortTerm.taxWithheldRON || 0))
       });
+    }
+    // Tradeville data (per country)
+    if (tvPort.countries && tvPort.countries.length > 0) {
+      for (const c of tvPort.countries) {
+        if (c.longGain > 0 || c.longLoss > 0) {
+          rows.push({
+            cat: I18n.t('income.roGainsLong') + ' (Tradeville)',
+            country: c.country,
+            gross: c.longGain - c.longLoss,
+            rate: (data.roLongRate * 100) + '%',
+            withheld: c.longTax,
+            net: Math.max(0, (c.longGain - c.longLoss) * data.roLongRate - c.longTax)
+          });
+        }
+        if (c.shortGain > 0 || c.shortLoss > 0) {
+          rows.push({
+            cat: I18n.t('income.roGainsShort') + ' (Tradeville)',
+            country: c.country,
+            gross: c.shortGain - c.shortLoss,
+            rate: (data.roShortRate * 100) + '%',
+            withheld: c.shortTax,
+            net: Math.max(0, (c.shortGain - c.shortLoss) * data.roShortRate - c.shortTax)
+          });
+        }
+      }
     }
     if (xtbDiv.dividends?.grossRON) {
       rows.push({

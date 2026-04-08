@@ -190,6 +190,9 @@ app.delete('/api/raw/:filename', (req, res) => {
           if (type === 'xtb_portfolio' && data.years[year].xtbPortfolio) {
             delete data.years[year].xtbPortfolio;
           }
+          if (type === 'tradeville_portfolio' && data.years[year].tradevillePortfolio) {
+            delete data.years[year].tradevillePortfolio;
+          }
           if (type === 'fidelity_statement' && data.years[year].fidelityTransfers) {
             delete data.years[year].fidelityTransfers;
             delete data.years[year].fidelityDividendsYTD;
@@ -310,7 +313,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Invalid year' });
     }
-    const validTypes = ['declaratie', 'investment', 'adeverinta', 'stock_award', 'trade_confirmation', 'xtb_dividends', 'xtb_portfolio', 'fidelity_statement', 'form_1042s', 'ms_statement'];
+    const validTypes = ['declaratie', 'investment', 'adeverinta', 'stock_award', 'trade_confirmation', 'xtb_dividends', 'xtb_portfolio', 'fidelity_statement', 'form_1042s', 'ms_statement', 'tradeville_portfolio'];
     if (!validTypes.includes(type)) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Invalid type. Must be: ' + validTypes.join(', ') });
@@ -600,6 +603,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         newTradesAdded, duplicatesSkipped,
         totalTrades: yearTrades.length
       });
+    }
+
+    // Tradeville Portfolio (Capital Gains)
+    if (type === 'tradeville_portfolio') {
+      const parsed = parseTradevillePortfolio(text, parsedYear);
+      const dataFile7 = path.join(DATA_DIR, 'parsed_data.json');
+      let data7 = { years: {} };
+      if (fs.existsSync(dataFile7)) data7 = JSON.parse(fs.readFileSync(dataFile7, 'utf8'));
+      if (!data7.years[parsedYear]) data7.years[parsedYear] = { year: parsedYear };
+      data7.years[parsedYear].tradevillePortfolio = parsed;
+      fs.writeFileSync(dataFile7, JSON.stringify(data7, null, 2), 'utf8');
+      return res.json({ success: true, year: parsedYear, type, parsed });
     }
 
     // Update parsed data
@@ -1242,6 +1257,62 @@ function parseXtbPortfolio(text, year) {
   }
 
   result.totalGainRON = result.longTerm.gainRON + result.shortTerm.gainRON - result.longTerm.lossRON - result.shortTerm.lossRON;
+  result.totalTaxWithheldRON = result.longTerm.taxWithheldRON + result.shortTerm.taxWithheldRON;
+
+  return result;
+}
+
+// Parse Tradeville Fișă de Portofoliu (capital gains)
+function parseTradevillePortfolio(text, year) {
+  const result = {
+    year,
+    source: 'Tradeville',
+    longTerm: { gainRON: 0, lossRON: 0, taxWithheldRON: 0 },
+    shortTerm: { gainRON: 0, lossRON: 0, taxWithheldRON: 0 },
+    countries: [],
+    totalGainImpozabilRON: 0,
+    totalGainNetRON: 0,
+    totalTaxWithheldRON: 0
+  };
+
+  // Normalize OCR artifacts
+  const cleaned = text.replace(/[|]/g, ' ').replace(/\s+/g, ' ');
+
+  // Parse rows: Nr.crt country currency >=365gain >=365loss >=365tax <365gain <365loss <365tax totalImpozabil totalNet
+  // Pattern: number country(2-3 letters) currency(RON/USD/EUR) numbers...
+  const rowPattern = /(\d+)\s+(NL|RO|US|DE|FR|GB|IE|LU|CH|AT|BE|IT|ES|[A-Z]{2})\s+(RON|USD|EUR)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)/g;
+  let match;
+  while ((match = rowPattern.exec(cleaned)) !== null) {
+    const country = match[2];
+    const currency = match[3];
+    const longGain = parseNumber(match[4]);
+    const longLoss = parseNumber(match[5]);
+    const longTax = parseNumber(match[6]);
+    const shortGain = parseNumber(match[7]);
+    const shortLoss = parseNumber(match[8]);
+    const shortTax = parseNumber(match[9]);
+    const totalImpozabil = parseNumber(match[10]);
+    const totalNet = parseNumber(match[11]);
+
+    result.countries.push({ country, currency, longGain, longLoss, longTax, shortGain, shortLoss, shortTax, totalImpozabil, totalNet });
+
+    // Aggregate all countries into RO broker totals (NL/RO/US all via Romanian broker = final tax)
+    result.longTerm.gainRON += longGain;
+    result.longTerm.lossRON += longLoss;
+    result.longTerm.taxWithheldRON += longTax;
+    result.shortTerm.gainRON += shortGain;
+    result.shortTerm.lossRON += shortLoss;
+    result.shortTerm.taxWithheldRON += shortTax;
+    result.totalGainImpozabilRON += totalImpozabil;
+    result.totalGainNetRON += totalNet;
+  }
+
+  // Fallback: try to match TOTAL line
+  const totalMatch = cleaned.match(/TOTAL\s+(?:ANUL\s+\d+\s+)?.*?([\d.,]+)\s*$/);
+  if (totalMatch && result.totalGainNetRON === 0) {
+    result.totalGainNetRON = parseNumber(totalMatch[1]);
+  }
+
   result.totalTaxWithheldRON = result.longTerm.taxWithheldRON + result.shortTerm.taxWithheldRON;
 
   return result;
