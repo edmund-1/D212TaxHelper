@@ -210,7 +210,7 @@
     "typeTradeConfirmation": "US (Fidelity) - Trade Confirmation (Sold Activity)",
     "typeXtbDividends": "Romania (XTB) - Dividends & Interest Report",
     "typeXtbPortfolio": "Romania (XTB) - Portfolio (Capital Gains)",
-    "typeTradevillePortfolio": "Romania (Tradeville) - Portfolio (Capital Gains)",
+    "typeTradevillePortfolio": "Romania (Tradeville) - Portfolio Statement (Capital Gains)",
     "typeFidelityStatement": "US (Fidelity) - Statement (Periodic Report)",
     "typeMSStatement": "US (Morgan Stanley) - Stock Plan Statement (Yearly)",
     "file": "PDF or Image File",
