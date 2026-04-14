@@ -44,12 +44,30 @@ const Charts = (() => {
       data.capitalGains || 0,
       data.interestIncome || 0
     ];
+    const bgColors = [c.blue, c.green, c.yellow];
+
+    // Add optional income categories
+    if (data.rentalIncome > 0) {
+      labels.push(I18n.t('income.rentalIncome'));
+      values.push(data.rentalIncome);
+      bgColors.push(c.purple || '#b39ddb');
+    }
+    if (data.royaltyIncome > 0) {
+      labels.push(I18n.t('income.royaltyIncome'));
+      values.push(data.royaltyIncome);
+      bgColors.push(c.orange || '#ffb74d');
+    }
+    if (data.otherIncome > 0) {
+      labels.push(I18n.t('income.otherIncome'));
+      values.push(data.otherIncome);
+      bgColors.push(c.red || '#ef5350');
+    }
 
     if (chartInstances[canvasId]) {
       const chart = chartInstances[canvasId];
       chart.data.labels = labels;
       chart.data.datasets[0].data = values;
-      chart.data.datasets[0].backgroundColor = [c.blue, c.green, c.yellow];
+      chart.data.datasets[0].backgroundColor = bgColors;
       chart.update();
       return;
     }
@@ -60,7 +78,7 @@ const Charts = (() => {
         labels,
         datasets: [{
           data: values,
-          backgroundColor: [c.blue, c.green, c.yellow],
+          backgroundColor: bgColors,
           borderColor: c.cardBg,
           borderWidth: 2
         }]
@@ -71,7 +89,37 @@ const Charts = (() => {
         plugins: {
           legend: {
             position: 'bottom',
-            labels: { color: c.text, font: { size: 11 } }
+            labels: {
+              color: c.text,
+              font: { size: 13 },
+              padding: 12,
+              generateLabels: (chart) => {
+                const ds = chart.data.datasets[0];
+                const total = ds.data.reduce((s, v) => s + v, 0);
+                return chart.data.labels.map((label, i) => {
+                  const val = ds.data[i];
+                  const pct = total > 0 ? (val / total * 100).toFixed(1) : '0.0';
+                  return {
+                    text: `${label} (${pct}%)`,
+                    fontColor: c.text,
+                    fillStyle: ds.backgroundColor[i],
+                    strokeStyle: ds.borderColor,
+                    lineWidth: ds.borderWidth,
+                    hidden: false,
+                    index: i
+                  };
+                });
+              }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
+                const pct = total > 0 ? (ctx.raw / total * 100).toFixed(1) : '0.0';
+                return `${ctx.label}: ${Math.round(ctx.raw).toLocaleString('ro-RO')} RON (${pct}%)`;
+              }
+            }
           }
         }
       }
@@ -95,12 +143,30 @@ const Charts = (() => {
       data.interestTax || 0,
       data.cassTax || 0
     ];
+    const bgColors = [c.blue, c.green, c.yellow, c.red];
+
+    // Add optional tax types
+    if (data.rentalTax > 0) {
+      labels.splice(-1, 0, I18n.t('income.rentalIncome'));
+      values.splice(-1, 0, data.rentalTax);
+      bgColors.splice(-1, 0, c.purple || '#b39ddb');
+    }
+    if (data.royaltyTax > 0) {
+      labels.splice(-1, 0, I18n.t('income.royaltyIncome'));
+      values.splice(-1, 0, data.royaltyTax);
+      bgColors.splice(-1, 0, c.orange || '#f0883e');
+    }
+    if (data.otherTax > 0) {
+      labels.splice(-1, 0, I18n.t('income.otherIncome'));
+      values.splice(-1, 0, data.otherTax);
+      bgColors.splice(-1, 0, c.cyan || '#39d2c0');
+    }
 
     if (chartInstances[canvasId]) {
       const chart = chartInstances[canvasId];
       chart.data.labels = labels;
       chart.data.datasets[0].data = values;
-      chart.data.datasets[0].backgroundColor = [c.blue, c.green, c.yellow, c.red];
+      chart.data.datasets[0].backgroundColor = bgColors;
       chart.update();
       return;
     }
@@ -111,7 +177,7 @@ const Charts = (() => {
         labels,
         datasets: [{
           data: values,
-          backgroundColor: [c.blue, c.green, c.yellow, c.red],
+          backgroundColor: bgColors,
           borderRadius: 4
         }]
       },
@@ -119,15 +185,24 @@ const Charts = (() => {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: false }
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => Math.round(ctx.raw).toLocaleString('ro-RO') + ' RON'
+            }
+          }
         },
         scales: {
           x: {
-            ticks: { color: c.text, font: { size: 10 } },
+            ticks: { color: c.text, font: { size: 12 } },
             grid: { color: c.grid }
           },
           y: {
-            ticks: { color: c.text, callback: v => v.toLocaleString() + ' RON' },
+            ticks: {
+              color: c.text,
+              callback: v => Number.isInteger(v) ? v.toLocaleString() + ' RON' : '',
+              precision: 0
+            },
             grid: { color: c.grid }
           }
         }
@@ -178,7 +253,7 @@ const Charts = (() => {
         plugins: {
           legend: {
             position: 'bottom',
-            labels: { color: c.text, font: { size: 11 } }
+            labels: { color: c.text, font: { size: 13 } }
           }
         },
         scales: {
@@ -251,10 +326,65 @@ const Charts = (() => {
     });
   }
 
+  function createMinSalaryChart(canvasId, salaryData) {
+    const c = colors();
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+
+    const years = Object.keys(salaryData).sort();
+    const values = years.map(y => salaryData[y]);
+
+    if (chartInstances[canvasId]) {
+      const chart = chartInstances[canvasId];
+      chart.data.labels = years;
+      chart.data.datasets[0].data = values;
+      chart.update();
+      return;
+    }
+
+    chartInstances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: years,
+        datasets: [{
+          label: 'RON/month',
+          data: values,
+          borderColor: c.orange || '#f0883e',
+          backgroundColor: 'rgba(240, 136, 62, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointBackgroundColor: c.orange || '#f0883e',
+          pointRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: c.text, font: { size: 13 } }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: c.text, font: { size: 12 } },
+            grid: { color: c.grid }
+          },
+          y: {
+            ticks: { color: c.text, callback: v => v.toLocaleString() + ' RON' },
+            grid: { color: c.grid }
+          }
+        }
+      }
+    });
+  }
+
   return {
     createIncomeBreakdown,
     createTaxBreakdown,
     createYearComparison,
-    createExchangeRates
+    createExchangeRates,
+    createMinSalaryChart
   };
 })();

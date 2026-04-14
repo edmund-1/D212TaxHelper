@@ -41,19 +41,24 @@
           <p class="card-value" id="total-income-value">-</p>
           <span class="card-currency">RON</span>
         </div>
-        <div class="card summary-card" id="card-total-tax">
-          <h3 data-i18n="dashboard.totalTax">Total Tax Due</h3>
-          <p class="card-value" id="total-tax-value">-</p>
-          <span class="card-currency">RON</span>
-        </div>
-        <div class="card summary-card" id="card-withholding">
-          <h3 data-i18n="dashboard.withholding">Stock Withholding</h3>
-          <p class="card-value" id="withholding-value">-</p>
+        <div class="card summary-card" id="card-already-paid">
+          <h3 data-i18n="dashboard.alreadyPaid">Already Paid</h3>
+          <p class="card-value" id="already-paid-value">-</p>
           <span class="card-currency">RON</span>
         </div>
         <div class="card summary-card" id="card-net-tax">
-          <h3 data-i18n="dashboard.netTax">Net Tax to Pay</h3>
+          <h3 data-i18n="dashboard.netTax">Income Tax</h3>
           <p class="card-value" id="net-tax-value">-</p>
+          <span class="card-currency">RON</span>
+        </div>
+        <div class="card summary-card" id="card-cass">
+          <h3 data-i18n="dashboard.cass">CASS (Health)</h3>
+          <p class="card-value" id="cass-value">-</p>
+          <span class="card-currency">RON</span>
+        </div>
+        <div class="card summary-card" id="card-total-tax">
+          <h3 data-i18n="dashboard.totalTax">Total to Pay (D212)</h3>
+          <p class="card-value" id="total-tax-value">-</p>
           <span class="card-currency">RON</span>
         </div>
       </div>
@@ -74,6 +79,10 @@
         <div class="card chart-card">
           <h3 data-i18n="dashboard.exchangeRates">Exchange Rates (USD/RON)</h3>
           <canvas id="chart-exchange-rates" aria-label="Exchange rates chart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3 data-i18n="dashboard.minSalary">Minimum Salary (RON)</h3>
+          <canvas id="chart-min-salary" aria-label="Minimum salary chart"></canvas>
         </div>
       </div>
     </section>
@@ -334,8 +343,18 @@
               <input type="number" step="0.01" id="input-us-dividends" name="usDividends">
             </div>
             <div class="form-row">
+              <label data-i18n="input.usDivTaxPaid">US Dividend Tax Withheld (USD)</label>
+              <input type="number" step="0.01" id="input-us-div-tax" name="usDivTaxPaid">
+              <small data-i18n="input.usDivTaxPaidHint">10% withheld at source per RO-US treaty</small>
+            </div>
+            <div class="form-row">
               <label data-i18n="input.roDividends">Romania Dividends (RON)</label>
               <input type="number" step="0.01" id="input-ro-dividends" name="roDividends">
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.roDivTaxPaid">RO Dividend Tax Withheld (RON)</label>
+              <input type="number" step="0.01" id="input-ro-div-tax" name="roDivTaxPaid">
+              <small data-i18n="input.roDivTaxPaidHint">Tax withheld at source by Romania broker</small>
             </div>
           </fieldset>
 
@@ -364,6 +383,62 @@
             <div class="form-row">
               <label data-i18n="input.interestRON">Interest Income (RON)</label>
               <input type="number" step="0.01" id="input-interest" name="interestIncome">
+            </div>
+          </fieldset>
+
+          <fieldset class="form-grid-2">
+            <legend data-i18n="input.rentalIncome">Rental Income (Chirii)</legend>
+            <div class="form-row">
+              <label data-i18n="input.rentalGross">Gross Rental Income (RON)</label>
+              <input type="number" step="0.01" id="input-rental-income" name="rentalIncome">
+              <small data-i18n="input.rentalGrossHint">Total rental income before deductions</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.rentalTaxPaid">Tax Already Paid (RON)</label>
+              <input type="number" step="0.01" id="input-rental-tax-paid" name="rentalTaxPaid">
+              <small data-i18n="input.rentalTaxPaidHint">Tax withheld or paid on rental income</small>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-grid-2">
+            <legend data-i18n="input.royaltyIncome">Intellectual Property / Royalties</legend>
+            <div class="form-row">
+              <label data-i18n="input.royaltyGross">Gross Royalty Income (RON)</label>
+              <input type="number" step="0.01" id="input-royalty-income" name="royaltyIncome">
+              <small data-i18n="input.royaltyGrossHint">Income from copyrights, patents, software licenses, etc.</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.royaltyTaxPaid">Tax Already Paid (RON)</label>
+              <input type="number" step="0.01" id="input-royalty-tax-paid" name="royaltyTaxPaid">
+              <small data-i18n="input.royaltyTaxPaidHint">Tax withheld at source on royalty income</small>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-grid-2">
+            <legend data-i18n="input.gamblingIncome">Gambling Income</legend>
+            <div class="form-row">
+              <label data-i18n="input.gamblingGross">Gambling Income (RON)</label>
+              <input type="number" step="0.01" id="input-gambling-income" name="gamblingIncome">
+              <small data-i18n="input.gamblingGrossHint">Net winnings from gambling (already taxed at source)</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.gamblingTaxPaid">Tax Already Paid (RON)</label>
+              <input type="number" step="0.01" id="input-gambling-tax-paid" name="gamblingTaxPaid">
+              <small data-i18n="input.gamblingTaxPaidHint">Tax withheld at source by gambling operator</small>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-grid-2">
+            <legend data-i18n="input.otherIncome">Other Income Sources (Alte surse)</legend>
+            <div class="form-row">
+              <label data-i18n="input.otherGross">Other Income (RON)</label>
+              <input type="number" step="0.01" id="input-other-income" name="otherIncome">
+              <small data-i18n="input.otherGrossHint">Any other taxable income not covered above</small>
+            </div>
+            <div class="form-row">
+              <label data-i18n="input.otherTaxPaid">Tax Already Paid (RON)</label>
+              <input type="number" step="0.01" id="input-other-tax-paid" name="otherTaxPaid">
+              <small data-i18n="input.otherTaxPaidHint">Tax withheld or paid on other income</small>
             </div>
           </fieldset>
 

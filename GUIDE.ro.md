@@ -1,6 +1,6 @@
 # D212 Asistent Fiscal - Ghid de Utilizare
 
-**Versiune ghid:** 1.8 | **Versiune aplicație:** 3.1.2 | **Ultima actualizare:** 09.04.2026
+**Versiune ghid:** 2.0 | **Versiune aplicație:** 3.2.0 | **Ultima actualizare:** 14.04.2026
 
 ---
 
@@ -616,19 +616,21 @@ Vezi istoricul complet făcând click pe numărul versiunii din footer-ul aplica
 - [CHANGELOG.en.md](CHANGELOG.en.md) (Engleză)
 - [CHANGELOG.ro.md](CHANGELOG.ro.md) (Română)
 
-### Versiunea curentă: v3.1.2 (09.04.2026)
+### Versiunea curentă: v3.2.0 (14.04.2026)
 
 **Modificări majore:**
-- Bare de progres pe butoanele Upload, Upgrade și Downgrade
-- Gestionare motor OCR din aplicație (Upgrade la Full / Downgrade la Lite)
-- Instalare/dezinstalare PaddleOCR din tab-ul Importă Document
-- Ștergere multiplă în Date Brute cu Selectează tot și Șterge Selectate
-- Buton Înapoi sus în ferestrele modale
-- Linkurile ancora și changelog funcționează în ferestre
+- 4 tipuri noi de venituri: Chirii, Drepturi IP, Jocuri noroc, Alte surse
+- Inputuri manuale impozit dividende SUA/RO reținut
+- Cote impozit corectate 2019-2022 (dividende 5%, câștiguri RO 10% flat)
+- CASS exclude corect jocuri noroc și alte venituri (Art. 174)
+- 5 căsuțe panou: Venit, Deja Plătit, Impozit Venit, CASS, Total D212
+- Grafice cu procente, toate tipurile impozite, evoluție salariu minim
+- Datele manuale apar în Date Brute pentru editare/ștergere
+- Pornire server asincronă (detectare PaddleOCR în fundal)
 
-### Versiunea anterioară: v3.0.0 (08.04.2026)
+### Versiunea anterioară: v3.1.2 (09.04.2026)
 
-Integrare PaddleOCR via subprocess Python, auto-detectare OCR, două variante build (Lite/Full), 11 parsere de documente, extragere Tradeville Portfolio.
+Bare de progres pe butoane, gestionare OCR din aplicație, ștergere multiplă, îmbunătățiri ferestre modale.
 
 ---
 

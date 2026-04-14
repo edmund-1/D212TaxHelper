@@ -1,5 +1,42 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v3.2.0 (2026-04-14)
+
+### Noi Tipuri de Venituri
+- **Venituri din Chirii** — deducere forfetara 40%, impozit 10%/16%, eligibil CASS
+- **Drepturi de Proprietate Intelectuală** — deducere forfetara 40%, impozit 10%/16%, eligibil CASS
+- **Venituri din Jocuri de Noroc** — impozit final la sursă, input manual, NU intră în CASS
+- **Alte Surse de Venituri** — impozit 10%/16%, NU intră în CASS
+- **Impozit Dividende SUA Reținut** — input manual pentru credit fiscal 10% convenția RO-SUA
+- **Impozit Dividende RO Reținut** — input manual pentru reținere broker
+
+### Corecturi Conformitate Fiscală (ANAF)
+- **Cota dividende 2019-2022** — corectată de la 8% la 5% corect
+- **Câștiguri capital RO 2019-2022** — corectat de la 1%/3% la 10% flat corect
+- **Jocuri noroc excluse din CASS** — conform Art. 174 Cod Fiscal
+- **Alte venituri excluse din CASS** — conform Art. 174
+- **Tabel venituri: impozit dividende SUA** — nu mai dublează impozitul dividende RO
+- **Tabel venituri: "plătit" câștiguri RO** — arată reținerea reală a brokerului
+- **Tabel impozite: câștiguri/dividende RO datorate** — arată suma netă dacă brokerul a reținut insuficient
+
+### Îmbunătățiri Panou Principal
+- **5 căsuțe rezumat** — Venit Total, Deja Plătit, Impozit pe Venit, CASS, Total D212
+- **Grafic venituri cu procente** — legenda și tooltip-urile arată defalcarea %
+- **Grafic impozite complet** — segmente impozit chirii, drepturi IP, alte surse
+- **Grafic Salariu Minim** — evoluția salariului 2019-2026
+- **Layout grafice 2×3** — rândul 1: venituri + impozite, rândul 2: comparație + cursuri + salariu
+- **Fonturi grafice mărite** — +2pt pentru legende și etichete axe
+
+### Administrare Date
+- **Fișier date manuale** — "Adaugă Date" creează un fișier brut vizibil/editabil în Date Brute
+- **Fix câmpuri formular** — dividendele și câștigurile persistă corect după salvare
+- **Purgare date manuale** — ștergerea fișierului brut curăță toate câmpurile manuale
+
+### Performanță
+- **Detectare PaddleOCR asincronă** — serverul pornește instant, detectarea OCR rulează în fundal
+
+---
+
 ## v3.1.2 (2026-04-09)
 
 ### Îmbunătățiri
