@@ -1,6 +1,6 @@
 # D212 Asistent Fiscal - Ghid de Utilizare
 
-**Versiune ghid:** 2.3 | **Versiune aplicație:** 3.2.3 | **Ultima actualizare:** 14.04.2026
+**Versiune ghid:** 2.4 | **Versiune aplicație:** 3.2.4 | **Ultima actualizare:** 15.04.2026
 
 ---
 

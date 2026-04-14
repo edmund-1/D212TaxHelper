@@ -805,6 +805,7 @@ const App = (() => {
     const yearChartContainer = document.getElementById('chart-year-comparison')?.closest('.chart-card');
     const rateChartContainer = document.getElementById('chart-exchange-rates')?.closest('.chart-card');
     const salaryChartContainer = document.getElementById('chart-min-salary')?.closest('.chart-card');
+    const d212ChartContainer = document.getElementById('chart-d212-payment')?.closest('.chart-card');
 
     if (hasFinancialData) {
       if (incomeChartContainer) incomeChartContainer.style.display = '';
@@ -812,6 +813,7 @@ const App = (() => {
       if (yearChartContainer) yearChartContainer.style.display = '';
       if (rateChartContainer) rateChartContainer.style.display = '';
       if (salaryChartContainer) salaryChartContainer.style.display = '';
+      if (d212ChartContainer) d212ChartContainer.style.display = '';
 
       Charts.createIncomeBreakdown('chart-income-breakdown', {
         dividends: (data.dividendsRON || data.dividendsUSD * data.exchangeRate) + data.dividendsRON_ro,
@@ -832,36 +834,36 @@ const App = (() => {
         cassTax: data.cassTax
       });
 
-      // Year comparison
-      const compData = {};
-      const yearsUpToSelected = allYears.filter(y => y <= selectedYear);
-      let compYears;
-      if (yearsUpToSelected.length <= 1) {
-        compYears = [selectedYear];
-      } else if (yearsUpToSelected.length === 2) {
-        compYears = yearsUpToSelected.slice(-2);
-      } else {
-        compYears = yearsUpToSelected.slice(-3);
-      }
-      for (const y of compYears) {
+      // Year comparison — show up to 5 years, with navigation if more
+      const allCompData = {};
+      const yearsUpToSelected = allYears.filter(y => y <= selectedYear).sort((a, b) => a - b);
+      for (const y of yearsUpToSelected) {
         const yd = computeYearData(y);
-        compData[y] = { totalIncome: yd.totalIncome, totalTax: yd.totalTax };
+        allCompData[y] = { totalIncome: yd.totalIncome, totalTax: yd.totalTax };
       }
-      Charts.createYearComparison('chart-year-comparison', compData);
+      Charts.createYearComparison('chart-year-comparison', allCompData, 5);
 
       // Exchange rates
       const rateData = {};
       for (const [y, r] of Object.entries(exchangeRates)) {
         rateData[y] = r.usdRon;
       }
-      Charts.createExchangeRates('chart-exchange-rates', rateData);
+      Charts.createExchangeRates('chart-exchange-rates', rateData, 5);
 
       // Min salary chart
       const salaryData = {};
       for (const [y, info] of Object.entries(cassThresholds)) {
         salaryData[y] = info.minSalary;
       }
-      Charts.createMinSalaryChart('chart-min-salary', salaryData);
+      Charts.createMinSalaryChart('chart-min-salary', salaryData, 5);
+
+      // D212 Total Taxes chart (grouped: already paid, income tax, CASS)
+      const d212PaymentData = {};
+      for (const y of allYears) {
+        const yd = computeYearData(y);
+        d212PaymentData[y] = { paid: yd.totalAlreadyPaid, tax: yd.totalTax, cass: yd.cassTax };
+      }
+      Charts.createD212PaymentChart('chart-d212-payment', d212PaymentData, 5);
     } else {
       if (incomeChartContainer) incomeChartContainer.style.display = 'none';
       if (taxChartContainer) taxChartContainer.style.display = 'none';
@@ -869,6 +871,8 @@ const App = (() => {
       if (rateChartContainer) rateChartContainer.style.display = 'none';
       const salaryContainer = document.getElementById('chart-min-salary')?.closest('.chart-card');
       if (salaryContainer) salaryContainer.style.display = 'none';
+      const d212Container = document.getElementById('chart-d212-payment')?.closest('.chart-card');
+      if (d212Container) d212Container.style.display = 'none';
     }
   }
 

@@ -10,7 +10,7 @@
   "dashboard": {
     "totalIncome": "Venit Total",
     "appTitle": "D212 Asistent Fiscal",
-    "totalTax": "Total de Plătit (D212)",
+    "totalTax": "Impozit Venit",
     "alreadyPaid": "Deja Plătit",
     "netTax": "Impozit pe Venit",
     "cass": "CASS (Sănătate)",
@@ -18,7 +18,8 @@
     "taxBreakdown": "Structura Impozitelor",
     "yearComparison": "Comparație pe Ani",
     "exchangeRates": "Cursuri de Schimb (USD/RON)",
-    "minSalary": "Salariu Minim (RON)"
+    "minSalary": "Salariu Minim (RON)",
+    "d212Payment": "Total Impozite (RON)"
   },
   "income": {
     "title": "Detalii Venituri",

@@ -1247,8 +1247,10 @@ function parseAnafD212FlatText(text, year) {
   // Normalize ANAF number: "18 .424" → 18424, "346" → 346
   const parseAnafNum = (s) => parseInt(s.replace(/\s+/g, '').replace(/\./g, ''), 10) || 0;
 
-  // Split into clean lines, keeping only number lines and country markers
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  // Split into lines preserving blanks for section boundary detection
+  const rawLines = text.split('\n').map(l => l.trim());
+  // Non-empty lines for data extraction
+  const lines = rawLines.filter(l => l.length > 0);
 
   // Extract income year: first 4-digit number after FORMULAR VALIDAT
   for (const line of lines) {
@@ -1278,6 +1280,27 @@ function parseAnafD212FlatText(text, year) {
     return nums;
   };
 
+  // Find country marker positions in rawLines (preserves blank line boundaries)
+  const rawCountryPositions = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    if (/^[A-Z]{2}--/.test(rawLines[i])) rawCountryPositions.push(i);
+  }
+
+  // Helper: extract numbers from rawLines section (until blank line AFTER numbers start)
+  const extractRawNums = (startRawIdx, endRawIdx) => {
+    const nums = [];
+    let foundData = false;
+    for (let i = startRawIdx; i < endRawIdx; i++) {
+      if (/^\d[\d\s]*(?:\.\d+)?$/.test(rawLines[i])) {
+        nums.push(parseAnafNum(rawLines[i]));
+        foundData = true;
+      } else if (rawLines[i] === '' && foundData) {
+        break; // blank line after data = end of section
+      }
+    }
+    return nums;
+  };
+
   if (countrySections.length >= 2) {
     // Section 1 (first country): Capital gains — 4 numbers
     // [venitNet, venitRecalculat, impRo, difImp]
@@ -1287,24 +1310,34 @@ function parseAnafD212FlatText(text, year) {
       result.capitalGains.taxDueRON = cgNums[2];
     }
 
-    // Section 2 (second country): Dividends — 7 numbers
-    // [venitBrut, venitNet, venitImp, impRo, impSt, crdF, difImp]
-    const endIdx = countrySections.length > 2 ? countrySections[2] : lines.length;
-    const divNums = extractNums(countrySections[1] + 1, endIdx);
+    // Section 2 (second country): Dividends
+    // Old format (2020-2022): 9 nums, New format (2023+): 7 nums
+    let divNums = [];
+    if (rawCountryPositions.length >= 2) {
+      const rawDivStart = rawCountryPositions[1] + 1;
+      const rawDivEnd = rawCountryPositions.length > 2 ? rawCountryPositions[2] : rawLines.length;
+      divNums = extractRawNums(rawDivStart, rawDivEnd);
+    }
+    if (divNums.length < 7) {
+      // Fallback: extract from filtered lines
+      const endIdx2 = countrySections.length > 2 ? countrySections[2] : lines.length;
+      divNums = extractNums(countrySections[1] + 1, Math.min(countrySections[1] + 1 + 9, endIdx2));
+    }
     if (divNums.length >= 7) {
       result.dividends.grossRON = divNums[0];
-      result.dividends.taxDueRON = divNums[3];
-      result.dividends.foreignTaxRON = divNums[4];
+      result.dividends.taxDueRON = divNums[divNums.length - 4];    // impRo
+      result.dividends.foreignTaxRON = divNums[divNums.length - 3]; // impSt
     }
 
     // Summary section: everything after the last country section's dividends data
-    // Find where dividends end (7 numbers after 2nd country marker)
+    // Find where dividends end (all numbers after 2nd country marker)
     let summaryStart = countrySections[1] + 1;
     let numCount = 0;
+    const divNumCount = divNums.length; // actual count (7 or 9)
     for (let i = summaryStart; i < lines.length; i++) {
       if (/^\d[\d\s]*(?:\.\d+)?$/.test(lines[i])) {
         numCount++;
-        if (numCount === 7) { summaryStart = i + 1; break; }
+        if (numCount === divNumCount) { summaryStart = i + 1; break; }
       }
     }
     const summaryNums = extractNums(summaryStart, lines.length);
@@ -1326,12 +1359,26 @@ function parseAnafD212FlatText(text, year) {
       }
     }
   } else if (countrySections.length === 1) {
-    // Single section — likely just capital gains
-    const nums = extractNums(countrySections[0] + 1, lines.length);
-    if (nums.length >= 4) {
-      result.capitalGains.taxableRON = nums[0];
-      result.capitalGains.taxDueRON = nums[2];
-      result.totalTax = nums[2];
+    // Single section — find numbers until blank line using rawLines
+    let singleNums = [];
+    if (rawCountryPositions.length >= 1) {
+      singleNums = extractRawNums(rawCountryPositions[0] + 1, rawLines.length);
+    }
+    if (singleNums.length < 7) {
+      singleNums = extractNums(countrySections[0] + 1, Math.min(countrySections[0] + 1 + 9, lines.length));
+    }
+    if (singleNums.length >= 7) {
+      // Dividends only (old format 9 nums, new 7 nums)
+      result.dividends.grossRON = singleNums[0];
+      result.dividends.taxDueRON = singleNums[singleNums.length - 4];    // impRo
+      result.dividends.foreignTaxRON = singleNums[singleNums.length - 3]; // impSt
+      // totalTax = difImp (last number) — 0 if credit covers tax
+      result.totalTax = singleNums[singleNums.length - 1];
+    } else if (singleNums.length >= 4) {
+      // Capital gains only
+      result.capitalGains.taxableRON = singleNums[0];
+      result.capitalGains.taxDueRON = singleNums[2];
+      result.totalTax = singleNums[2];
     }
   }
 

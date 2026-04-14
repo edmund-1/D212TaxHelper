@@ -1,5 +1,22 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v3.2.4 (2026-04-15)
+
+### Îmbunătățiri Panou Principal
+- **6 grafice** — reorganizate pe două rânduri a câte 3: Structura Veniturilor, Structura Impozitelor, Comparație pe Ani (rândul 1) și Total Impozite, Cursuri de Schimb, Salariu Minim (rândul 2)
+- **Grafic Total Impozite** (nou) — grafic stivuit arătând Deja Plătit (verde), Impozit Venit (roșu) și CASS (violet) pe an, cu totaluri în tooltip
+- **Comparație pe Ani afișează acum 5 ani** — extins de la 3 la 5 ani
+- **Săgeți de navigare pe toate graficele multi-an** — Comparație pe Ani, Total Impozite, Cursuri de Schimb și Salariu Minim afișează ◀▶ când sunt 6+ ani de date
+
+### Modificări Etichete
+- **"Total de Plătit (D212)"** redenumit în **"Impozit Venit"** în căsuțele panoului și legendele graficelor
+- **"Plată Totală D212"** redenumit în **"Total Impozite"**
+
+### Corecturi
+- **Parser PDF imagine ANAF D-212** — corectat parsarea declarațiilor 2020-2022 cu doar dividende (secțiune țară unică), formatul vechi cu 9 câmpuri vs formatul nou cu 7, și detecția limitelor de secțiuni prin linii goale
+
+---
+
 ## v3.2.3 (2026-04-14)
 
 ### Funcționalități Noi
