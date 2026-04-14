@@ -1,5 +1,22 @@
 # D212 Tax Helper - Changelog
 
+## v3.2.4 (2026-04-15)
+
+### Dashboard Improvements
+- **6 charts layout** — reorganized into two rows of 3: Income Breakdown, Tax Breakdown, Year Comparison (row 1) and Total Taxes, Exchange Rates, Minimum Salary (row 2)
+- **Total Taxes chart** (new) — stacked bar chart showing Already Paid (green), Income Tax (red), and CASS (purple) per year with tooltip totals
+- **Year Comparison now shows 5 years** — expanded from 3 to 5 years of comparison data
+- **Navigation arrows on all multi-year charts** — Year Comparison, Total Taxes, Exchange Rates, and Minimum Salary all show ◀▶ arrows when there are 6+ years of data, using a shared generic navigation system
+
+### Label Changes
+- **"Total de Plătit (D212)"** renamed to **"Impozit Venit"** / **"Income Tax"** in dashboard cards and chart legends
+- **"Plată Totală D212"** chart renamed to **"Total Impozite"** / **"Total Taxes"**
+
+### Bug Fixes
+- **ANAF D-212 image PDF parser** — fixed parsing for 2020-2022 declarations with dividends-only (single country section), old 9-field format vs new 7-field format, and blank-line boundary detection between data sections
+
+---
+
 ## v3.2.3 (2026-04-14)
 
 ### New Features

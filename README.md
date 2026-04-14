@@ -10,9 +10,10 @@ A local web application that helps Romanian tax residents calculate and prepare 
 
 ## Features
 
-- **11 document parsers** — automatically extracts data from PDFs and images (Fidelity statements, Morgan Stanley statements, 1042-S forms, XTB reports, Tradeville portfolio, trade confirmations, etc.)
+- **11 document parsers** — automatically extracts data from PDFs and images (Fidelity statements, Morgan Stanley statements, 1042-S forms, XTB reports, Tradeville portfolio, trade confirmations, ANAF D-212 declarations, etc.)
 - **Tax calculations** — income tax, capital gains tax, dividend tax, and CASS (health insurance contribution)
 - **D212 form helper** — generates the exact values needed to fill in the ANAF declaration
+- **6 interactive charts** — income breakdown, tax breakdown, year comparison, total taxes, exchange rates, and minimum salary — with navigation arrows for 6+ years
 - **Multi-year comparison** — compare financial data across fiscal years
 - **Bilingual** — full Romanian and English interface
 - **Offline & private** — runs entirely on your computer, no data is sent anywhere

@@ -10,7 +10,7 @@
   "dashboard": {
     "totalIncome": "Total Income",
     "appTitle": "D212 Tax Helper",
-    "totalTax": "Total to Pay (D212)",
+    "totalTax": "Income Tax",
     "alreadyPaid": "Already Paid",
     "netTax": "Income Tax",
     "cass": "CASS (Health)",
@@ -18,7 +18,8 @@
     "taxBreakdown": "Tax Breakdown",
     "yearComparison": "Year Comparison",
     "exchangeRates": "Exchange Rates (USD/RON)",
-    "minSalary": "Minimum Salary (RON)"
+    "minSalary": "Minimum Salary (RON)",
+    "d212Payment": "Total Taxes (RON)"
   },
   "income": {
     "title": "Income Details",

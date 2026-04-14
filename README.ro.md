@@ -10,9 +10,10 @@ O aplicație web locală care ajută rezidenții fiscali din România să calcul
 
 ## Funcționalități
 
-- **11 parsere de documente** — extrage automat datele din PDF-uri și imagini (extrase Fidelity, extrase Morgan Stanley, formulare 1042-S, rapoarte XTB, portofoliu Tradeville, confirmări de tranzacție etc.)
+- **11 parsere de documente** — extrage automat datele din PDF-uri și imagini (extrase Fidelity, extrase Morgan Stanley, formulare 1042-S, rapoarte XTB, portofoliu Tradeville, confirmări de tranzacție, declarații ANAF D-212 etc.)
 - **Calculul impozitelor** — impozit pe venit, impozit pe câștiguri de capital, impozit pe dividende și CASS (contribuția de asigurări sociale de sănătate)
 - **Asistent completare D212** — generează valorile exacte necesare completării declarației ANAF
+- **6 grafice interactive** — structura veniturilor, structura impozitelor, comparație pe ani, total impozite, cursuri de schimb și salariu minim — cu săgeți de navigare pentru 6+ ani
 - **Comparație multi-an** — compară datele financiare pe mai mulți ani fiscali
 - **Bilingv** — interfață completă în Română și Engleză
 - **Offline și privat** — rulează în totalitate pe calculatorul tău, nicio dată nu este trimisă nicăieri

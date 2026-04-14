@@ -73,15 +73,43 @@
           <canvas id="chart-tax-breakdown" aria-label="Tax breakdown chart"></canvas>
         </div>
         <div class="card chart-card">
-          <h3 data-i18n="dashboard.yearComparison">Year Comparison</h3>
+          <div class="chart-header-nav">
+            <h3 data-i18n="dashboard.yearComparison">Year Comparison</h3>
+            <div class="chart-nav-arrows" id="year-comp-nav" style="display:none">
+              <button class="chart-nav-btn" id="year-comp-prev" title="Previous">&#9664;</button>
+              <button class="chart-nav-btn" id="year-comp-next" title="Next">&#9654;</button>
+            </div>
+          </div>
           <canvas id="chart-year-comparison" aria-label="Year comparison chart"></canvas>
         </div>
         <div class="card chart-card">
-          <h3 data-i18n="dashboard.exchangeRates">Exchange Rates (USD/RON)</h3>
+          <div class="chart-header-nav">
+            <h3 data-i18n="dashboard.d212Payment">Total Taxes (RON)</h3>
+            <div class="chart-nav-arrows" id="d212-pay-nav" style="display:none">
+              <button class="chart-nav-btn" id="d212-pay-prev" title="Previous">&#9664;</button>
+              <button class="chart-nav-btn" id="d212-pay-next" title="Next">&#9654;</button>
+            </div>
+          </div>
+          <canvas id="chart-d212-payment" aria-label="D212 total payment chart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <div class="chart-header-nav">
+            <h3 data-i18n="dashboard.exchangeRates">Exchange Rates (USD/RON)</h3>
+            <div class="chart-nav-arrows" id="exch-rate-nav" style="display:none">
+              <button class="chart-nav-btn" id="exch-rate-prev" title="Previous">&#9664;</button>
+              <button class="chart-nav-btn" id="exch-rate-next" title="Next">&#9654;</button>
+            </div>
+          </div>
           <canvas id="chart-exchange-rates" aria-label="Exchange rates chart"></canvas>
         </div>
         <div class="card chart-card">
-          <h3 data-i18n="dashboard.minSalary">Minimum Salary (RON)</h3>
+          <div class="chart-header-nav">
+            <h3 data-i18n="dashboard.minSalary">Minimum Salary (RON)</h3>
+            <div class="chart-nav-arrows" id="min-salary-nav" style="display:none">
+              <button class="chart-nav-btn" id="min-salary-prev" title="Previous">&#9664;</button>
+              <button class="chart-nav-btn" id="min-salary-next" title="Next">&#9654;</button>
+            </div>
+          </div>
           <canvas id="chart-min-salary" aria-label="Minimum salary chart"></canvas>
         </div>
       </div>

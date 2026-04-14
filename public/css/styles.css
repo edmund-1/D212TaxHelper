@@ -158,12 +158,6 @@ main {
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
-.charts-grid .chart-card:nth-child(1) {
-  grid-column: span 1;
-}
-.charts-grid .chart-card:nth-child(2) {
-  grid-column: span 2;
-}
 .chart-card {
   padding: 1rem;
   min-height: 300px;
@@ -171,6 +165,33 @@ main {
 .chart-card canvas {
   max-height: 280px;
 }
+.chart-header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chart-header-nav h3 { margin: 0; }
+.chart-nav-arrows {
+  display: flex;
+  gap: 0.25rem;
+}
+.chart-nav-btn {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.chart-nav-btn:hover { background: var(--accent); }
+.chart-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.chart-nav-btn:disabled:hover { background: var(--bg-card); }
 
 /* ============ Tables ============ */
 .table-responsive { overflow-x: auto; }
@@ -767,8 +788,6 @@ footer {
   header h1 { font-size: 1rem; }
   .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-grid { grid-template-columns: 1fr; }
-  .charts-grid .chart-card:nth-child(1),
-  .charts-grid .chart-card:nth-child(2) { grid-column: span 1; }
   .import-grid { grid-template-columns: 1fr; }
   main { padding: 1rem; }
   .card { padding: 1rem; }
