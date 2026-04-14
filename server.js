@@ -1951,6 +1951,8 @@ app.post('/api/ocr-downgrade', (req, res) => {
   try {
     fs.rmSync(pythonDir, { recursive: true, force: true });
     _paddleOcrAvailable = null; // reset cache
+    // Re-detect so /api/ocr-status reflects the new state immediately
+    detectPaddleOcrAsync();
     log('INFO', 'PaddleOCR downgraded — python/ folder removed');
     res.json({ success: true });
   } catch (err) {
@@ -1982,6 +1984,8 @@ app.post('/api/ocr-upgrade', (req, res) => {
     }
     _paddleOcrAvailable = null;
     log('INFO', 'PaddleOCR upgrade complete');
+    // Re-detect PaddleOCR so /api/ocr-status reflects the new state
+    detectPaddleOcrAsync();
     res.json({ success: true });
   });
 });

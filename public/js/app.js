@@ -2076,6 +2076,11 @@ const App = (() => {
     try {
       const resp = await fetch('/api/ocr-status');
       const status = await resp.json();
+      // If server is still detecting PaddleOCR, retry after a short delay
+      if (status.detecting) {
+        setTimeout(fetchOcrStatus, 2000);
+        return;
+      }
       const badge = document.getElementById('ocr-engine-badge');
       const label = document.getElementById('ocr-engine-label');
       const actionBtn = document.getElementById('ocr-action-btn');

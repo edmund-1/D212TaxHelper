@@ -1,5 +1,13 @@
 # D212 Tax Helper - Changelog
 
+## v3.2.2 (2026-04-14)
+
+### Bug Fixes
+- **OCR badge stuck on Lite after upgrade** — the OCR engine badge now updates immediately after upgrading to Full or downgrading to Lite, without needing a server restart
+- **OCR badge shows Lite on page load** — when PaddleOCR detection is still running at startup, the frontend now retries automatically until detection completes instead of showing the wrong badge
+
+---
+
 ## v3.2.1 (2026-04-14)
 
 ### UX Improvements

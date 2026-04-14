@@ -1,5 +1,13 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v3.2.2 (2026-04-14)
+
+### Corecturi
+- **Insigna OCR blocată pe Lite după upgrade** — insigna motorului OCR se actualizează imediat după upgrade la Full sau downgrade la Lite, fără a necesita repornirea serverului
+- **Insigna OCR arată Lite la încărcarea paginii** — când detecția PaddleOCR este încă în curs la pornirea serverului, frontend-ul reîncearcă automat până la finalizarea detecției în loc să afișeze insigna greșită
+
+---
+
 ## v3.2.1 (2026-04-14)
 
 ### Îmbunătățiri UX
