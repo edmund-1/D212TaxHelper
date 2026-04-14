@@ -793,52 +793,63 @@ const App = (() => {
     document.getElementById('cass-value').textContent = fmt(data.cassTax);
     document.getElementById('total-tax-value').textContent = fmt(data.totalTax);
 
-    // Charts
-    Charts.createIncomeBreakdown('chart-income-breakdown', {
-      dividends: (data.dividendsRON || data.dividendsUSD * data.exchangeRate) + data.dividendsRON_ro,
-      capitalGains: data.capitalGainsTaxableRON + data.capitalGainsRON_ro,
-      interestIncome: data.interestIncomeRON,
-      rentalIncome: data.rentalGross || 0,
-      royaltyIncome: data.royaltyGross || 0,
-      otherIncome: (data.gamblingIncome || 0) + (data.otherGross || 0)
-    });
-
-    Charts.createTaxBreakdown('chart-tax-breakdown', {
-      dividendTax: data.dividendTaxRON,
-      capitalGainsTax: data.capitalGainsTaxRON,
-      interestTax: data.interestTax,
-      rentalTax: data.rentalTaxToPay || 0,
-      royaltyTax: data.royaltyTaxToPay || 0,
-      otherTax: data.otherTaxToPay || 0,
-      cassTax: data.cassTax
-    });
-
-    // Year comparison - dynamically adjust based on available years
-    const compData = {};
+    // Charts - only show if there's actual financial data
     const allYears = Object.keys(appData.years || {}).map(Number).sort((a, b) => a - b);
-    const yearsUpToSelected = allYears.filter(y => y <= selectedYear);
-    let compYears;
-    if (yearsUpToSelected.length <= 1) {
-      compYears = [selectedYear];
-    } else if (yearsUpToSelected.length === 2) {
-      compYears = yearsUpToSelected.slice(-2);
-    } else {
-      compYears = yearsUpToSelected.slice(-3);
-    }
-    for (const y of compYears) {
-      const yd = computeYearData(y);
-      compData[y] = { totalIncome: yd.totalIncome, totalTax: yd.totalTax };
-    }
-    Charts.createYearComparison('chart-year-comparison', compData);
-
-    // Exchange rates - only show if there's actual financial data uploaded
-    const chartContainer = document.getElementById('chart-exchange-rates')?.closest('.chart-card');
     const hasFinancialData = allYears.some(y => {
       const yd = appData.years?.[y];
       return yd && Object.keys(yd).some(k => k !== 'year' && k !== 'exchangeRate' && k !== 'minSalary' && k !== 'd212Deadline' && k !== 'usBroker' && k !== 'roBroker' && k !== 'taxRates');
     });
+
+    const incomeChartContainer = document.getElementById('chart-income-breakdown')?.closest('.chart-card');
+    const taxChartContainer = document.getElementById('chart-tax-breakdown')?.closest('.chart-card');
+    const yearChartContainer = document.getElementById('chart-year-comparison')?.closest('.chart-card');
+    const rateChartContainer = document.getElementById('chart-exchange-rates')?.closest('.chart-card');
+    const salaryChartContainer = document.getElementById('chart-min-salary')?.closest('.chart-card');
+
     if (hasFinancialData) {
-      if (chartContainer) chartContainer.style.display = '';
+      if (incomeChartContainer) incomeChartContainer.style.display = '';
+      if (taxChartContainer) taxChartContainer.style.display = '';
+      if (yearChartContainer) yearChartContainer.style.display = '';
+      if (rateChartContainer) rateChartContainer.style.display = '';
+      if (salaryChartContainer) salaryChartContainer.style.display = '';
+
+      Charts.createIncomeBreakdown('chart-income-breakdown', {
+        dividends: (data.dividendsRON || data.dividendsUSD * data.exchangeRate) + data.dividendsRON_ro,
+        capitalGains: data.capitalGainsTaxableRON + data.capitalGainsRON_ro,
+        interestIncome: data.interestIncomeRON,
+        rentalIncome: data.rentalGross || 0,
+        royaltyIncome: data.royaltyGross || 0,
+        otherIncome: (data.gamblingIncome || 0) + (data.otherGross || 0)
+      });
+
+      Charts.createTaxBreakdown('chart-tax-breakdown', {
+        dividendTax: data.dividendTaxRON,
+        capitalGainsTax: data.capitalGainsTaxRON,
+        interestTax: data.interestTax,
+        rentalTax: data.rentalTaxToPay || 0,
+        royaltyTax: data.royaltyTaxToPay || 0,
+        otherTax: data.otherTaxToPay || 0,
+        cassTax: data.cassTax
+      });
+
+      // Year comparison
+      const compData = {};
+      const yearsUpToSelected = allYears.filter(y => y <= selectedYear);
+      let compYears;
+      if (yearsUpToSelected.length <= 1) {
+        compYears = [selectedYear];
+      } else if (yearsUpToSelected.length === 2) {
+        compYears = yearsUpToSelected.slice(-2);
+      } else {
+        compYears = yearsUpToSelected.slice(-3);
+      }
+      for (const y of compYears) {
+        const yd = computeYearData(y);
+        compData[y] = { totalIncome: yd.totalIncome, totalTax: yd.totalTax };
+      }
+      Charts.createYearComparison('chart-year-comparison', compData);
+
+      // Exchange rates
       const rateData = {};
       for (const [y, r] of Object.entries(exchangeRates)) {
         rateData[y] = r.usdRon;
@@ -852,7 +863,10 @@ const App = (() => {
       }
       Charts.createMinSalaryChart('chart-min-salary', salaryData);
     } else {
-      if (chartContainer) chartContainer.style.display = 'none';
+      if (incomeChartContainer) incomeChartContainer.style.display = 'none';
+      if (taxChartContainer) taxChartContainer.style.display = 'none';
+      if (yearChartContainer) yearChartContainer.style.display = 'none';
+      if (rateChartContainer) rateChartContainer.style.display = 'none';
       const salaryContainer = document.getElementById('chart-min-salary')?.closest('.chart-card');
       if (salaryContainer) salaryContainer.style.display = 'none';
     }
