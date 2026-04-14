@@ -32,7 +32,11 @@ function findPython() {
 
 function checkPaddleOcrAvailable() {
   if (_paddleOcrAvailable !== null) return _paddleOcrAvailable;
+  // Synchronous fallback — only used if async detection hasn't completed yet
+  return _checkPaddleOcrSync();
+}
 
+function _checkPaddleOcrSync() {
   if (!fs.existsSync(PADDLEOCR_SCRIPT)) {
     _paddleOcrAvailable = { available: false, reason: 'ocr_service.py not found' };
     return _paddleOcrAvailable;
@@ -55,6 +59,36 @@ function checkPaddleOcrAvailable() {
   }
 
   return _paddleOcrAvailable;
+}
+
+// Async detection — runs in background, doesn't block server startup
+function detectPaddleOcrAsync() {
+  if (!fs.existsSync(PADDLEOCR_SCRIPT)) {
+    _paddleOcrAvailable = { available: false, reason: 'ocr_service.py not found' };
+    return;
+  }
+  const pythonExe = findPython();
+  if (!pythonExe) {
+    _paddleOcrAvailable = { available: false, reason: 'Python not found' };
+    return;
+  }
+  const { execFile } = require('child_process');
+  execFile(pythonExe, ['-c', 'from paddleocr import PaddleOCR; print("OK")'], {
+    timeout: 30000,
+    env: { ...process.env, PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True', GLOG_minloglevel: '2' }
+  }, (err) => {
+    if (err) {
+      _paddleOcrAvailable = { available: false, reason: 'PaddleOCR not installed', python: pythonExe };
+    } else {
+      _paddleOcrAvailable = { available: true, python: pythonExe };
+    }
+    log('INFO', 'OCR engine detection', {
+      paddleocr: _paddleOcrAvailable.available,
+      detail: _paddleOcrAvailable.reason || 'ready',
+      python: _paddleOcrAvailable.python || null,
+    });
+    console.log(`  OCR Engine: ${_paddleOcrAvailable.available ? 'PaddleOCR (PP-StructureV3)' : 'Tesseract.js (PaddleOCR not available: ' + (_paddleOcrAvailable.reason || 'unknown') + ')'}`);
+  });
 }
 
 function runPaddleOcr(filePath, mode = 'auto') {
@@ -121,16 +155,8 @@ function log(level, msg, meta) {
 }
 log('INFO', 'Server starting', { pid: process.pid, node: process.version, cwd: __dirname });
 
-// Detect PaddleOCR availability at startup (non-blocking)
-setImmediate(() => {
-  const status = checkPaddleOcrAvailable();
-  log('INFO', 'OCR engine detection', {
-    paddleocr: status.available,
-    detail: status.reason || 'ready',
-    python: status.python || null,
-  });
-  console.log(`  OCR Engine: ${status.available ? 'PaddleOCR (PP-StructureV3)' : 'Tesseract.js (PaddleOCR not available: ' + (status.reason || 'unknown') + ')'}`);
-});
+// Detect PaddleOCR availability at startup (non-blocking async)
+detectPaddleOcrAsync();
 
 process.on('uncaughtException', (err) => {
   log('ERROR', 'Uncaught exception: ' + err.message, { stack: err.stack });
@@ -173,7 +199,34 @@ const upload = multer({
 
 // GET /api/ocr-status - Return OCR engine availability
 app.get('/api/ocr-status', (req, res) => {
-  const paddle = checkPaddleOcrAvailable();
+  // If async detection hasn't completed yet, return "detecting" status
+  if (_paddleOcrAvailable === null) {
+    let pythonSizeMB = null;
+    const pythonDir = path.join(__dirname, 'python');
+    if (fs.existsSync(pythonDir)) {
+      try {
+        let total = 0;
+        const walk = (dir) => {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const p = path.join(dir, entry.name);
+            if (entry.isDirectory()) walk(p);
+            else total += fs.statSync(p).size;
+          }
+        };
+        walk(pythonDir);
+        pythonSizeMB = Math.round(total / (1024 * 1024));
+      } catch { /* ignore */ }
+    }
+    return res.json({
+      paddleocr: false,
+      paddleocrDetail: 'Detecting...',
+      tesseract: true,
+      engine: 'tesseract',
+      pythonSizeMB,
+      detecting: true,
+    });
+  }
+  const paddle = _paddleOcrAvailable;
   let pythonSizeMB = null;
   const pythonDir = path.join(__dirname, 'python');
   if (fs.existsSync(pythonDir)) {
@@ -259,6 +312,39 @@ app.put('/api/data/:year', (req, res) => {
     }
     data.years[year] = { ...data.years[year], ...req.body, year };
     fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf8');
+
+    // Save a raw text file for manual data (visible in Raw Data tab)
+    const manualFields = [
+      'usBroker', 'roBroker', 'fidelityDividends', 'usDivTaxPaid',
+      'xtbDividends', 'roDivTaxPaid', 'fidelityGains', 'fidelityCost',
+      'interestIncome', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
+      'royaltyTaxPaid', 'gamblingIncome', 'gamblingTaxPaid', 'otherIncome',
+      'otherTaxPaid', 'stockWithholdingPaid', 'exchangeRate', 'minSalary',
+      'd212Deadline', 'roGainsCountries'
+    ];
+    const hasManualData = manualFields.some(f => {
+      const v = req.body[f];
+      if (f === 'roGainsCountries') return Array.isArray(v) && v.length > 0;
+      return v !== undefined && v !== '' && v !== null;
+    });
+    if (hasManualData) {
+      const lines = [`Manual Data — Year ${year}`, `Saved: ${new Date().toISOString()}`, ''];
+      for (const f of manualFields) {
+        const v = req.body[f];
+        if (v === undefined || v === '' || v === null) continue;
+        if (f === 'roGainsCountries' && Array.isArray(v)) {
+          lines.push(`${f}:`);
+          for (const c of v) {
+            lines.push(`  ${c.country || '?'}\t≥1yr: ${c.longGain || 0}\t<1yr: ${c.shortGain || 0}\tTax: ${c.taxWithheld || 0}`);
+          }
+        } else {
+          lines.push(`${f}\t${v}`);
+        }
+      }
+      const rawFile = path.join(DATA_DIR, `manual_data_${year}_raw.txt`);
+      fs.writeFileSync(rawFile, lines.join('\n'), 'utf8');
+    }
+
     res.json({ success: true, data: data.years[year] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -308,6 +394,20 @@ app.delete('/api/raw/:filename', (req, res) => {
             delete data.years[year][type];
           }
           // Handle special naming conventions
+          if (type === 'manual_data') {
+            // Remove all manually entered fields
+            const manualKeys = [
+              'usBroker', 'roBroker', 'fidelityDividends', 'usDivTaxPaid',
+              'xtbDividends', 'roDivTaxPaid', 'fidelityGains', 'fidelityCost',
+              'interestIncome', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
+              'royaltyTaxPaid', 'gamblingIncome', 'gamblingTaxPaid', 'otherIncome',
+              'otherTaxPaid', 'stockWithholdingPaid', 'exchangeRate', 'minSalary',
+              'd212Deadline', 'roGainsCountries', 'taxRates'
+            ];
+            for (const k of manualKeys) {
+              delete data.years[year][k];
+            }
+          }
           if (type === 'xtb_dividends' && data.years[year].xtbDividendsReport) {
             delete data.years[year].xtbDividendsReport;
           }

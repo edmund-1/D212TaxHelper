@@ -492,9 +492,9 @@ const App = (() => {
     const defaultRate = exchangeRates[year]?.usdRon || 4.57;
     const rate = savedRate || decl.exchangeRate || defaultRate;
 
-    // Dividend tax rate: 16% from 2026, 10% for 2025, 8% for 2024 and earlier
-    const divTaxRate = year >= 2026 ? 0.16 : year >= 2025 ? 0.10 : 0.08;
-    const divTaxRateLabel = year >= 2026 ? '16%' : year >= 2025 ? '10%' : '8%';
+    // Dividend tax rate: 16% from 2026, 10% for 2025, 8% for 2023-2024, 5% for 2019-2022
+    const divTaxRate = year >= 2026 ? 0.16 : year >= 2025 ? 0.10 : year >= 2023 ? 0.08 : 0.05;
+    const divTaxRateLabel = year >= 2026 ? '16%' : year >= 2025 ? '10%' : year >= 2023 ? '8%' : '5%';
     // Capital gains tax rate: 16% from 2026, 10% for 2025 and earlier
     const capGainsTaxRate = year >= 2026 ? 0.16 : 0.10;
 
@@ -571,8 +571,10 @@ const App = (() => {
       dividendsRON = dividendsUSD * rate;
     }
     if (yd.xtbDividends !== undefined && yd.xtbDividends !== '') dividendsRON_ro = parseFloat(yd.xtbDividends) || 0;
+    if (yd.roDivTaxPaid !== undefined && yd.roDivTaxPaid !== '') roDivTaxWithheld = parseFloat(yd.roDivTaxPaid) || 0;
     if (yd.fidelityGains !== undefined && yd.fidelityGains !== '') {
       const gainsUSD = parseFloat(yd.fidelityGains) || 0;
+      capitalGainsSaleUSD = gainsUSD;
       capitalGainsTaxableRON = (gainsUSD - capitalGainsCostUSD) * rate;
     }
     // Manual override: RO gains from country rows
@@ -606,7 +608,7 @@ const App = (() => {
     // US dividends: US withholds 10% at source per RO-US treaty.
     // Romania taxes at divTaxRate. Credit fiscal = min(RO tax, US tax paid).
     // Difference to pay = max(0, RO tax - US credit).
-    const usForeignTaxUSD = fd.dividends?.foreignTaxUSD || f1042sTaxUSD || inv.taxesWithheld || 0;
+    const usForeignTaxUSD = (yd.usDivTaxPaid !== undefined && yd.usDivTaxPaid !== '' ? parseFloat(yd.usDivTaxPaid) : null) ?? fd.dividends?.foreignTaxUSD ?? f1042sTaxUSD ?? inv.taxesWithheld ?? 0;
     const usForeignTaxRON = fd.dividends?.foreignTaxRON || (usForeignTaxUSD * rate);
     // US dividends: RO tax due minus credit for US tax already paid
     const usDivTaxDueRON = dividendsRON * divTaxRate;
@@ -616,10 +618,13 @@ const App = (() => {
     const roDivTaxDue = dividendsRON_ro * divTaxRate;
     const roDivTaxNet = Math.max(0, roDivTaxDue - (roDivTaxWithheld || 0));
     const dividendTaxRON = usDivTax + roDivTaxNet;
-    // US capital gains at capGainsTaxRate, Romania rates: 2025=1%/3%, 2026+=3%/6%
+    // US capital gains at capGainsTaxRate, Romania domestic rates:
+    // 2019-2022: flat 10% (no long/short distinction)
+    // 2023-2025: 1% long (>=1yr), 3% short (<1yr)
+    // 2026+: 3% long, 6% short
     const tr = yd.taxRates || {};
-    const defaultRoLong = year >= 2026 ? 3 : 1;
-    const defaultRoShort = year >= 2026 ? 6 : 3;
+    const defaultRoLong = year >= 2026 ? 3 : year >= 2023 ? 1 : 10;
+    const defaultRoShort = year >= 2026 ? 6 : year >= 2023 ? 3 : 10;
     const roLongRate = (tr.roCapGainsLongRate != null ? tr.roCapGainsLongRate : defaultRoLong) / 100;
     const roShortRate = (tr.roCapGainsShortRate != null ? tr.roCapGainsShortRate : defaultRoShort) / 100;
     const roCapitalGainsTax = (roLongTermGainRON * roLongRate) + (roShortTermGainRON * roShortRate);
@@ -638,6 +643,36 @@ const App = (() => {
     const interestTaxPaid = adv.interestTax || 0;
     const interestTax = Math.max(0, interestTaxGross - interestTaxPaid);
 
+    // ---- Additional income types ----
+    // Rental income: 10% on net income (40% flat rate deduction per Cod Fiscal art. 84)
+    const rentalGross = parseFloat(yd.rentalIncome) || 0;
+    const rentalTaxPaid = parseFloat(yd.rentalTaxPaid) || 0;
+    const rentalNet = rentalGross * 0.6; // 40% deduction
+    const rentalTaxRate = interestTaxRate; // same as other income: 10% (2025) / 16% (2026+)
+    const rentalTaxDue = rentalNet * rentalTaxRate;
+    const rentalTaxToPay = Math.max(0, rentalTaxDue - rentalTaxPaid);
+
+    // Intellectual property / royalties: 10% on net income (40% flat rate deduction per Cod Fiscal art. 72-73)
+    const royaltyGross = parseFloat(yd.royaltyIncome) || 0;
+    const royaltyTaxPaid = parseFloat(yd.royaltyTaxPaid) || 0;
+    const royaltyNet = royaltyGross * 0.6; // 40% deduction
+    const royaltyTaxRate = interestTaxRate;
+    const royaltyTaxDue = royaltyNet * royaltyTaxRate;
+    const royaltyTaxToPay = Math.max(0, royaltyTaxDue - royaltyTaxPaid);
+
+    // Gambling income: already taxed at source (final tax), only counts for CASS
+    const gamblingIncomeManual = parseFloat(yd.gamblingIncome) || 0;
+    const gamblingTaxPaidManual = parseFloat(yd.gamblingTaxPaid) || 0;
+    const gamblingIncomeTotal = gamblingIncomeManual || (adv.gamblingIncome || 0);
+    const gamblingTaxTotal = gamblingTaxPaidManual || (adv.gamblingTax || 0);
+
+    // Other income sources: 10% (2025) / 16% (2026+) on gross
+    const otherGross = parseFloat(yd.otherIncome) || 0;
+    const otherTaxPaid = parseFloat(yd.otherTaxPaid) || 0;
+    const otherTaxRate = interestTaxRate;
+    const otherTaxDue = otherGross * otherTaxRate;
+    const otherTaxToPay = Math.max(0, otherTaxDue - otherTaxPaid);
+
     // CASS base: NET investment income
     // Per art. 174 Cod Fiscal — use net income (gross minus deductible expenses/taxes)
     const usDivNetRON = dividendsRON - usForeignTaxRON;
@@ -647,19 +682,26 @@ const App = (() => {
     const totalCapitalGainsRON = capitalGainsTaxableRON + capitalGainsRON_ro;
     const interestNetRON = Math.max(0, interestIncomeRON - interestTaxPaid);
     // Subtract stock withholding and RO broker tax from CASS base
-    const totalAlreadyPaid = withholding + (roPortTaxWithheld || 0) + (roDivTaxWithheld || 0) + interestTaxPaid;
+    const totalAlreadyPaid = usForeignTaxRON + withholding + (roPortTaxWithheld || 0) + (roDivTaxWithheld || 0) + interestTaxPaid + rentalTaxPaid + royaltyTaxPaid + gamblingTaxTotal + otherTaxPaid;
     const usNetCapGainsRON_cass = Math.max(0, capitalGainsTaxableRON - withholding);
     const roNetCapGainsRON_cass = Math.max(0, capitalGainsRON_ro - (roPortTaxWithheld || 0));
-    const totalInvestmentIncome_cass = Math.max(0, totalDividendsRON_cass + usNetCapGainsRON_cass + roNetCapGainsRON_cass + interestNetRON);
-    const totalInvestmentIncome = totalDividendsRON + totalCapitalGainsRON + interestIncomeRON + (adv.gamblingIncome || 0);
+    // Include income types for CASS per Art. 174 Cod Fiscal:
+    // - cedarea folosinței bunurilor (rental) ✓
+    // - investiții (dividends, capital gains, interest) ✓
+    // - drepturi de proprietate intelectuală (royalties) ✓
+    // NOT included in CASS: gambling (Art. 110 - final tax), other income (Art. 114-115)
+    const rentalNetCass = Math.max(0, rentalNet - rentalTaxPaid);
+    const royaltyNetCass = Math.max(0, royaltyNet - royaltyTaxPaid);
+    const totalInvestmentIncome_cass = Math.max(0, totalDividendsRON_cass + usNetCapGainsRON_cass + roNetCapGainsRON_cass + interestNetRON + rentalNetCass + royaltyNetCass);
+    const totalInvestmentIncome = totalDividendsRON + totalCapitalGainsRON + interestIncomeRON + gamblingIncomeTotal + rentalGross + royaltyGross + otherGross;
     const savedMinSalary = (yd.minSalary !== undefined && yd.minSalary !== '') ? parseFloat(yd.minSalary) : null;
     const cassResult = calculateCASS(totalInvestmentIncome_cass, year, savedMinSalary);
     let cassTax = usCassTax || decl.cassContribution || cassResult.amount;
     let cassApplies = cassResult.applies;
     const cassInfo = cassResult;
 
-    const totalTax = (decl.totalTax || (dividendTaxRON + capitalGainsTaxRON + interestTax)) + cassTax;
-    const netTax = totalTax; // withholding already deducted from taxable base
+    const incomeTaxOnly = decl.totalTax || (dividendTaxRON + capitalGainsTaxRON + interestTax + rentalTaxToPay + royaltyTaxToPay + otherTaxToPay);
+    const totalTax = incomeTaxOnly + cassTax;
 
     return {
       dividendsUSD,
@@ -681,6 +723,8 @@ const App = (() => {
       roLongRate,
       roShortRate,
       dividendTaxRON,
+      usDivTax,
+      roDivTaxNet,
       capitalGainsTaxRON,
       interestTax,
       interestTaxPaid,
@@ -689,9 +733,9 @@ const App = (() => {
       cassInfo,
       totalIncome: totalInvestmentIncome,
       totalIncome_cass: totalInvestmentIncome_cass,
+      incomeTaxOnly,
       totalTax,
       stockWithholding: withholding,
-      netTax,
       // From trade confirmations
       tradeProceedsUSD,
       tradeCount: trades.count || 0,
@@ -711,8 +755,22 @@ const App = (() => {
       usDivForeignTaxRON: fd.dividends?.foreignTaxRON ?? usForeignTaxRON,
       usDivForeignTaxUSD: fd.dividends?.foreignTaxUSD ?? usForeignTaxUSD,
       // Gambling income
-      gamblingIncome: adv.gamblingIncome || 0,
-      gamblingTax: adv.gamblingTax || 0,
+      gamblingIncome: gamblingIncomeTotal,
+      gamblingTax: gamblingTaxTotal,
+      // Rental income
+      rentalGross,
+      rentalNet,
+      rentalTaxPaid,
+      rentalTaxToPay,
+      // Royalty income
+      royaltyGross,
+      royaltyNet,
+      royaltyTaxPaid,
+      royaltyTaxToPay,
+      // Other income
+      otherGross,
+      otherTaxPaid,
+      otherTaxToPay,
       // Broker labels
       usBrokerLabel,
       usDivBrokerLabel,
@@ -730,21 +788,28 @@ const App = (() => {
     const data = computeYearData(selectedYear);
 
     document.getElementById('total-income-value').textContent = fmt(data.totalIncome);
+    document.getElementById('already-paid-value').textContent = fmt(data.totalAlreadyPaid);
+    document.getElementById('net-tax-value').textContent = fmt(data.incomeTaxOnly);
+    document.getElementById('cass-value').textContent = fmt(data.cassTax);
     document.getElementById('total-tax-value').textContent = fmt(data.totalTax);
-    document.getElementById('withholding-value').textContent = fmt(data.stockWithholding);
-    document.getElementById('net-tax-value').textContent = fmt(data.netTax);
 
     // Charts
     Charts.createIncomeBreakdown('chart-income-breakdown', {
       dividends: (data.dividendsRON || data.dividendsUSD * data.exchangeRate) + data.dividendsRON_ro,
       capitalGains: data.capitalGainsTaxableRON + data.capitalGainsRON_ro,
-      interestIncome: data.interestIncomeRON
+      interestIncome: data.interestIncomeRON,
+      rentalIncome: data.rentalGross || 0,
+      royaltyIncome: data.royaltyGross || 0,
+      otherIncome: (data.gamblingIncome || 0) + (data.otherGross || 0)
     });
 
     Charts.createTaxBreakdown('chart-tax-breakdown', {
       dividendTax: data.dividendTaxRON,
       capitalGainsTax: data.capitalGainsTaxRON,
       interestTax: data.interestTax,
+      rentalTax: data.rentalTaxToPay || 0,
+      royaltyTax: data.royaltyTaxToPay || 0,
+      otherTax: data.otherTaxToPay || 0,
       cassTax: data.cassTax
     });
 
@@ -779,8 +844,17 @@ const App = (() => {
         rateData[y] = r.usdRon;
       }
       Charts.createExchangeRates('chart-exchange-rates', rateData);
+
+      // Min salary chart
+      const salaryData = {};
+      for (const [y, info] of Object.entries(cassThresholds)) {
+        salaryData[y] = info.minSalary;
+      }
+      Charts.createMinSalaryChart('chart-min-salary', salaryData);
     } else {
       if (chartContainer) chartContainer.style.display = 'none';
+      const salaryContainer = document.getElementById('chart-min-salary')?.closest('.chart-card');
+      if (salaryContainer) salaryContainer.style.display = 'none';
     }
   }
 
@@ -800,7 +874,7 @@ const App = (() => {
         usTaxPaid: data.usDivForeignTaxUSD || 0,
         taxRate: '-',
         paid: data.usDivForeignTaxRON || 0,
-        tax: data.dividendTaxRON
+        tax: data.usDivTax
       },
       {
         cat: I18n.t('income.roDividends') + data.roBrokerLabel + (data.roDivTaxWithheld ? ' ' + I18n.t('misc.creditFiscal') : ''),
@@ -822,7 +896,7 @@ const App = (() => {
         usTaxPaid: 0,
         taxRate: (data.capGainsTaxRate * 100) + '%',
         paid: 0,
-        tax: data.capitalGainsTaxRON
+        tax: Math.max(0, data.usNetGainsRON) * data.capGainsTaxRate
       },
       {
         cat: I18n.t('income.roGainsLong') + data.roBrokerLabel + ' ' + I18n.t('misc.roWithheld'),
@@ -832,7 +906,7 @@ const App = (() => {
         usTaxRate: '-',
         usTaxPaid: 0,
         taxRate: (data.roLongRate * 100) + '%',
-        paid: data.roLongTermGainRON * data.roLongRate,
+        paid: data.roPortTaxWithheld > 0 ? Math.min(data.roPortTaxWithheld, data.roLongTermGainRON * data.roLongRate) : data.roLongTermGainRON * data.roLongRate,
         tax: 0
       },
       {
@@ -871,6 +945,51 @@ const App = (() => {
         taxRate: '10%',
         paid: data.gamblingTax || 0,
         tax: 0  // Already withheld at source
+      });
+    }
+
+    // Add rental income if present
+    if (data.rentalGross > 0) {
+      rows.push({
+        cat: I18n.t('income.rentalIncome'),
+        usd: '-',
+        rate: '-',
+        ron: data.rentalGross,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: (data.interestTaxRate * 100) + '%',
+        paid: data.rentalTaxPaid || 0,
+        tax: data.rentalTaxToPay
+      });
+    }
+
+    // Add royalty income if present
+    if (data.royaltyGross > 0) {
+      rows.push({
+        cat: I18n.t('income.royaltyIncome'),
+        usd: '-',
+        rate: '-',
+        ron: data.royaltyGross,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: (data.interestTaxRate * 100) + '%',
+        paid: data.royaltyTaxPaid || 0,
+        tax: data.royaltyTaxToPay
+      });
+    }
+
+    // Add other income if present
+    if (data.otherGross > 0) {
+      rows.push({
+        cat: I18n.t('income.otherIncome'),
+        usd: '-',
+        rate: '-',
+        ron: data.otherGross,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: (data.interestTaxRate * 100) + '%',
+        paid: data.otherTaxPaid || 0,
+        tax: data.otherTaxToPay
       });
     }
 
@@ -1177,7 +1296,18 @@ const App = (() => {
     if (gamblingIncome > 0) {
       html += dataRow(I18n.t('taxes.earnGambling'), fmtR(gamblingIncome) + ' RON', { indent: true });
     }
-    const roSubtotalIncome = roLong + roShort + roDivGross + data.interestIncomeRON + gamblingIncome;
+    if (data.rentalGross > 0) {
+      html += dataRow(I18n.t('taxes.earnRental'), fmtR(data.rentalGross) + ' RON', { indent: true });
+      html += dataRow(I18n.t('taxes.earnRentalNet'), fmtR(data.rentalNet) + ' RON', { indent: true, muted: true });
+    }
+    if (data.royaltyGross > 0) {
+      html += dataRow(I18n.t('taxes.earnRoyalty'), fmtR(data.royaltyGross) + ' RON', { indent: true });
+      html += dataRow(I18n.t('taxes.earnRoyaltyNet'), fmtR(data.royaltyNet) + ' RON', { indent: true, muted: true });
+    }
+    if (data.otherGross > 0) {
+      html += dataRow(I18n.t('taxes.earnOther'), fmtR(data.otherGross) + ' RON', { indent: true });
+    }
+    const roSubtotalIncome = roLong + roShort + roDivGross + data.interestIncomeRON + gamblingIncome + data.rentalGross + data.royaltyGross + data.otherGross;
     html += dataRow(I18n.t('taxes.subtotalRO'), fmtR(roSubtotalIncome) + ' RON', { indent: true, bold: true, topBorder: true });
 
     html += dataRow(I18n.t('taxes.earnTotal'), fmtR(usSubtotalIncome + roSubtotalIncome) + ' RON', { bold: true, topBorder: true });
@@ -1199,7 +1329,7 @@ const App = (() => {
     html += dataRow(I18n.t('taxes.subtotalUS'), fmtR(usPaidSubtotal) + ' RON', { indent: true, bold: true, topBorder: true, green: true });
 
     // -- Romania taxes paid --
-    const roPaidSubtotal = roCapTaxWithheld + roDivTaxWithheld + interestTaxPaid + gamblingTax;
+    const roPaidSubtotal = roCapTaxWithheld + roDivTaxWithheld + interestTaxPaid + gamblingTax + (data.rentalTaxPaid || 0) + (data.royaltyTaxPaid || 0) + (data.otherTaxPaid || 0);
     html += dataRow('<strong>' + I18n.t('taxes.subsectionRO') + '</strong>', '', { indent: false });
     if (roCapTaxWithheld > 0) {
       html += dataRow(I18n.t('taxes.paidRoCapGains'), fmtR(roCapTaxWithheld) + ' RON', { indent: true, green: true });
@@ -1213,9 +1343,18 @@ const App = (() => {
     if (gamblingTax > 0) {
       html += dataRow(I18n.t('taxes.paidGambling'), fmtR(gamblingTax) + ' RON', { indent: true, green: true });
     }
+    if (data.rentalTaxPaid > 0) {
+      html += dataRow(I18n.t('taxes.paidRental'), fmtR(data.rentalTaxPaid) + ' RON', { indent: true, green: true });
+    }
+    if (data.royaltyTaxPaid > 0) {
+      html += dataRow(I18n.t('taxes.paidRoyalty'), fmtR(data.royaltyTaxPaid) + ' RON', { indent: true, green: true });
+    }
+    if (data.otherTaxPaid > 0) {
+      html += dataRow(I18n.t('taxes.paidOther'), fmtR(data.otherTaxPaid) + ' RON', { indent: true, green: true });
+    }
     html += dataRow(I18n.t('taxes.subtotalRO'), fmtR(roPaidSubtotal) + ' RON', { indent: true, bold: true, topBorder: true, green: true });
 
-    const totalPaid = usForeignTaxRON + roCapTaxWithheld + roDivTaxWithheld + interestTaxPaid + gamblingTax + stockWithholding;
+    const totalPaid = usForeignTaxRON + roCapTaxWithheld + roDivTaxWithheld + interestTaxPaid + gamblingTax + stockWithholding + (data.rentalTaxPaid || 0) + (data.royaltyTaxPaid || 0) + (data.otherTaxPaid || 0);
     html += dataRow(I18n.t('taxes.paidTotal'), fmtR(totalPaid) + ' RON', { bold: true, topBorder: true, green: true });
 
     html += emptyRow();
@@ -1228,10 +1367,21 @@ const App = (() => {
     }
     // US dividends
     html += dataRow(I18n.t('taxes.oweUsDiv'), fmtR(usDivTax) + ' RON', { indent: true, muted: usDivTax === 0 });
-    // Romania capital gains: final tax
-    html += dataRow(I18n.t('taxes.oweRoCapGains'), I18n.t('taxes.finalTaxDone'), { indent: true, muted: true });
-    // Romania dividends: final tax
-    html += dataRow(I18n.t('taxes.oweRoDiv'), I18n.t('taxes.finalTaxDone'), { indent: true, muted: true });
+    // Romania capital gains: check if broker withheld enough
+    const roCapGainsTaxDue = (roLong * (data.roLongRate || 0.01)) + (roShort * (data.roShortRate || 0.03));
+    const roCapGainsNetOwed = Math.max(0, roCapGainsTaxDue - roCapTaxWithheld);
+    if (roCapGainsNetOwed > 0) {
+      html += dataRow(I18n.t('taxes.oweRoCapGains'), fmtR(roCapGainsNetOwed) + ' RON', { indent: true });
+    } else {
+      html += dataRow(I18n.t('taxes.oweRoCapGains'), I18n.t('taxes.finalTaxDone'), { indent: true, muted: true });
+    }
+    // Romania dividends: check if broker withheld enough
+    const roDivNetOwed = Math.max(0, roDivGross * data.divTaxRate - roDivTaxWithheld);
+    if (roDivNetOwed > 0) {
+      html += dataRow(I18n.t('taxes.oweRoDiv'), fmtR(roDivNetOwed) + ' RON', { indent: true });
+    } else {
+      html += dataRow(I18n.t('taxes.oweRoDiv'), I18n.t('taxes.finalTaxDone'), { indent: true, muted: true });
+    }
     // Interest tax remaining
     const interestTaxRemaining = Math.max(0, interestTaxAll - interestTaxPaid);
     html += dataRow(I18n.t('taxes.oweInterest'), fmtR(interestTaxRemaining) + ' RON', { indent: true });
@@ -1239,8 +1389,20 @@ const App = (() => {
     if (gamblingIncome > 0) {
       html += dataRow(I18n.t('taxes.oweGambling'), I18n.t('taxes.finalTaxDone'), { indent: true, muted: true });
     }
+    // Rental income tax
+    if (data.rentalGross > 0) {
+      html += dataRow(I18n.t('taxes.oweRental'), fmtR(data.rentalTaxToPay) + ' RON', { indent: true });
+    }
+    // Royalty income tax
+    if (data.royaltyGross > 0) {
+      html += dataRow(I18n.t('taxes.oweRoyalty'), fmtR(data.royaltyTaxToPay) + ' RON', { indent: true });
+    }
+    // Other income tax
+    if (data.otherGross > 0) {
+      html += dataRow(I18n.t('taxes.oweOther'), fmtR(data.otherTaxToPay) + ' RON', { indent: true });
+    }
     // Subtotal income tax
-    const incomeTaxToPay = Math.max(0, usGainsTax) + usDivTax + interestTaxRemaining;
+    const incomeTaxToPay = Math.max(0, usGainsTax) + usDivTax + roCapGainsNetOwed + roDivNetOwed + interestTaxRemaining + (data.rentalTaxToPay || 0) + (data.royaltyTaxToPay || 0) + (data.otherTaxToPay || 0);
     html += dataRow(I18n.t('taxes.oweIncomeTaxSubtotal'), '<strong>' + fmtR(incomeTaxToPay) + ' RON</strong>', { topBorder: true });
     // CASS
     html += dataRow(I18n.t('taxes.oweCASS'), fmtR(data.cassTax) + ' RON', { indent: true });
@@ -1441,8 +1603,11 @@ const App = (() => {
       const roShortGainWH = data.roShortTermGainRON || 0;
       const roDivWH = data.dividendsRON_ro || 0;
       const interestWH = data.interestIncomeRON || 0;
+      const rentalWH = data.rentalNet || 0;
+      const royaltyWH = data.royaltyNet || 0;
       const gamblingWH = data.gamblingIncome || 0;
-      const totalWH = roLongGainWH + roShortGainWH + roDivWH + interestWH + gamblingWH;
+      // CASS total: per Art. 174, excludes gambling and other income
+      const totalWH = roLongGainWH + roShortGainWH + roDivWH + interestWH + rentalWH + royaltyWH;
 
       const rows = [
         [I18n.t('dcl.whCapGainsLong'), fmtR(roLongGainWH)],
@@ -1450,8 +1615,14 @@ const App = (() => {
         [I18n.t('dcl.whDividends'), fmtR(roDivWH)],
         [I18n.t('dcl.whInterest'), fmtR(interestWH)],
       ];
+      if (rentalWH > 0) {
+        rows.push([I18n.t('dcl.whRental') || 'Rental income (net)', fmtR(rentalWH)]);
+      }
+      if (royaltyWH > 0) {
+        rows.push([I18n.t('dcl.whRoyalty') || 'Royalty income (net)', fmtR(royaltyWH)]);
+      }
       if (gamblingWH > 0) {
-        rows.push([I18n.t('dcl.whGambling'), fmtR(gamblingWH)]);
+        rows.push([I18n.t('dcl.whGambling'), fmtR(gamblingWH) + ' *']);
       }
       rows.push([I18n.t('dcl.whNote'), '']);
       rows.push(['<strong>' + I18n.t('dcl.whTotal') + '</strong>', '<strong>' + fmtR(totalWH) + '</strong>']);
@@ -1588,10 +1759,20 @@ const App = (() => {
     document.getElementById('input-us-broker').value = yd.usBroker || '';
     document.getElementById('input-ro-broker').value = yd.roBroker || '';
     document.getElementById('input-us-dividends').value = yd.fidelityDividends || '';
+    document.getElementById('input-us-div-tax').value = yd.usDivTaxPaid || '';
     document.getElementById('input-ro-dividends').value = yd.xtbDividends || '';
+    document.getElementById('input-ro-div-tax').value = yd.roDivTaxPaid || '';
     document.getElementById('input-us-gains').value = yd.fidelityGains || '';
     document.getElementById('input-us-cost').value = yd.fidelityCost || '';
     document.getElementById('input-interest').value = yd.interestIncome || '';
+    document.getElementById('input-rental-income').value = yd.rentalIncome || '';
+    document.getElementById('input-rental-tax-paid').value = yd.rentalTaxPaid || '';
+    document.getElementById('input-royalty-income').value = yd.royaltyIncome || '';
+    document.getElementById('input-royalty-tax-paid').value = yd.royaltyTaxPaid || '';
+    document.getElementById('input-gambling-income').value = yd.gamblingIncome || '';
+    document.getElementById('input-gambling-tax-paid').value = yd.gamblingTaxPaid || '';
+    document.getElementById('input-other-income').value = yd.otherIncome || '';
+    document.getElementById('input-other-tax-paid').value = yd.otherTaxPaid || '';
     document.getElementById('input-exchange-rate').value = yd.exchangeRate || rate;
     document.getElementById('input-min-salary').value = yd.minSalary || defaultMinSalary;
     document.getElementById('input-d212-deadline').value = yd.d212Deadline || d212DefaultDeadline(selectedYear);
@@ -1700,12 +1881,22 @@ const App = (() => {
     const payload = {
       usBroker: document.getElementById('input-us-broker').value,
       roBroker: document.getElementById('input-ro-broker').value,
-      usDividends: document.getElementById('input-us-dividends').value,
-      roDividends: document.getElementById('input-ro-dividends').value,
-      usGains: document.getElementById('input-us-gains').value,
-      usCost: document.getElementById('input-us-cost').value,
+      fidelityDividends: document.getElementById('input-us-dividends').value,
+      usDivTaxPaid: document.getElementById('input-us-div-tax').value,
+      xtbDividends: document.getElementById('input-ro-dividends').value,
+      roDivTaxPaid: document.getElementById('input-ro-div-tax').value,
+      fidelityGains: document.getElementById('input-us-gains').value,
+      fidelityCost: document.getElementById('input-us-cost').value,
       roGainsCountries: collectRoGainsRows(),
       interestIncome: document.getElementById('input-interest').value,
+      rentalIncome: document.getElementById('input-rental-income').value,
+      rentalTaxPaid: document.getElementById('input-rental-tax-paid').value,
+      royaltyIncome: document.getElementById('input-royalty-income').value,
+      royaltyTaxPaid: document.getElementById('input-royalty-tax-paid').value,
+      gamblingIncome: document.getElementById('input-gambling-income').value,
+      gamblingTaxPaid: document.getElementById('input-gambling-tax-paid').value,
+      otherIncome: document.getElementById('input-other-income').value,
+      otherTaxPaid: document.getElementById('input-other-tax-paid').value,
       stockWithholdingPaid: document.getElementById('input-stock-withholding').value
     };
 
@@ -1785,10 +1976,10 @@ const App = (() => {
     const tr = yd.taxRates || {};
     document.getElementById('input-us-div-rate').value = tr.usDividendRate ?? 10;
     document.getElementById('input-us-capgains-rate').value = tr.usCapGainsRate ?? 0;
-    document.getElementById('input-ro-div-rate').value = tr.roDividendRate ?? (selectedYear >= 2026 ? 16 : selectedYear >= 2025 ? 10 : 8);
+    document.getElementById('input-ro-div-rate').value = tr.roDividendRate ?? (selectedYear >= 2026 ? 16 : selectedYear >= 2025 ? 10 : selectedYear >= 2023 ? 8 : 5);
     document.getElementById('input-ro-capgains-rate').value = tr.roCapGainsRate ?? (selectedYear >= 2026 ? 16 : 10);
-    document.getElementById('input-ro-capgains-long-rate').value = tr.roCapGainsLongRate ?? (selectedYear >= 2026 ? 3 : 1);
-    document.getElementById('input-ro-capgains-short-rate').value = tr.roCapGainsShortRate ?? (selectedYear >= 2026 ? 6 : 3);
+    document.getElementById('input-ro-capgains-long-rate').value = tr.roCapGainsLongRate ?? (selectedYear >= 2026 ? 3 : selectedYear >= 2023 ? 1 : 10);
+    document.getElementById('input-ro-capgains-short-rate').value = tr.roCapGainsShortRate ?? (selectedYear >= 2026 ? 6 : selectedYear >= 2023 ? 3 : 10);
     document.getElementById('input-ro-interest-rate').value = tr.roInterestRate ?? (selectedYear >= 2026 ? 16 : 10);
   }
 

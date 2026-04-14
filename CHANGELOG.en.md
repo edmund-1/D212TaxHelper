@@ -1,5 +1,42 @@
 # D212 Tax Helper - Changelog
 
+## v3.2.0 (2026-04-14)
+
+### New Income Types
+- **Rental Income (Chirii)** — 40% flat deduction, 10%/16% tax, CASS eligible
+- **Intellectual Property / Royalties** — 40% flat deduction, 10%/16% tax, CASS eligible
+- **Gambling Income** — final tax at source, manual input, NOT in CASS
+- **Other Income Sources** — 10%/16% tax, NOT in CASS
+- **US Dividend Tax Withheld** — manual input for 10% RO-US treaty credit
+- **RO Dividend Tax Withheld** — manual input for broker withholding
+
+### Tax Compliance Fixes (ANAF)
+- **Dividend tax rate 2019-2022** — fixed from 8% to correct 5%
+- **RO domestic capital gains 2019-2022** — fixed from 1%/3% to correct 10% flat
+- **Gambling excluded from CASS** — per Art. 174 Cod Fiscal
+- **Other income excluded from CASS** — per Art. 174
+- **Income table: US dividends tax** — no longer double-counts RO dividend tax
+- **Income table: RO gains "paid"** — shows actual broker withholding
+- **Tax table: RO gains/dividends owed** — shows net amount if broker under-withheld
+
+### Dashboard Improvements
+- **5 summary cards** — Total Income, Already Paid, Income Tax, CASS, Total D212
+- **Income chart with percentages** — legend and tooltips show % breakdown
+- **Tax chart includes all types** — rental, royalty, other tax segments added
+- **Minimum Salary chart** — shows salary evolution 2019-2026
+- **2×3 chart layout** — row 1: income + tax charts, row 2: comparison + exchange rates + salary
+- **Larger chart fonts** — +2pt for legends and axis labels
+
+### Data Management
+- **Manual data raw file** — "Adaugă Date" creates a raw file viewable/editable in Date Brute
+- **Form field fix** — dividends and gains persist correctly after save
+- **Manual data purge** — purging raw file clears all manual fields
+
+### Performance
+- **Async PaddleOCR detection** — server starts instantly, OCR detection runs in background
+
+---
+
 ## v3.1.2 (2026-04-09)
 
 ### Improvements

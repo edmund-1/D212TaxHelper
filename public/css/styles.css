@@ -150,13 +150,19 @@ main {
   color: var(--text-muted);
   text-transform: uppercase;
 }
-#card-net-tax .card-value { color: var(--warning); }
+#card-total-tax .card-value { color: var(--warning); }
 
 /* ============ Charts ============ */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
+}
+.charts-grid .chart-card:nth-child(1) {
+  grid-column: span 1;
+}
+.charts-grid .chart-card:nth-child(2) {
+  grid-column: span 2;
 }
 .chart-card {
   padding: 1rem;
@@ -761,6 +767,8 @@ footer {
   header h1 { font-size: 1rem; }
   .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-grid { grid-template-columns: 1fr; }
+  .charts-grid .chart-card:nth-child(1),
+  .charts-grid .chart-card:nth-child(2) { grid-column: span 1; }
   .import-grid { grid-template-columns: 1fr; }
   main { padding: 1rem; }
   .card { padding: 1rem; }
