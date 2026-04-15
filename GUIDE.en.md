@@ -1,6 +1,6 @@
 # D212 Tax Helper - User Guide
 
-**Guide version:** 2.5 | **App version:** 1.4.5 | **Last updated:** 2026-04-15
+**Guide version:** 2.6 | **App version:** 1.4.6 | **Last updated:** 2026-04-16
 
 ---
 

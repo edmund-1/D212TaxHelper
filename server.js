@@ -4,6 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const pdfParse = require('pdf-parse-new');
 const { execFile } = require('child_process');
+const ledger = require('./ledger');
 let Tesseract = null; // lazy-loaded on first OCR use
 
 // ============ PaddleOCR CONFIGURATION ============
@@ -181,7 +182,13 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api')) log('INFO', `${req.method} ${req.path}`, req.method === 'POST' ? { type: req.query.type || req.body?.type } : undefined);
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.json')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 // File upload config - accept PDFs and images
 const upload = multer({
@@ -402,7 +409,7 @@ app.delete('/api/raw/:filename', (req, res) => {
               'xtbDividends', 'roDivTaxPaid', 'fidelityGains', 'fidelityCost',
               'interestIncome', 'interestTaxPaid', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
               'royaltyTaxPaid', 'gamblingIncome', 'gamblingTaxPaid', 'otherIncome',
-              'otherTaxPaid', 'stockWithholdingPaid', 'exchangeRate', 'minSalary',
+              'otherTaxPaid', 'stockWithholdingPaid', 'salaryTaxedIncome', 'exchangeRate', 'minSalary',
               'd212Deadline', 'roGainsCountries', 'taxRates'
             ];
             for (const k of manualKeys) {
@@ -418,11 +425,6 @@ app.delete('/api/raw/:filename', (req, res) => {
           if (type === 'tradeville_portfolio' && data.years[year].tradevillePortfolio) {
             delete data.years[year].tradevillePortfolio;
           }
-          if (type === 'fidelity_statement' && data.years[year].fidelityTransfers) {
-            delete data.years[year].fidelityTransfers;
-            delete data.years[year].fidelityDividendsYTD;
-            delete data.years[year].fidelityTrades;
-          }
           if (type === 'ms_statement' && data.years[year].msStatement) {
             delete data.years[year].msStatement;
             delete data.years[year].msDividends;
@@ -436,15 +438,29 @@ app.delete('/api/raw/:filename', (req, res) => {
           if (type === 'trade_confirmation' && data.years[year].fidelityTrades) {
             delete data.years[year].fidelityTrades;
           }
-          // Clear stock_awards.json when stock_award raw file is purged
+          // Remove ALL stock_awards.json entries when stock_award raw file is purged
+          // (user may upload multi-year docs under one year)
           if (type === 'stock_award') {
             const stockFile = path.join(DATA_DIR, 'stock_awards.json');
             if (fs.existsSync(stockFile)) {
               fs.writeFileSync(stockFile, JSON.stringify({ 'Stock Awards': [] }, null, 2), 'utf8');
             }
+            // Also purge all vests from ledger
+            const ldg = ledger.load();
+            let deleted = 0;
+            for (const entry of ldg.entries) {
+              if (entry.type === 'stock_vest' && !entry.deleted) {
+                entry.deleted = true;
+                deleted++;
+              }
+            }
+            if (deleted > 0) {
+              ledger.recalculateAllocations(ldg);
+              ledger.save(ldg);
+            }
           }
           // Clear trades from trades.json based on source
-          if (type === 'trade_confirmation' || type === 'ms_statement' || type === 'fidelity_statement') {
+          if (type === 'trade_confirmation' || type === 'ms_statement') {
             const tradesFile = path.join(DATA_DIR, 'trades.json');
             if (fs.existsSync(tradesFile)) {
               const raw = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
@@ -452,29 +468,35 @@ app.delete('/api/raw/:filename', (req, res) => {
               let filtered;
               if (type === 'ms_statement') {
                 filtered = trades.filter(t => t.source !== 'ms_statement');
-              } else if (type === 'fidelity_statement') {
-                filtered = trades.filter(t => t.source !== 'fidelity_statement');
               } else {
                 // trade_confirmation: remove trades without a source (legacy) or with no source field
-                filtered = trades.filter(t => t.source === 'ms_statement' || t.source === 'fidelity_statement');
+                filtered = trades.filter(t => t.source === 'ms_statement');
               }
               fs.writeFileSync(tradesFile, JSON.stringify({ trades: filtered }, null, 2), 'utf8');
 
               // Recalculate fidelityTrades aggregate for this year
               const yearTrades = filtered.filter(t => t.year === parseInt(year, 10));
               if (yearTrades.length > 0) {
+                const ySales = yearTrades.filter(t => t.transactionType !== 'purchase');
+                const yPurchases = yearTrades.filter(t => t.transactionType === 'purchase');
                 data.years[year].fidelityTrades = {
-                  count: yearTrades.length,
-                  totalProceeds: yearTrades.reduce((s, t) => s + (t.saleProceeds || 0), 0),
-                  totalFees: yearTrades.reduce((s, t) => s + (t.fees || 0), 0),
-                  totalNet: yearTrades.reduce((s, t) => s + (t.netProceeds || 0), 0),
-                  totalShares: yearTrades.reduce((s, t) => s + (t.shares || 0), 0),
+                  count: ySales.length,
+                  totalProceeds: ySales.reduce((s, t) => s + (t.saleProceeds || 0), 0),
+                  totalFees: ySales.reduce((s, t) => s + (t.fees || 0), 0),
+                  totalNet: ySales.reduce((s, t) => s + (t.netProceeds || 0), 0),
+                  totalShares: ySales.reduce((s, t) => s + (t.shares || 0), 0),
+                  purchases: yPurchases.length,
+                  totalEsppGain: yPurchases.reduce((s, t) => s + (t.esppGain || 0), 0),
+                  totalEsppContributions: yPurchases.reduce((s, t) => s + (t.accumulatedContributions || 0), 0),
+                  totalEsppShares: yPurchases.reduce((s, t) => s + (t.shares || 0), 0),
                   trades: yearTrades
                 };
               } else if (data.years[year]) {
                 delete data.years[year].fidelityTrades;
               }
             }
+            // Also purge from ledger
+            ledger.purgeBySourceFile(safeName);
           }
           // Clean up empty year objects
           if (data.years[year] && Object.keys(data.years[year]).filter(k => k !== 'year').length === 0) {
@@ -538,7 +560,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Invalid year' });
     }
-    const validTypes = ['declaratie', 'investment', 'adeverinta', 'stock_award', 'trade_confirmation', 'xtb_dividends', 'xtb_portfolio', 'fidelity_statement', 'form_1042s', 'ms_statement', 'tradeville_portfolio'];
+    const validTypes = ['declaratie', 'investment', 'adeverinta', 'stock_award', 'trade_confirmation', 'xtb_dividends', 'xtb_portfolio', 'form_1042s', 'ms_statement', 'tradeville_portfolio'];
     if (!validTypes.includes(type)) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Invalid type. Must be: ' + validTypes.join(', ') });
@@ -561,7 +583,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     }
 
     // Types that benefit from PaddleOCR table extraction
-    const TABLE_TYPES = ['tradeville_portfolio', 'investment', 'declaratie', 'fidelity_statement', 'ms_statement'];
+    const TABLE_TYPES = ['tradeville_portfolio', 'investment', 'declaratie', 'ms_statement'];
     const preferPaddleOcr = TABLE_TYPES.includes(type);
     const paddleStatus = checkPaddleOcrAvailable();
 
@@ -664,7 +686,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     // If OCR fallback was used, check quality for generic document types
     // Types with their own quality checks (tradeville, trade_confirmation, fidelity, etc.) are handled downstream
-    const SELF_VALIDATED_TYPES = ['tradeville_portfolio', 'trade_confirmation', 'fidelity_statement', 'form_1042s', 'ms_statement', 'xtb_dividends', 'xtb_portfolio', 'stock_award'];
+    const SELF_VALIDATED_TYPES = ['tradeville_portfolio', 'trade_confirmation', 'form_1042s', 'ms_statement', 'xtb_dividends', 'xtb_portfolio', 'stock_award'];
     if (usedOcrFallback && !SELF_VALIDATED_TYPES.includes(type)) {
       const realizatMatches = text.match(/Realizat\s+\d+/gi) || [];
       if (realizatMatches.length === 0) {
@@ -705,11 +727,49 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.unlinkSync(paddleFilePath);
     }
 
-    // Stock award documents get special handling
+    // Stock award documents get special handling (append, not overwrite)
     if (type === 'stock_award') {
       const stockData = parseStockAward(text, parsedYear);
-      fs.writeFileSync(path.join(DATA_DIR, 'stock_awards.json'), JSON.stringify({ 'Stock Awards': stockData.rows }, null, 2), 'utf8');
-      return res.json({ success: true, year: parsedYear, type, parsed: stockData });
+      const stockFile = path.join(DATA_DIR, 'stock_awards.json');
+      let existing = { 'Stock Awards': [] };
+      if (fs.existsSync(stockFile)) {
+        existing = JSON.parse(fs.readFileSync(stockFile, 'utf8'));
+        if (!Array.isArray(existing['Stock Awards'])) existing['Stock Awards'] = [];
+      }
+      // Dedup: skip rows with same datastat date already present
+      let added = 0, skipped = 0;
+      for (const row of stockData.rows) {
+        const isDup = existing['Stock Awards'].some(r =>
+          r.datastat === row.datastat &&
+          Math.abs((r.stock_withholding || 0) - (row.stock_withholding || 0)) < 0.01 &&
+          Math.abs((r.stock_award_bik || 0) - (row.stock_award_bik || 0)) < 0.01
+        );
+        if (!isDup) {
+          existing['Stock Awards'].push(row);
+          added++;
+        } else {
+          skipped++;
+        }
+      }
+      // Sort by date (supports DD-Mon-YY, DD-Mon-YYYY, DD.MM.YYYY)
+      existing['Stock Awards'].sort((a, b) => {
+        const parseDate = (d) => {
+          const months = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+          let m = String(d).match(/(\d{1,2})-(\w{3})-(\d{2,4})/);
+          if (m) {
+            let yr = parseInt(m[3]); if (yr < 100) yr += 2000;
+            return new Date(yr, months[m[2].toLowerCase()] || 0, parseInt(m[1])).getTime();
+          }
+          m = String(d).match(/(\d{1,2})\.(\d{2})\.(\d{4})/);
+          if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1])).getTime();
+          return 0;
+        };
+        return parseDate(a.datastat) - parseDate(b.datastat);
+      });
+      fs.writeFileSync(stockFile, JSON.stringify(existing, null, 2), 'utf8');
+      // Also add to ledger for persistent tracking
+      const ledgerResult = ledger.addVestEntries(stockData.rows, rawFile);
+      return res.json({ success: true, year: parsedYear, type, parsed: stockData, added, skipped, totalRows: existing['Stock Awards'].length, ledger: ledgerResult });
     }
 
     // Trade confirmations get appended (multiple files per year)
@@ -734,18 +794,27 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         data2 = JSON.parse(fs.readFileSync(dataFile2, 'utf8'));
       }
       if (!data2.years[parsedYear]) data2.years[parsedYear] = { year: parsedYear };
-      // Aggregate all trades for this year
+      // Aggregate trades for this year (separate sales from purchases)
       const yearTrades = trades.trades.filter(t => t.year === parsedYear);
+      const yearSales = yearTrades.filter(t => t.transactionType !== 'purchase');
+      const yearPurchases = yearTrades.filter(t => t.transactionType === 'purchase');
       data2.years[parsedYear].fidelityTrades = {
-        count: yearTrades.length,
-        totalProceeds: yearTrades.reduce((s, t) => s + (t.saleProceeds || 0), 0),
-        totalFees: yearTrades.reduce((s, t) => s + (t.fees || 0), 0),
-        totalNet: yearTrades.reduce((s, t) => s + (t.netProceeds || 0), 0),
-        totalShares: yearTrades.reduce((s, t) => s + (t.shares || 0), 0),
+        count: yearSales.length,
+        totalProceeds: yearSales.reduce((s, t) => s + (t.saleProceeds || 0), 0),
+        totalFees: yearSales.reduce((s, t) => s + (t.fees || 0), 0),
+        totalNet: yearSales.reduce((s, t) => s + (t.netProceeds || 0), 0),
+        totalShares: yearSales.reduce((s, t) => s + (t.shares || 0), 0),
+        purchases: yearPurchases.length,
+        totalEsppGain: yearPurchases.reduce((s, t) => s + (t.esppGain || 0), 0),
+        totalEsppContributions: yearPurchases.reduce((s, t) => s + (t.accumulatedContributions || 0), 0),
+        totalEsppShares: yearPurchases.reduce((s, t) => s + (t.shares || 0), 0),
         trades: yearTrades
       };
       fs.writeFileSync(dataFile2, JSON.stringify(data2, null, 2), 'utf8');
-      return res.json({ success: true, year: parsedYear, type, parsed: trade, isDuplicate, yearSummary: data2.years[parsedYear].fidelityTrades });
+      // Also add to ledger for persistent tracking
+      ledger.addTrade(trade, rawFile);
+      const ledgerAlloc = ledger.getAllocations(parsedYear);
+      return res.json({ success: true, year: parsedYear, type, parsed: trade, isDuplicate, yearSummary: data2.years[parsedYear].fidelityTrades, ledgerAllocations: ledgerAlloc });
     }
 
     // XTB Dividends & Interest report
@@ -770,75 +839,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       data3.years[parsedYear].xtbPortfolio = parsed;
       fs.writeFileSync(dataFile3, JSON.stringify(data3, null, 2), 'utf8');
       return res.json({ success: true, year: parsedYear, type, parsed });
-    }
-
-    // Fidelity Statement (periodic report with sales, transfers, dividends)
-    if (type === 'fidelity_statement') {
-      const parsed = parseFidelityStatement(text, parsedYear);
-
-      // Load existing trades for dedup
-      const tradesFile = path.join(DATA_DIR, 'trades.json');
-      let trades = { trades: [] };
-      if (fs.existsSync(tradesFile)) {
-        const raw = JSON.parse(fs.readFileSync(tradesFile, 'utf8'));
-        trades = { trades: Array.isArray(raw.trades) ? raw.trades : [] };
-      }
-
-      // Dedup sales: match by date + shares + netProceeds (or refNumber)
-      let newTradesAdded = 0;
-      let duplicatesSkipped = 0;
-      for (const sale of parsed.sales) {
-        const isDup = trades.trades.some(t =>
-          (t.refNumber && sale.refNumber && t.refNumber === sale.refNumber) ||
-          (t.saleDate === sale.saleDate && Math.abs(t.shares - sale.shares) < 0.001 && Math.abs(t.netProceeds - sale.netProceeds) < 0.01)
-        );
-        if (!isDup) {
-          trades.trades.push(sale);
-          newTradesAdded++;
-        } else {
-          duplicatesSkipped++;
-        }
-      }
-      fs.writeFileSync(tradesFile, JSON.stringify(trades, null, 2), 'utf8');
-
-      // Update parsed_data with statement info + trade totals
-      const dataFile4 = path.join(DATA_DIR, 'parsed_data.json');
-      let data4 = { years: {} };
-      if (fs.existsSync(dataFile4)) data4 = JSON.parse(fs.readFileSync(dataFile4, 'utf8'));
-      if (!data4.years[parsedYear]) data4.years[parsedYear] = { year: parsedYear };
-
-      // Save transfers and statement metadata
-      if (!data4.years[parsedYear].fidelityTransfers) data4.years[parsedYear].fidelityTransfers = [];
-      for (const tr of parsed.transfers) {
-        const trDup = data4.years[parsedYear].fidelityTransfers.some(
-          e => e.date === tr.date && Math.abs(e.quantity - tr.quantity) < 0.001
-        );
-        if (!trDup) data4.years[parsedYear].fidelityTransfers.push(tr);
-      }
-
-      // Update fidelity dividends YTD if higher than current
-      if (parsed.dividendsYTD > 0) {
-        data4.years[parsedYear].fidelityDividendsYTD = parsed.dividendsYTD;
-      }
-
-      // Recalculate trade aggregates
-      const yearTrades = trades.trades.filter(t => t.year === parsedYear);
-      data4.years[parsedYear].fidelityTrades = {
-        count: yearTrades.length,
-        totalProceeds: yearTrades.reduce((s, t) => s + (t.saleProceeds || 0), 0),
-        totalFees: yearTrades.reduce((s, t) => s + (t.fees || 0), 0),
-        totalNet: yearTrades.reduce((s, t) => s + (t.netProceeds || 0), 0),
-        totalShares: yearTrades.reduce((s, t) => s + (t.shares || 0), 0),
-        trades: yearTrades
-      };
-
-      fs.writeFileSync(dataFile4, JSON.stringify(data4, null, 2), 'utf8');
-      return res.json({
-        success: true, year: parsedYear, type, parsed,
-        newTradesAdded, duplicatesSkipped,
-        totalTrades: yearTrades.length,
-        transfers: data4.years[parsedYear].fidelityTransfers
-      });
     }
 
     // Form 1042-S (US tax withholding on foreign person's income)
@@ -920,6 +920,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       };
 
       fs.writeFileSync(dataFile6, JSON.stringify(data6, null, 2), 'utf8');
+      // Also add to ledger
+      ledger.addMSTrades(parsed.sales, rawFile);
       return res.json({
         success: true, year: parsedYear, type, parsed,
         newTradesAdded, duplicatesSkipped,
@@ -988,21 +990,36 @@ app.get('/api/stock-withholding', (req, res) => {
     if (!fs.existsSync(stockFile)) {
       return res.json({ total: 0, rows: [] });
     }
+    const yearFilter = req.query.year ? parseInt(req.query.year, 10) : null;
     const excelData = JSON.parse(fs.readFileSync(stockFile, 'utf8'));
     let total = 0;
+    let totalBik = 0;
     const rows = [];
+    const parseRowYear = (row) => {
+      const dateStr = row.datastat || row.date || row.Date || '';
+      const m = dateStr.match(/(\d{4})$/) || dateStr.match(/(\d{2})$/);
+      if (!m) return null;
+      let y = parseInt(m[1], 10);
+      if (y < 100) y += 2000;
+      return y;
+    };
     for (const sheetName of Object.keys(excelData)) {
       for (const row of excelData[sheetName]) {
-        if (row.stock_withholding !== undefined && row.stock_withholding !== null) {
-          const val = parseFloat(row.stock_withholding);
-          if (!isNaN(val)) {
-            total += val;
-            rows.push(row);
-          }
+        const rowYear = parseRowYear(row);
+        if (yearFilter && rowYear !== yearFilter) continue;
+        const whVal = parseFloat(row.stock_withholding) || 0;
+        const bik = parseFloat(row.stock_award_bik) || 0;
+        const esppBik = parseFloat(row.espp_gain_bik) || 0;
+        const rowBik = bik + esppBik;
+        // Include row if it has any financial data
+        if (whVal > 0 || rowBik > 0) {
+          total += whVal;
+          totalBik += rowBik;
+          rows.push(row);
         }
       }
     }
-    res.json({ total, rows });
+    res.json({ total, totalBik, rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1022,6 +1039,39 @@ app.get('/api/trades', (req, res) => {
     const totalNet = trades.reduce((s, t) => s + (t.netProceeds || 0), 0);
     const totalShares = trades.reduce((s, t) => s + (t.shares || 0), 0);
     res.json({ trades, totalProceeds, totalNet, totalShares, count: trades.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ledger/allocations - Get FIFO cost basis and BIK allocations
+app.get('/api/ledger/allocations', (req, res) => {
+  try {
+    const year = req.query.year ? parseInt(req.query.year, 10) : null;
+    if (year) {
+      res.json(ledger.getAllocations(year));
+    } else {
+      res.json(ledger.getAllAllocations());
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ledger/summary - Ledger summary for debugging
+app.get('/api/ledger/summary', (req, res) => {
+  try {
+    res.json(ledger.getSummary());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ledger/migrate - Migrate existing data into ledger
+app.post('/api/ledger/migrate', (req, res) => {
+  try {
+    const result = ledger.migrateFromExisting(DATA_DIR);
+    res.json({ success: true, migrated: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1488,139 +1538,6 @@ function parseAdeverinta(text, year) {
   return result;
 }
 
-// Parse Fidelity Stock Plan Services Statement (periodic report)
-function parseFidelityStatement(text, year) {
-  const result = {
-    year,
-    period: '',
-    sales: [],
-    transfers: [],
-    dividendsYTD: 0,
-    realizedGainLoss: 0,
-    endingValue: 0,
-    holdingsQuantity: 0
-  };
-
-  // Period
-  const periodMatch = text.match(/((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+,\s+\d{4}\s*-\s*(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+,\s+\d{4})/);
-  if (periodMatch) result.period = periodMatch[1];
-
-  // Securities Sold: parse each "You Sold" entry
-  // Pattern: "MM/DD MICROSOFT CORP 594918104 You Sold\nLong-term gain: $X\n-Q PRICE COST FEE NET"
-  const soldSection = text.split(/Securities Bought & Sold/i)[1]?.split(/Securities Transferred/i)[0] || '';
-  const soldLines = soldSection.split('\n');
-  for (let i = 0; i < soldLines.length; i++) {
-    if (/You Sold/i.test(soldLines[i])) {
-      // Try to get gain info from next line
-      let gainAmount = 0;
-      let gainType = '';
-      if (i + 1 < soldLines.length) {
-        const gainMatch = soldLines[i + 1].match(/(Long-term|Short-term)\s+gain:\s+\$([\d.,]+)/i);
-        if (gainMatch) {
-          gainType = gainMatch[1].toLowerCase().includes('long') ? 'long-term' : 'short-term';
-          gainAmount = parseNumber(gainMatch[2]);
-        }
-      }
-      // Get the data line (shares, price, cost, fee, amount)
-      for (let j = i + 1; j < Math.min(i + 4, soldLines.length); j++) {
-        const dataMatch = soldLines[j].match(/-([\d.]+)\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+-?\$?([\d.,]+)\s+\$?([\d.,]+)/);
-        if (dataMatch) {
-          // Get date from earlier lines
-          let saleDate = '';
-          for (let k = Math.max(0, i - 2); k <= i; k++) {
-            const dateM = soldLines[k].match(/^t?\s*f?(\d{2}\/\d{2})/);
-            if (dateM) saleDate = dateM[1];
-          }
-          // Convert MM/DD to month name format like trade confirmations use
-          const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-          let saleDateFormatted = saleDate;
-          if (saleDate) {
-            const parts = saleDate.split('/');
-            const m = parseInt(parts[0], 10);
-            if (m >= 1 && m <= 12) saleDateFormatted = `${monthNames[m-1]}/${parts[1]}/${year}`;
-          }
-
-          const sale = {
-            year,
-            symbol: 'MSFT',
-            company: 'MICROSOFT CORP',
-            shares: parseFloat(dataMatch[1]),
-            pricePerShare: parseNumber(dataMatch[2]),
-            costBasis: parseNumber(dataMatch[3]),
-            fees: parseNumber(dataMatch[4]),
-            netProceeds: parseNumber(dataMatch[5]),
-            saleProceeds: parseFloat(dataMatch[1]) * parseNumber(dataMatch[2]),
-            saleDate: saleDateFormatted,
-            gainType,
-            gainAmount,
-            source: 'fidelity_statement'
-          };
-          // Recalculate proceeds more accurately
-          sale.saleProceeds = parseFloat((sale.shares * sale.pricePerShare).toFixed(2));
-          result.sales.push(sale);
-          break;
-        }
-      }
-    }
-  }
-
-  // Securities Transferred Out
-  const transferSection = text.split(/Securities Transferred Out/i)[1]?.split(/Dividends|Other Activity/i)[0] || '';
-  const transferLines = transferSection.split('\n');
-  for (let i = 0; i < transferLines.length; i++) {
-    const deliverMatch = transferLines[i].match(/Delivered/i);
-    if (deliverMatch) {
-      // Look for quantity and price in nearby lines
-      for (let j = Math.max(0, i - 3); j <= Math.min(i + 3, transferLines.length - 1); j++) {
-        const qtyMatch = transferLines[j].match(/-([\d.]+)\s+\$([\d.,]+)/);
-        if (qtyMatch) {
-          let date = '';
-          for (let k = Math.max(0, i - 5); k <= i; k++) {
-            const dm = transferLines[k].match(/(\d{2}\/\d{2})/);
-            if (dm) { date = dm[1]; break; }
-          }
-          // Get transfer value
-          let value = 0;
-          const valMatch = transferSection.match(/VALUE OF TRANSACTION\s*\$([\d.,]+)/i);
-          if (valMatch) value = parseNumber(valMatch[1]);
-
-          result.transfers.push({
-            date,
-            symbol: 'MSFT',
-            quantity: parseFloat(qtyMatch[1]),
-            pricePerShare: parseNumber(qtyMatch[2]),
-            value: value || parseFloat(qtyMatch[1]) * parseNumber(qtyMatch[2]),
-            destination: 'XTB',
-            year
-          });
-          break;
-        }
-      }
-    }
-  }
-
-  // Dividends YTD
-  const divYtdMatch = text.match(/Dividends[\s\S]*?Year-to-Date[\s\S]*?\$([\d.,]+)/);
-  if (divYtdMatch) result.dividendsYTD = parseNumber(divYtdMatch[1]);
-  // Fallback: look for "Total $X.XX $Y.YY" in Income Summary
-  const divTotalMatch = text.match(/Total\s+\$([\d.,]+)\s+\$([\d.,]+)/);
-  if (divTotalMatch) result.dividendsYTD = parseNumber(divTotalMatch[2]);
-
-  // Realized gains
-  const gainMatch = text.match(/Net Gain\/Loss\s+\$([\d.,]+)\s+\$([\d.,]+)/);
-  if (gainMatch) result.realizedGainLoss = parseNumber(gainMatch[2]);
-
-  // Ending value
-  const endMatch = text.match(/Ending.*Account Value\s+\$([\d.,]+)/);
-  if (endMatch) result.endingValue = parseNumber(endMatch[1]);
-
-  // MSFT holdings quantity
-  const msftMatch = text.match(/MICROSOFT CORP \(MSFT\)\s+\$[\d.,]+\s+([\d.]+)/);
-  if (msftMatch) result.holdingsQuantity = parseFloat(msftMatch[1]);
-
-  return result;
-}
-
 // Parse Morgan Stanley Stock Plan Statement (yearly summary)
 function parseMSStatement(text, year) {
   const result = {
@@ -2054,6 +1971,10 @@ function parseTradevilleFromTables(tables, year) {
 
 // Parse Fidelity Trade Confirmation PDF
 function parseTradeConfirmation(text, year) {
+  const isESPP = /ESPP/i.test(text);
+  const isPurchase = /YOU PURCHASED/i.test(text);
+  const isSold = /YOU SOLD/i.test(text);
+
   const result = {
     year,
     symbol: '',
@@ -2066,14 +1987,71 @@ function parseTradeConfirmation(text, year) {
     saleDate: '',
     settlementDate: '',
     refNumber: '',
-    participantId: ''
+    participantId: '',
+    transactionType: isPurchase ? 'purchase' : 'sale',
+    isESPP: isESPP
   };
 
-  // "YOU SOLD 2 AT 431.5000"
-  const soldMatch = text.match(/YOU SOLD\s+([\d.]+)\s+AT\s+([\d.]+)/i);
-  if (soldMatch) {
-    result.shares = parseFloat(soldMatch[1]);
-    result.pricePerShare = parseFloat(soldMatch[2]);
+  if (isPurchase) {
+    // "YOU PURCHASED 2.4179 AT $302.6900 PURCHASE PRICE"
+    const purchMatch = text.match(/YOU PURCHASED\s+([\d.]+)\s+AT\s+\$?([\d.,]+)/i);
+    if (purchMatch) {
+      result.shares = parseFloat(purchMatch[1]);
+      result.pricePerShare = parseNumber(purchMatch[2]);
+    }
+
+    // Purchase date from ESPP header: "MICROSOFT ESPP PLAN on DEC/31/2021."
+    const purchDateMatch = text.match(/ESPP PLAN on\s+(\w+\/\d+\/\d+)/i);
+    if (purchDateMatch) result.saleDate = purchDateMatch[1];
+
+    // Offering period
+    const offeringMatch = text.match(/Offering period:\s*(.+)/i);
+    if (offeringMatch) result.offeringPeriod = offeringMatch[1].trim();
+
+    // Dollar amounts after SYMBOL line: Market Value, Accumulated Contributions, Gain, Share Proceeds
+    const amounts = [];
+    const amtRegex = /\$[\d,]+\.\d{2}/g;
+    // Skip the price in the "AT $302.69" line — get amounts after the symbol/company lines
+    const symbolIdx = text.indexOf('SYMBOL:');
+    const afterSymbol = symbolIdx >= 0 ? text.substring(symbolIdx) : text;
+    let m;
+    while ((m = amtRegex.exec(afterSymbol)) !== null) {
+      amounts.push(parseNumber(m[0].replace('$', '')));
+    }
+
+    if (amounts.length >= 4) {
+      result.marketValue = amounts[0];
+      result.accumulatedContributions = amounts[1];
+      result.esppGain = amounts[2];
+      result.purchaseCost = amounts[3]; // = Accumulated Contributions used
+    }
+
+    // Compute cost basis (what was actually paid per share)
+    result.saleProceeds = result.marketValue || 0;
+    result.netProceeds = result.purchaseCost || (result.shares * result.pricePerShare);
+  } else {
+    // "YOU SOLD 2 AT 431.5000"
+    const soldMatch = text.match(/YOU SOLD\s+([\d.]+)\s+AT\s+([\d.]+)/i);
+    if (soldMatch) {
+      result.shares = parseFloat(soldMatch[1]);
+      result.pricePerShare = parseFloat(soldMatch[2]);
+    }
+
+    // Dollar amounts: Sale Proceeds, Fees, Net
+    const amounts = text.match(/\$[\d,]+\.\d{2}/g);
+    if (amounts && amounts.length >= 3) {
+      result.saleProceeds = parseNumber(amounts[0].replace('$', ''));
+      result.fees = parseNumber(amounts[1].replace('$', ''));
+      result.netProceeds = Math.abs(parseNumber(amounts[2].replace(/[$-]/g, '')));
+    }
+
+    // Sale Date: "MAY/01/2025"
+    const dateMatch = text.match(/Sale Date:\s*(\w+\/\d+\/\d+)/i);
+    if (dateMatch) result.saleDate = dateMatch[1];
+
+    // Settlement Date
+    const settlMatch = text.match(/Proceeds Available:\s*(\w+\/\d+\/\d+)/i);
+    if (settlMatch) result.settlementDate = settlMatch[1];
   }
 
   // Symbol
@@ -2083,22 +2061,6 @@ function parseTradeConfirmation(text, year) {
   // Company name (line after SYMBOL)
   const companyMatch = text.match(/SYMBOL:\s*\w+\s*\n(.+)/);
   if (companyMatch) result.company = companyMatch[1].trim();
-
-  // Dollar amounts: Sale Proceeds, Fees, Net
-  const amounts = text.match(/\$[\d,]+\.\d{2}/g);
-  if (amounts && amounts.length >= 3) {
-    result.saleProceeds = parseNumber(amounts[0].replace('$', ''));
-    result.fees = parseNumber(amounts[1].replace('$', ''));
-    result.netProceeds = Math.abs(parseNumber(amounts[2].replace(/[$-]/g, '')));
-  }
-
-  // Sale Date: "MAY/01/2025"
-  const dateMatch = text.match(/Sale Date:\s*(\w+\/\d+\/\d+)/i);
-  if (dateMatch) result.saleDate = dateMatch[1];
-
-  // Settlement Date
-  const settlMatch = text.match(/Proceeds Available:\s*(\w+\/\d+\/\d+)/i);
-  if (settlMatch) result.settlementDate = settlMatch[1];
 
   // Ref number
   const refMatch = text.match(/REF #\s*([\w-]+)/);
@@ -2128,13 +2090,27 @@ function parseStockAward(text, year) {
   }
 
   if (headerIdx >= 0) {
-    const headerCols = lines[headerIdx].split(/\s{2,}|\t/).map(c => c.trim().toLowerCase().replace(/\s+/g, '_'));
+    // Fix merged header columns (PDF sometimes extracts without spaces)
+    let headerLine = lines[headerIdx]
+      .replace(/espp_gain_bikstock_award_bik/gi, 'espp_gain_bik stock_award_bik')
+      .replace(/stock_award_bikstock_withholding/gi, 'stock_award_bik stock_withholding')
+      .replace(/stock_withholdingdinit/gi, 'stock_withholding dinit');
+    const headerCols = headerLine.split(/\s{2,}|\t|\s/).map(c => c.trim().toLowerCase().replace(/\s+/g, '_')).filter(Boolean);
     for (let i = headerIdx + 1; i < lines.length; i++) {
       const line = lines[i];
       if (!line || /^\s*$/.test(line) || /^total|^sum/i.test(line)) continue;
 
       const dataCols = line.split(/\s{2,}|\t/);
       if (dataCols.length < 2) continue;
+
+      // If single-space separated (PDF quirk), re-split by single space
+      if (dataCols.length < headerCols.length) {
+        const reSplit = line.split(/\s+/);
+        if (reSplit.length >= headerCols.length - 2) {
+          dataCols.length = 0;
+          dataCols.push(...reSplit);
+        }
+      }
 
       // Map all columns
       const fullRow = {};
@@ -2150,9 +2126,13 @@ function parseStockAward(text, year) {
 
       // Get withholding value
       const wh = parseFloat((row.stock_withholding || '0').replace(/[^0-9.\-]/g, ''));
+      const bik = parseFloat((row.stock_award_bik || '0').replace(/[^0-9.\-]/g, ''));
+      const espp = parseFloat((row.espp_gain_bik || '0').replace(/[^0-9.\-]/g, ''));
       if (!isNaN(wh)) {
         row.stock_withholding = wh;
-        if (wh > 0) {
+        row.stock_award_bik = !isNaN(bik) ? bik : 0;
+        row.espp_gain_bik = !isNaN(espp) ? espp : 0;
+        if (wh > 0 || bik > 0 || espp > 0) {
           result.totalWithholding += wh;
           result.rows.push(row);
         }
@@ -2160,16 +2140,21 @@ function parseStockAward(text, year) {
     }
   }
 
-  // Fallback: pattern match for Microsoft payroll format (OCR)
+  // Fallback: pattern match for Microsoft payroll format (OCR/PDF)
+  // Use CNP (13-digit) as anchor to reliably locate the numeric columns
+  // Supports: DD-Mon-YY, DD-Mon-YYYY, DD.MM.YYYY
   if (result.rows.length === 0) {
     for (const line of lines) {
-      const m = line.match(/(\d{1,2}-\w{3}-\d{4})\s+\d+\s+\w+\s+[\w ]+\s+\d+\s+(\w+)\s+\w+\s+(\d+)\s+(\d+)/);
+      const m = line.match(/(\d{1,2}[.-](?:\w{3}|\d{2})[.-]\d{2,4})\s+.*?\b\d{13}\s+\w{2,4}\s+(\d+)\s+(\d+)\s+(\d+)/);
       if (m) {
+        const espp = parseInt(m[2], 10);
+        const bik = parseInt(m[3], 10);
         const wh = parseInt(m[4], 10);
-        if (wh > 0) {
+        if (wh > 0 || bik > 0 || espp > 0) {
           result.rows.push({
             datastat: m[1],
-            stock_award_bik: parseInt(m[3], 10),
+            espp_gain_bik: espp,
+            stock_award_bik: bik,
             stock_withholding: wh
           });
           result.totalWithholding += wh;
@@ -2186,10 +2171,10 @@ function parseStockAward(text, year) {
     // First, collect ALL rows (including zero withholding) from OCR fallback
     const allRows = [];
     for (const line of lines) {
-      const m = line.match(/(\d{1,2}-\w{3}-\d{4})\s+\d+\s+\w+\s+[\w ]+\s+\d+\s+(\w+)\s+\w+\s+(\d+)\s+(\d+)/);
+      const m = line.match(/(\d{1,2}[.-](?:\w{3}|\d{2})[.-]\d{2,4})\s+.*?\b\d{13}\s+\w{2,4}\s+(\d+)\s+(\d+)\s+(\d+)/);
       if (m) {
         allRows.push({
-          datastat: m[1], espp_gain_bik: '0',
+          datastat: m[1], espp_gain_bik: m[2],
           stock_award_bik: m[3], stock_withholding: m[4], dinit: ''
         });
       }
@@ -2301,4 +2286,18 @@ app.listen(PORT, (err) => {
   }
   log('INFO', 'Server started', { port: PORT, url: `http://localhost:${PORT}` });
   console.log(`\n  D212 Tax Helper running at http://localhost:${PORT}\n`);
+
+  // Auto-migrate existing data to ledger on first run
+  const ledgerFile = path.join(DATA_DIR, 'ledger.json');
+  if (!fs.existsSync(ledgerFile)) {
+    try {
+      const result = ledger.migrateFromExisting(DATA_DIR);
+      if (result.trades > 0 || result.vests > 0) {
+        log('INFO', 'Ledger migration completed', result);
+        console.log(`  Ledger: migrated ${result.trades} trades, ${result.vests} vests`);
+      }
+    } catch (err) {
+      log('ERROR', 'Ledger migration failed', { error: err.message });
+    }
+  }
 });
