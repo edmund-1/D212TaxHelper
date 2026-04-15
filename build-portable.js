@@ -29,6 +29,7 @@ const TEMP = path.resolve(__dirname, '..', '_portable_temp');
 // Files/folders to copy from the app
 const APP_ITEMS = [
   'server.js',
+  'ledger.js', // Persistent financial ledger module
   'ocr_service.py', // PaddleOCR service (used if Python available)
   'setup_paddleocr.js', // Enables Lite→Full upgrade
   'package.json',

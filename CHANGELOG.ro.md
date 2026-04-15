@@ -1,5 +1,55 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v1.4.6 (2026-04-16)
+
+### Integrare ESPP & Stock Award
+- **Suport achiziție ESPP** — parserul Confirmare Tranzacție detectează acum `YOU PURCHASED` (ESPP) alături de `YOU SOLD`, extrăgând Valoare Piață, Contribuții Acumulate, Câștig ESPP și Perioadă de Ofertă
+- **Cost ESPP FIFO** — costul achiziției ESPP (contribuții $) este urmărit automat prin FIFO pe mai mulți ani și scăzut din încasările vânzării în USD înainte de conversia în RON, conform formulei ANAF D-212
+- **Tabele separate ESPP/Vânzări** — tranzacțiile cu acțiuni SUA împărțite în două tabele: "Achiziții Acțiuni ESPP SUA" și "Vânzări Acțiuni SUA", fiecare cu totaluri proprii
+- **Urmărire consum ESPP** — tooltip pe rândul câștiguri SUA arată ce loturi ESPP au fost consumate
+
+### Deducere BIK Stock Award
+- **"Venit impozitat deja ca salariu" (BIK)** — valorile stock_award_bik din documentele Stock Award importate sunt însumate și deduse din câștigurile de capital conform regulilor ANAF D-212: `Impozabil = Vânzare_RON - Cost_RON - BIK_RON`
+- **Încărcare multi-an** — documente Stock Award din ani diferiți pot fi încărcate sub un singur an fiscal pentru maximizarea deducerii BIK (ex: încarcă documentele 2019-2023 sub anul 2023 pentru a reduce pragul CASS)
+- **Afișare pe an** — deducerea BIK și tabelul de rețineri apar doar pentru anii cu documente Stock Award încărcate
+- **Suprascriere manuală BIK** — nou câmp "Venit impozitat deja ca salariu (RON)" în Adaugă Date
+- **Rând separat de deducere** în tabelul detalii venituri cu stil verde și tooltip
+
+### Îmbunătățiri Parser Stock Award
+- **Suport date multi-format** — parserul gestionează `ZZ-Lun-AA` (2019-2023), `ZZ-Lun-AAAA` (2025) și `ZZ.LL.AAAA` (2024)
+- **Fix antet îmbinat** — gestionează extragerea PDF unde anteturile coloanelor se îmbină
+- **Mod adăugare** — încărcarea documentelor Stock Award suplimentare adaugă intrări cu deduplicare (fără suprascriere)
+- **Ștergerea curăță tot** — ștergerea unui fișier stock_award elimină TOATE intrările stock award
+
+### Registru Persistent
+- **ledger.json** — nou sistem de urmărire a intrărilor financiare cu alocare FIFO a costului
+- **Migrare automată** — tranzacțiile și stock award-urile existente sunt migrate automat la registru la prima pornire
+- **Ștergere soft la purjare** — intrările șterse păstrate pentru audit
+- **Endpoint-uri API** — `/api/ledger/allocations`, `/api/ledger/summary`, `POST /api/ledger/migrate`
+
+### Modificări Tipuri Document
+- **Eliminat** "SUA (Fidelity) - Extras de Cont (Raport Periodic)" (fidelity_statement)
+- **Redenumit** Confirmare Tranzacție în "Confirmare Tranzacție (Vânzare / Achiziție)"
+
+### Panou Principal & Grafice
+- **Eliminat** căsuța "Impozit de Plată" (redundantă)
+- **Graficele urmează anul selectat** — toate graficele afișează ani până la anul selectat
+- **Izolare date pe an** — graficele calculează impozitele independent pe an
+- **Anteturi no-cache** pentru fișierele JSON locale
+
+### Îmbunătățiri Afișare
+- **Date normalizate** — toate datele afișate în format `AAAA.LL.ZZ`
+- **Tabelul de rețineri** afișează coloanele BIK și Reținere cu dată, sortate cronologic
+- **Totaluri tabel venituri** calculate din rândurile efective (inclusiv deduceri cu +/-)
+
+### Corecturi
+- **Dubla numărare reținere** — corectat duplicatul `total += val` în API-ul withholding
+- **Date vechi la ștergere** — ștergerea fișierelor curăță corect toate datele conexe
+- **Ștergere confirmare tranzacție** — corectat bug variabilă (`filename` → `safeName`)
+- **Calcul CASS** — deducerea BIK reduce corect baza CASS
+
+---
+
 ## v1.4.5 (2026-04-15)
 
 ### Corecturi Conformitate Fiscală

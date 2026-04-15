@@ -3,8 +3,28 @@ const App = (() => {
   let appData = { years: {} };
   let taxRates = {};
   let exchangeRates = {};
-  let withholdingData = { total: 0, rows: [] };
+  let withholdingData = { total: 0, totalBik: 0, rows: [] };
+  let ledgerAllocations = {}; // { year: { esppCostUSD, bikAllocatedRON, ... } }
+  let rawFilesList = []; // cached list of raw files
   let selectedYear = new Date().getFullYear() - 1;
+
+  // Check if stock_award raw file exists for a given year
+  function hasStockAwardFile(year) {
+    return rawFilesList.some(f => f.name === `stock_award_${year}_raw.txt`);
+  }
+
+  // Normalize dates to YYYY.MM.DD format
+  function normalizeDate(d) {
+    const months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+    let m = String(d).match(/(\d{1,2})-(\w{3})-(\d{2,4})/);
+    if (m) { let yr = parseInt(m[3]); if (yr < 100) yr += 2000; return yr + '.' + months[m[2].toLowerCase()] + '.' + m[1].padStart(2,'0'); }
+    m = String(d).match(/^(\d{1,2})\.(\d{2})\.(\d{4})$/);
+    if (m) return m[3] + '.' + m[2] + '.' + m[1].padStart(2,'0');
+    const tMonths = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
+    m = String(d).match(/(\w{3})\/(\d{2})\/(\d{4})/);
+    if (m) return m[3] + '.' + (tMonths[m[1].toUpperCase()] || '01') + '.' + m[2];
+    return d;
+  }
 
   // Romanian CASS thresholds (tiered system based on minimum gross salary)
   // CAS does NOT apply for investment income (only PFA, independent activities)
@@ -434,7 +454,20 @@ const App = (() => {
     if (tabName === 'input') populateForm();
   }
 
-  function render() {
+  async function render() {
+    // Fetch withholding and ledger allocations
+    try {
+      const [whResp, ledgerResp, rawResp] = await Promise.all([
+        fetch('/api/stock-withholding'),
+        fetch('/api/ledger/allocations'),
+        fetch('/api/raw')
+      ]);
+      withholdingData = await whResp.json();
+      ledgerAllocations = await ledgerResp.json();
+      const rawData = await rawResp.json();
+      rawFilesList = Array.isArray(rawData) ? rawData : [];
+    } catch { /* use cached */ }
+    invalidateComputeCache();
     renderDashboard();
     renderIncomeTable();
     renderTaxTable();
@@ -543,6 +576,11 @@ const App = (() => {
     if (yd.tradevillePortfolio) roSources.add('Tradeville');
     if (yd.roBroker) roSources.add(yd.roBroker);
     const roBrokerLabel = roSources.size > 0 ? ' (' + [...roSources].join(' & ') + ')' : '';
+    // Use ledger allocations for ESPP cost basis (FIFO-computed server-side)
+    const yearAlloc = ledgerAllocations[year] || {};
+    if (!capitalGainsCostUSD && yearAlloc.esppCostUSD > 0) {
+      capitalGainsCostUSD = yearAlloc.esppCostUSD;
+    }
     if (!capitalGainsSaleUSD && tradeProceedsUSD > 0) {
       capitalGainsSaleUSD = trades.totalProceeds || 0;
     }
@@ -560,9 +598,18 @@ const App = (() => {
     let roDivTaxWithheld = xtbDiv.dividends?.taxWithheldRON || 0;
     let roInterestRON = xtbDiv.interest?.grossRON || 0;
     let roPortTaxWithheld = (xtbPort.totalTaxWithheldRON || 0) + (tvPort.totalTaxWithheldRON || 0);
-    let withholding = withholdingData.total || 0;
+    let withholding = hasStockAwardFile(year) ? (withholdingData.total || 0) : 0;
+
+    // Stock award BIK: sum of ALL imported stock_award_bik entries
+    // Only apply when stock award docs were uploaded for THIS year AND there are capital gains
+    const hasUSCapGains = tradeProceedsUSD > 0 || capitalGainsSaleUSD > 0 || capitalGainsTaxableRON > 0;
+    const hasStockAward = hasStockAwardFile(year);
+    let salaryTaxedRON = (hasUSCapGains && hasStockAward) ? (withholdingData.totalBik || 0) : 0;
 
     // Manual overrides
+    if (yd.salaryTaxedIncome !== undefined && yd.salaryTaxedIncome !== '') {
+      salaryTaxedRON = parseFloat(yd.salaryTaxedIncome) || 0;
+    }
     if (yd.fidelityCost !== undefined && yd.fidelityCost !== '') {
       capitalGainsCostUSD = parseFloat(yd.fidelityCost) || 0;
     }
@@ -635,9 +682,10 @@ const App = (() => {
     // Romania capital gains: tax already withheld by XTB
     const roGainsTaxNet = Math.max(0, roCapitalGainsTax - (roPortTaxWithheld || 0));
 
-    // US income: deduct stock withholding from US capital gains ONLY (not dividends)
-    // Per Romanian tax rules: stock withholding is salary benefit already taxed, deducted from capital gains
-    const usNetGainsRON = Math.max(0, capitalGainsTaxableRON - withholding);
+    // US income: deduct salary-taxed BIK from US capital gains as cost basis
+    // BIK (stock_award_bik) = income already taxed as salary in Romania, deducted from capital gains
+    // Stock withholding = tax/CASS paid on the BIK through payroll (shown as "already paid", not deducted from base)
+    const usNetGainsRON = Math.max(0, capitalGainsTaxableRON - salaryTaxedRON);
     const usGrossIncomeRON = capitalGainsTaxableRON + dividendsRON;
     const usNetIncomeRON = usNetGainsRON + dividendsRON;
 
@@ -696,7 +744,7 @@ const App = (() => {
     const interestNetRON = Math.max(0, interestIncomeRON - interestTaxPaid);
     // Subtract stock withholding and RO broker tax from CASS base
     const totalAlreadyPaid = usForeignTaxRON + withholding + (roPortTaxWithheld || 0) + (roDivTaxWithheld || 0) + interestTaxPaid + rentalTaxPaid + royaltyTaxPaid + gamblingTaxTotal + otherTaxPaid;
-    const usNetCapGainsRON_cass = Math.max(0, capitalGainsTaxableRON - withholding);
+    const usNetCapGainsRON_cass = Math.max(0, capitalGainsTaxableRON - salaryTaxedRON);
     const roNetCapGainsRON_cass = Math.max(0, capitalGainsRON_ro - (roPortTaxWithheld || 0));
     // Include income types for CASS per Art. 174 Cod Fiscal:
     // - cedarea folosinței bunurilor (rental) ✓
@@ -741,6 +789,7 @@ const App = (() => {
       capitalGainsTaxRON,
       interestTax,
       interestTaxPaid,
+      salaryTaxedRON,
       cassTax,
       cassApplies,
       cassInfo,
@@ -753,6 +802,13 @@ const App = (() => {
       tradeProceedsUSD,
       tradeCount: trades.count || 0,
       tradeShares: trades.totalShares || 0,
+      esppPurchaseCount: trades.purchases || 0,
+      esppGainUSD: trades.totalEsppGain || 0,
+      esppContributionsUSD: trades.totalEsppContributions || 0,
+      esppSharesCount: trades.totalEsppShares || 0,
+      // Ledger FIFO allocations for this year
+      esppSharesConsumed: yearAlloc.esppSharesConsumed || 0,
+      esppCostAllocatedUSD: yearAlloc.esppCostUSD || 0,
       // Romania broker data
       roDivTaxWithheld,
       roPortTaxWithheld,
@@ -802,15 +858,21 @@ const App = (() => {
 
     document.getElementById('total-income-value').textContent = fmt(data.totalIncome);
     document.getElementById('already-paid-value').textContent = fmt(data.totalAlreadyPaid);
-    document.getElementById('net-tax-value').textContent = fmt(data.incomeTaxOnly);
     document.getElementById('cass-value').textContent = fmt(data.cassTax);
-    document.getElementById('total-tax-value').textContent = fmt(data.totalTax);
+    document.getElementById('total-tax-value').textContent = fmt(data.incomeTaxOnly);
 
     // Charts - only show if there's actual financial data
     const allYears = Object.keys(appData.years || {}).map(Number).sort((a, b) => a - b);
+    const manualKeys = new Set(['year','exchangeRate','minSalary','d212Deadline','usBroker','roBroker','taxRates',
+      'fidelityDividends','usDivTaxPaid','xtbDividends','roDivTaxPaid','fidelityGains','fidelityCost',
+      'interestIncome','interestTaxPaid','rentalIncome','rentalTaxPaid','royaltyIncome','royaltyTaxPaid',
+      'gamblingIncome','gamblingTaxPaid','otherIncome','otherTaxPaid','stockWithholdingPaid','salaryTaxedIncome',
+      'roGainsCountries','roGainsLong','roGainsShort','roGainsTaxWithheld']);
     const hasFinancialData = allYears.some(y => {
       const yd = appData.years?.[y];
-      return yd && Object.keys(yd).some(k => k !== 'year' && k !== 'exchangeRate' && k !== 'minSalary' && k !== 'd212Deadline' && k !== 'usBroker' && k !== 'roBroker' && k !== 'taxRates');
+      if (!yd) return false;
+      // Check for imported document data (non-manual keys with actual values)
+      return Object.entries(yd).some(([k, v]) => !manualKeys.has(k) && v !== '' && v !== null && v !== undefined);
     });
 
     const incomeChartContainer = document.getElementById('chart-income-breakdown')?.closest('.chart-card');
@@ -847,36 +909,44 @@ const App = (() => {
         cassTax: data.cassTax
       });
 
-      // Year comparison — show up to 5 years, with navigation if more
+      // Year comparison — only years with actual data
       const allCompData = {};
       const yearsUpToSelected = allYears.filter(y => y <= selectedYear).sort((a, b) => a - b);
       for (const y of yearsUpToSelected) {
+        const yData = appData.years?.[y];
+        const hasImports = yData && Object.entries(yData).some(([k, v]) => !manualKeys.has(k) && v !== '' && v !== null && v !== undefined);
+        if (!hasImports) continue;
         const yd = computeYearData(y);
         allCompData[y] = { totalIncome: yd.totalIncome, totalTax: yd.totalTax };
       }
       Charts.createYearComparison('chart-year-comparison', allCompData, 5);
 
-      // Exchange rates
+      // Exchange rates - show up to selected year
       const rateData = {};
       for (const [y, r] of Object.entries(exchangeRates)) {
-        rateData[y] = r.usdRon;
+        if (parseInt(y) <= selectedYear) rateData[y] = r.usdRon;
       }
-      Charts.createExchangeRates('chart-exchange-rates', rateData, 5);
+      Charts.createExchangeRates('chart-exchange-rates', rateData, 5, selectedYear);
 
-      // Min salary chart
+      // Min salary chart - show up to selected year
       const salaryData = {};
       for (const [y, info] of Object.entries(cassThresholds)) {
-        salaryData[y] = info.minSalary;
+        if (parseInt(y) <= selectedYear) salaryData[y] = info.minSalary;
       }
-      Charts.createMinSalaryChart('chart-min-salary', salaryData, 5);
+      Charts.createMinSalaryChart('chart-min-salary', salaryData, 5, selectedYear);
 
       // D212 Total Taxes chart (grouped: already paid, income tax, CASS)
+      // Only show years up to selected year that have actual imported financial data
       const d212PaymentData = {};
       for (const y of allYears) {
+        if (y > selectedYear) continue;
+        const yData = appData.years?.[y];
+        const hasImports = yData && Object.entries(yData).some(([k, v]) => !manualKeys.has(k) && v !== '' && v !== null && v !== undefined);
+        if (!hasImports) continue;
         const yd = computeYearData(y);
-        d212PaymentData[y] = { paid: yd.totalAlreadyPaid, tax: yd.totalTax, cass: yd.cassTax };
+        d212PaymentData[y] = { paid: yd.totalAlreadyPaid, tax: yd.incomeTaxOnly, cass: yd.cassTax };
       }
-      Charts.createD212PaymentChart('chart-d212-payment', d212PaymentData, 5);
+      Charts.createD212PaymentChart('chart-d212-payment', d212PaymentData, 5, selectedYear);
     } else {
       if (incomeChartContainer) incomeChartContainer.style.display = 'none';
       if (taxChartContainer) taxChartContainer.style.display = 'none';
@@ -920,16 +990,43 @@ const App = (() => {
         tooltip: data.roDivTaxWithheld ? I18n.t('misc.creditFiscalTooltip') : undefined
       },
       {
-        cat: I18n.t('income.usGains') + data.usBrokerLabel + (data.tradeCount ? ` (${data.tradeCount} trades)` : ''),
-        usd: data.tradeProceedsUSD || data.capitalGainsSaleUSD || 0,
+        cat: I18n.t('income.usGains') + data.usBrokerLabel + (data.tradeCount ? ` (${data.tradeCount} ${I18n.t('misc.sales') || 'sales'})` : ''),
+        usd: Math.max(0, (data.tradeProceedsUSD || data.capitalGainsSaleUSD || 0) - (data.capitalGainsCostUSD || 0)),
         rate: data.exchangeRate,
-        ron: data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate,
+        ron: data.capitalGainsTaxableRON || Math.max(0, (data.tradeProceedsUSD || 0) - (data.capitalGainsCostUSD || 0)) * data.exchangeRate,
         usTaxRate: '-',
         usTaxPaid: 0,
         taxRate: (data.capGainsTaxRate * 100) + '%',
         paid: 0,
-        tax: Math.max(0, data.usNetGainsRON) * data.capGainsTaxRate
+        tax: Math.max(0, data.usNetGainsRON) * data.capGainsTaxRate,
+        tooltip: data.esppSharesConsumed > 0 ? (I18n.t('misc.esppConsumedTooltip') || 'ESPP cost deducted') + ': $' + data.esppCostAllocatedUSD.toFixed(2) + ' (' + data.esppSharesConsumed + ' shares FIFO)' : undefined
       },
+      ...(data.salaryTaxedRON > 0 ? [{
+        cat: '↳ ' + (I18n.t('income.salaryTaxedDeduction') || 'Income already taxed as salary (BIK)'),
+        usd: '-',
+        rate: '-',
+        ron: -data.salaryTaxedRON,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: '-',
+        paid: 0,
+        tax: 0,
+        isDeduction: true,
+        tooltip: (I18n.t('misc.bikBreakdownTooltip') || 'Stock award BIK from imported documents, allocated via FIFO to sales in this year') + '. ' + (I18n.t('misc.taxableAfterBik') || 'Taxable after BIK') + ': ' + Math.round(Math.max(0, (data.capitalGainsTaxableRON || 0) - data.salaryTaxedRON)).toLocaleString('ro-RO') + ' RON'
+      }] : []),
+      ...(data.esppPurchaseCount > 0 ? [{
+        cat: (I18n.t('income.esppPurchases') || 'US ESPP Stock Purchases') + data.usBrokerLabel + ` (${data.esppPurchaseCount} ${I18n.t('misc.purchases') || 'purchases'})`,
+        usd: data.esppContributionsUSD,
+        rate: data.exchangeRate,
+        ron: data.esppContributionsUSD * data.exchangeRate,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: '-',
+        paid: 0,
+        tax: 0,
+        isInfo: true,
+        tooltip: (I18n.t('misc.esppGainTooltip') || 'ESPP gain') + ': $' + data.esppGainUSD.toFixed(2) + ' (' + data.esppSharesCount + ' shares)'
+      }] : []),
       {
         cat: I18n.t('income.roGainsLong') + data.roBrokerLabel + ' ' + I18n.t('misc.roWithheld'),
         usd: '-',
@@ -1036,8 +1133,14 @@ const App = (() => {
     const totalUsTaxPaid = rows.reduce((s, r) => s + (r.usTaxPaid || 0), 0);
 
     const deductionTooltip = I18n.t('income.deductionNote');
-    tbody.innerHTML = rows.map(r => `
-      <tr${r.tooltip ? ` title="${esc(r.tooltip)}" style="cursor:help;"` : ''}>
+    tbody.innerHTML = rows.map(r => {
+      let attrs = '';
+      if (r.isDeduction) {
+        attrs = ` style="color:var(--success);font-size:0.9em;${r.tooltip ? 'cursor:help;' : ''}"${r.tooltip ? ` title="${esc(r.tooltip)}"` : ''}`;
+      } else if (r.tooltip) {
+        attrs = ` title="${esc(r.tooltip)}" style="cursor:help;"`;
+      }
+      return `<tr${attrs}>
         <td>${esc(r.cat)}</td>
         <td>${r.usd === '-' ? '-' : fmtUSD(r.usd)}</td>
         <td>${r.rate === '-' ? '-' : r.rate.toFixed(4)}</td>
@@ -1047,42 +1150,47 @@ const App = (() => {
         <td>${r.taxRate}</td>
         <td>${r.paid !== undefined ? fmt(r.paid) : '-'}</td>
         <td>${fmt(r.tax)}</td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
 
     const hasDeduction = (data.rentalGross > 0) || (data.royaltyGross > 0);
+    const totalRON = rows.reduce((s, r) => s + (typeof r.ron === 'number' ? r.ron : 0), 0);
+    const totalTax = rows.reduce((s, r) => s + (r.tax || 0), 0);
     tfoot.innerHTML = `
       <tr>
         <td colspan="3"><strong>${I18n.t('income.total')}</strong></td>
-        <td><strong>${fmt(data.totalIncome)}</strong></td>
+        <td><strong>${fmt(totalRON)}</strong></td>
         <td></td>
         <td><strong>${fmt(totalUsTaxPaid)}</strong></td>
         <td></td>
         <td><strong>${fmt(totalPaid)}</strong></td>
-        <td><strong>${fmt(data.totalTax)}</strong></td>
+        <td><strong>${fmt(totalTax)}</strong></td>
       </tr>
       ${hasDeduction ? `<tr><td colspan="9" style="font-size:0.75rem;color:var(--text-muted);border:none;padding-top:0.5rem;">* ${I18n.t('income.deductionNote')}</td></tr>` : ''}
     `;
   }
 
   // ============ WITHHOLDING TABLE ============
-  function renderWithholdingTable() {
+  async function renderWithholdingTable() {
     const tbody = document.getElementById('withholding-tbody');
     const tfoot = document.getElementById('withholding-tfoot');
-    if (!withholdingData.rows.length) {
+    // Only show entries if stock_award docs were uploaded for the selected year
+    if (!hasStockAwardFile(selectedYear) || !withholdingData.rows.length) {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.noWithholdingData') + '</td></tr>';
       tfoot.innerHTML = '';
       return;
     }
-    let total = 0;
+    let totalWH = 0, totalBIK = 0;
     tbody.innerHTML = withholdingData.rows.map((r, i) => {
-      const date = r.date || r.Date || r.vest_date || r.datastat || '-';
-      const desc = r.description || r.Description || r.type || I18n.t('misc.stockWithholdingDesc');
-      const amt = parseFloat(r.stock_withholding) || 0;
-      total += amt;
-      return `<tr><td>${i + 1}</td><td>${esc(String(date))}</td><td>${esc(String(desc))}</td><td>${fmt(amt)}</td></tr>`;
+      const rawDate = r.date || r.Date || r.vest_date || r.datastat || '-';
+      const date = normalizeDate(rawDate);
+      const bik = (parseFloat(r.stock_award_bik) || 0) + (parseFloat(r.espp_gain_bik) || 0);
+      const wh = parseFloat(r.stock_withholding) || 0;
+      totalBIK += bik;
+      totalWH += wh;
+      return `<tr><td>${i + 1}</td><td>${esc(String(date))}</td><td>${fmt(bik)}</td><td>${fmt(wh)}</td></tr>`;
     }).join('');
-    tfoot.innerHTML = `<tr><td colspan="3"><strong>${I18n.t('income.total')}</strong></td><td><strong>${fmt(total)}</strong></td></tr>`;
+    tfoot.innerHTML = `<tr><td colspan="2"><strong>${I18n.t('income.total')}</strong></td><td><strong>${fmt(totalBIK)}</strong></td><td><strong>${fmt(totalWH)}</strong></td></tr>`;
   }
 
   // ============ XTB TRADES TABLE ============
@@ -1227,6 +1335,9 @@ const App = (() => {
   async function renderTradesTable() {
     const tbody = document.getElementById('trades-tbody');
     const tfoot = document.getElementById('trades-tfoot');
+    const esppTbody = document.getElementById('espp-tbody');
+    const esppTfoot = document.getElementById('espp-tfoot');
+    const esppCard = document.getElementById('espp-purchases-card');
     if (!tbody) return;
     try {
       const resp = await fetch(`/api/trades?year=${selectedYear}`);
@@ -1234,30 +1345,72 @@ const App = (() => {
       if (!data.trades || data.trades.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.noTradeConfirmations') + '</td></tr>';
         tfoot.innerHTML = '';
+        if (esppCard) esppCard.style.display = 'none';
+        if (esppTbody) esppTbody.innerHTML = '';
+        if (esppTfoot) esppTfoot.innerHTML = '';
         return;
       }
-      tbody.innerHTML = data.trades.map((t, i) => `
-        <tr>
+      const sales = data.trades.filter(t => t.transactionType !== 'purchase');
+      const purchases = data.trades.filter(t => t.transactionType === 'purchase');
+
+      // ESPP Purchases table
+      if (purchases.length > 0 && esppCard && esppTbody) {
+        esppCard.style.display = '';
+        esppTbody.innerHTML = purchases.map((t, i) => `<tr>
           <td>${i + 1}</td>
-          <td>${esc(t.saleDate || '-')}</td>
+          <td>${esc(normalizeDate(t.saleDate || '-'))}</td>
+          <td>${esc(t.symbol || '-')}</td>
+          <td>${t.shares || '-'}</td>
+          <td>${t.pricePerShare ? t.pricePerShare.toFixed(4) : '-'}</td>
+          <td>${fmtUSD(t.marketValue || 0)}</td>
+          <td>${fmtUSD(t.esppGain || 0)}</td>
+          <td>${fmtUSD(t.accumulatedContributions || 0)}</td>
+        </tr>`).join('');
+        const totalMktVal = purchases.reduce((s, t) => s + (t.marketValue || 0), 0);
+        const totalGain = purchases.reduce((s, t) => s + (t.esppGain || 0), 0);
+        const totalContrib = purchases.reduce((s, t) => s + (t.accumulatedContributions || 0), 0);
+        const totalPurchShares = purchases.reduce((s, t) => s + (t.shares || 0), 0);
+        esppTfoot.innerHTML = `<tr>
+          <td colspan="3"><strong>${I18n.t('income.total')} (${purchases.length} ${I18n.t('misc.purchases') || 'purchases'})</strong></td>
+          <td><strong>${parseFloat(totalPurchShares.toFixed(6))}</strong></td>
+          <td></td>
+          <td><strong>${fmtUSD(totalMktVal)}</strong></td>
+          <td><strong>${fmtUSD(totalGain)}</strong></td>
+          <td><strong>${fmtUSD(totalContrib)}</strong></td>
+        </tr>`;
+      } else if (esppCard) {
+        esppCard.style.display = 'none';
+        if (esppTbody) esppTbody.innerHTML = '';
+        if (esppTfoot) esppTfoot.innerHTML = '';
+      }
+
+      // Sales table
+      if (sales.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.noTradeConfirmations') + '</td></tr>';
+        tfoot.innerHTML = '';
+      } else {
+        tbody.innerHTML = sales.map((t, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(normalizeDate(t.saleDate || '-'))}</td>
           <td>${esc(t.symbol || '-')}</td>
           <td>${t.shares || '-'}</td>
           <td>${t.pricePerShare ? t.pricePerShare.toFixed(4) : '-'}</td>
           <td>${fmtUSD(t.saleProceeds)}</td>
           <td>${fmtUSD(t.fees)}</td>
           <td>${fmtUSD(t.netProceeds)}</td>
-        </tr>
-      `).join('');
-      tfoot.innerHTML = `
-        <tr>
-          <td colspan="3"><strong>${I18n.t('income.total')} (${data.count} trades)</strong></td>
-          <td><strong>${parseFloat(data.totalShares.toFixed(6))}</strong></td>
+        </tr>`).join('');
+        const totalProceeds = sales.reduce((s, t) => s + (t.saleProceeds || 0), 0);
+        const totalNet = sales.reduce((s, t) => s + (t.netProceeds || 0), 0);
+        const totalShares = sales.reduce((s, t) => s + (t.shares || 0), 0);
+        tfoot.innerHTML = `<tr>
+          <td colspan="3"><strong>${I18n.t('income.total')} (${sales.length} ${I18n.t('misc.sales') || 'sales'})</strong></td>
+          <td><strong>${parseFloat(totalShares.toFixed(6))}</strong></td>
           <td></td>
-          <td><strong>${fmtUSD(data.totalProceeds)}</strong></td>
+          <td><strong>${fmtUSD(totalProceeds)}</strong></td>
           <td></td>
-          <td><strong>${fmtUSD(data.totalNet)}</strong></td>
-        </tr>
-      `;
+          <td><strong>${fmtUSD(totalNet)}</strong></td>
+        </tr>`;
+      }
     } catch {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.errorLoadingTrades') + '</td></tr>';
     }
@@ -1323,10 +1476,10 @@ const App = (() => {
     html += dataRow('<strong>' + I18n.t('taxes.subsectionUS') + '</strong>', '', { indent: false });
     html += dataRow(I18n.t('taxes.earnUsGains') + data.usBrokerLabel, fmtR(usGainsRON) + ' RON', { indent: true });
     html += dataRow(I18n.t('taxes.earnUsDiv') + data.usDivBrokerLabel, fmtR(usDivRON) + ' RON', { indent: true });
-    if (stockWithholding > 0) {
-      html += dataRow(I18n.t('taxes.earnStockDeduction'), '-' + fmtR(stockWithholding) + ' RON', { indent: true, green: true });
+    if (data.salaryTaxedRON > 0) {
+      html += dataRow(I18n.t('taxes.earnSalaryTaxedDeduction') || 'Income already taxed as salary', '-' + fmtR(data.salaryTaxedRON) + ' RON', { indent: true, green: true });
     }
-    const usSubtotalIncome = usGainsRON + usDivRON - stockWithholding;
+    const usSubtotalIncome = usGainsRON + usDivRON - (data.salaryTaxedRON || 0);
     html += dataRow(I18n.t('taxes.subtotalUS'), fmtR(usSubtotalIncome) + ' RON', { indent: true, bold: true, topBorder: true });
 
     // -- Romania income --
@@ -1535,11 +1688,12 @@ const App = (() => {
       const usDivRON = (data.dividendsRON || data.dividendsUSD * data.exchangeRate);
       const usGainsRON = data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate;
       const usGainsGrossUSD = data.tradeProceedsUSD || data.capitalGainsSaleUSD || 0;
-      const usGainsGrossRON = usGainsGrossUSD * data.exchangeRate;
       const esppCost = data.capitalGainsCostUSD || 0;
+      const usGainsGrossRON = usGainsGrossUSD * data.exchangeRate;
       const esppCostRON = esppCost * data.exchangeRate;
-      const stockWH = data.stockWithholding || 0;
-      const usNetGainsRON = Math.max(0, usGainsGrossRON - esppCostRON - stockWH);
+      const salaryTaxed = data.salaryTaxedRON || 0;
+      // ANAF formula: Taxable = Sale_RON - Cost_RON - BIK_RON
+      const usNetGainsRON = Math.max(0, usGainsGrossRON - esppCostRON - salaryTaxed);
       const usCapGainsTax = usNetGainsRON * (data.capGainsTaxRate || 0.10);
       const usDivTaxDue = usDivRON * data.divTaxRate;
       const usTaxPaidRON = data.usDivForeignTaxRON || 0;
@@ -1551,9 +1705,9 @@ const App = (() => {
         ['--- ' + I18n.t('dcl.sepCapitalGains') + ' ---', ''],
         [I18n.t('dcl.saleValueUSD'), fmtD(usGainsGrossUSD) + ' USD'],
         [I18n.t('dcl.saleValueRON'), fmtR(usGainsGrossRON) + ' RON'],
-        [I18n.t('dcl.esppCostUSD'), fmtD(esppCost) + ' USD'],
+        [I18n.t('dcl.esppCostUSD'), fmtD(esppCost) + ' USD' + (data.esppSharesConsumed > 0 ? ' <small>(' + data.esppSharesConsumed + ' ' + (I18n.t('income.shares') || 'shares') + ' ESPP FIFO)</small>' : '')],
         [I18n.t('dcl.esppCostRON'), fmtR(esppCostRON) + ' RON'],
-        [I18n.t('dcl.alreadyTaxedSalary'), fmtR(stockWH) + ' RON'],
+        [I18n.t('dcl.alreadyTaxedSalary'), fmtR(salaryTaxed) + ' RON'],
         [I18n.t('dcl.taxableCapitalGains'), '<strong>' + fmtR(usNetGainsRON) + ' RON</strong>'],
         [I18n.t('dcl.incomeTaxDue10').replace('10%', (data.capGainsTaxRate * 100) + '%'), '<strong>' + fmtR(usCapGainsTax) + ' RON</strong>'],
         ['--- ' + I18n.t('dcl.sepDividends') + ' ---', ''],
@@ -1693,10 +1847,13 @@ const App = (() => {
     // Summary section
     const summaryTbody = document.getElementById('dcl-summary-tbody');
     if (summaryTbody) {
-      const usGainsGrossRON = data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate;
+      const usGainsGrossUSD2 = data.tradeProceedsUSD || data.capitalGainsSaleUSD || 0;
+      const esppCostUSD2 = data.capitalGainsCostUSD || 0;
+      // ANAF formula: Taxable = Sale_RON - Cost_RON - BIK_RON
+      const usGainsGrossRON = data.capitalGainsTaxableRON || usGainsGrossUSD2 * data.exchangeRate;
       const usDivRON = (data.dividendsRON || data.dividendsUSD * data.exchangeRate);
-      const esppCostRON = (data.capitalGainsCostUSD || 0) * data.exchangeRate;
-      const usNetGains = Math.max(0, usGainsGrossRON - esppCostRON - (data.stockWithholding || 0));
+      const esppCostRON = esppCostUSD2 * data.exchangeRate;
+      const usNetGains = Math.max(0, usGainsGrossRON - esppCostRON - (data.salaryTaxedRON || 0));
       const usGainsTax = usNetGains * (data.capGainsTaxRate || 0.10);
       // US dividends: RO tax - US credit = difference
       const usDivTaxDue = usDivRON * data.divTaxRate;
@@ -1820,6 +1977,7 @@ const App = (() => {
     document.getElementById('input-min-salary').value = yd.minSalary || defaultMinSalary;
     document.getElementById('input-d212-deadline').value = yd.d212Deadline || d212DefaultDeadline(selectedYear);
     document.getElementById('input-stock-withholding').value = yd.stockWithholdingPaid || '';
+    document.getElementById('input-salary-taxed').value = yd.salaryTaxedIncome || '';
 
     // Populate RO gains country rows
     renderRoGainsRows(yd.roGainsCountries || []);
@@ -1941,7 +2099,8 @@ const App = (() => {
       gamblingTaxPaid: document.getElementById('input-gambling-tax-paid').value,
       otherIncome: document.getElementById('input-other-income').value,
       otherTaxPaid: document.getElementById('input-other-tax-paid').value,
-      stockWithholdingPaid: document.getElementById('input-stock-withholding').value
+      stockWithholdingPaid: document.getElementById('input-stock-withholding').value,
+      salaryTaxedIncome: document.getElementById('input-salary-taxed').value
     };
 
     try {
@@ -2281,38 +2440,27 @@ const App = (() => {
         let resultHtml = fileCount > 1 ? `<p style="color: var(--success)"><strong>${esc(files[fi].name)}</strong> - ${I18n.t('import.success')}</p>` : `<p style="color: var(--success)">${I18n.t('import.success')}</p>`;
         if (result.type === 'trade_confirmation') {
           const t = result.parsed;
-          resultHtml += `<div style="margin-top:0.5rem;">
-            <p><strong>${t.symbol}</strong> - ${t.shares} shares @ $${t.pricePerShare?.toFixed(4) || '?'}</p>
-            <p>Sale Date: ${t.saleDate || '-'} | Net Proceeds: $${t.netProceeds?.toFixed(2) || '?'}</p>
-            ${result.isDuplicate ? '<p style="color:var(--warning)">⚠ Duplicate detected (already imported)</p>' : ''}
-          </div>`;
+          if (t.transactionType === 'purchase') {
+            resultHtml += `<div style="margin-top:0.5rem;">
+              <p><strong>${esc(t.symbol)}</strong> - ${I18n.t('misc.esppPurchase') || 'ESPP Purchase'}</p>
+              <p>${t.shares} shares @ $${t.pricePerShare?.toFixed(4) || '?'} | Date: ${normalizeDate(t.saleDate || '-')}</p>
+              <p>Market Value: $${t.marketValue?.toFixed(2) || '?'} | Contributions: $${t.accumulatedContributions?.toFixed(2) || '?'} | Gain: $${t.esppGain?.toFixed(2) || '?'}</p>
+              ${t.offeringPeriod ? `<p>Offering: ${esc(t.offeringPeriod)}</p>` : ''}
+              ${result.isDuplicate ? '<p style="color:var(--warning)">⚠ Duplicate detected (already imported)</p>' : ''}
+            </div>`;
+          } else {
+            resultHtml += `<div style="margin-top:0.5rem;">
+              <p><strong>${esc(t.symbol)}</strong> - ${t.shares} shares @ $${t.pricePerShare?.toFixed(4) || '?'}</p>
+              <p>Sale Date: ${normalizeDate(t.saleDate || '-')} | Net Proceeds: $${t.netProceeds?.toFixed(2) || '?'}</p>
+              ${result.isDuplicate ? '<p style="color:var(--warning)">⚠ Duplicate detected (already imported)</p>' : ''}
+            </div>`;
+          }
           if (result.yearSummary) {
             resultHtml += `<div style="margin-top:0.5rem; padding:0.5rem; background:var(--bg-secondary); border-radius:var(--radius);">
               <strong>Year ${result.year} Summary:</strong> ${result.yearSummary.count} trades, 
               ${result.yearSummary.totalShares} shares, 
               $${result.yearSummary.totalNet?.toFixed(2)} net proceeds
             </div>`;
-          }
-        } else if (result.type === 'fidelity_statement') {
-          const p = result.parsed;
-          resultHtml += `<div style="margin-top:0.5rem;">
-            <p><strong>Period:</strong> ${esc(p.period || '-')}</p>
-            <p><strong>Sales found:</strong> ${p.sales?.length || 0} | <strong>New added:</strong> ${result.newTradesAdded || 0} | <strong>Duplicates skipped:</strong> ${result.duplicatesSkipped || 0}</p>
-            <p><strong>Total trades for year:</strong> ${result.totalTrades || 0}</p>
-          </div>`;
-          if (result.transfers?.length > 0) {
-            resultHtml += `<div style="margin-top:0.5rem; padding:0.5rem; background:var(--bg-secondary); border-radius:var(--radius);">
-              <strong>Transfers to XTB:</strong><br>`;
-            for (const tr of result.transfers) {
-              resultHtml += `${tr.date || '-'}: ${tr.quantity} ${tr.symbol} shares ($${tr.value?.toFixed(2) || '?'})<br>`;
-            }
-            resultHtml += `</div>`;
-          }
-          if (p.dividendsYTD > 0) {
-            resultHtml += `<p style="margin-top:0.5rem;"><strong>Fidelity Dividends YTD:</strong> $${p.dividendsYTD?.toFixed(2)}</p>`;
-          }
-          if (p.realizedGainLoss > 0) {
-            resultHtml += `<p><strong>Realized Gain/Loss YTD:</strong> $${p.realizedGainLoss?.toFixed(2)}</p>`;
           }
         } else if (result.type === 'form_1042s') {
           const p = result.parsed;

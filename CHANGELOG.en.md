@@ -1,5 +1,55 @@
 # D212 Tax Helper - Changelog
 
+## v1.4.6 (2026-04-16)
+
+### ESPP & Stock Award Integration
+- **ESPP purchase support** — Trade Confirmation parser now detects `YOU PURCHASED` (ESPP) alongside `YOU SOLD`, extracting Market Value, Accumulated Contributions, ESPP Gain, and Offering Period
+- **ESPP cost basis FIFO** — ESPP purchase cost ($contributions) is automatically tracked via FIFO across years and deducted from sale proceeds in USD before RON conversion, matching ANAF D-212 formula
+- **Separate ESPP/Sales tables** — US stock transactions split into two tables: "Achiziții Acțiuni ESPP SUA" (purchases) and "Vânzări Acțiuni SUA" (sales), each with own totals
+- **ESPP consumption tracking** — tooltip on US gains row shows which ESPP lots were consumed (shares + cost)
+
+### Stock Award BIK Deduction
+- **"Venit impozitat deja ca salariu" (BIK)** — stock_award_bik values from imported Stock Award documents are summed and deducted from capital gains per ANAF D-212 rules: `Taxable = Sale_RON - Cost_RON - BIK_RON`
+- **Multi-year upload** — multiple Stock Award documents from different years can be uploaded under a single tax year to maximize BIK deduction (e.g., upload 2019-2023 docs under year 2023 to reduce CASS threshold)
+- **Year-scoped display** — BIK deduction and withholding table only appear for years where Stock Award documents were uploaded
+- **Manual BIK override** — new "Venit impozitat deja ca salariu (RON)" field in Add Data form for entering Think People / tax advisor values
+- **Separate deduction row** in income details table with green styling and hover tooltip showing taxable amount after BIK
+
+### Stock Award Parser Improvements
+- **Multi-format date support** — parser handles `DD-Mon-YY` (2019-2023), `DD-Mon-YYYY` (2025), and `DD.MM.YYYY` (2024) date formats
+- **Merged header fix** — handles PDF extraction where column headers merge (e.g., `espp_gain_bikstock_award_bik`)
+- **Append mode** — uploading additional Stock Award documents appends entries with deduplication (no overwrite)
+- **Purge clears all** — deleting a stock_award raw file removes ALL stock award entries (supports multi-year uploads)
+
+### Persistent Ledger
+- **ledger.json** — new persistent financial entry tracking with FIFO cost basis allocation
+- **Auto-migration** — existing trades and stock awards are automatically migrated to ledger on first server start
+- **Soft-delete on purge** — deleted entries preserved for audit trail
+- **API endpoints** — `/api/ledger/allocations`, `/api/ledger/summary`, `POST /api/ledger/migrate`
+
+### Document Type Changes
+- **Removed** "SUA (Fidelity) - Extras de Cont (Raport Periodic)" (fidelity_statement) integration
+- **Renamed** Trade Confirmation to "Confirmare Tranzacție (Vânzare / Achiziție)" reflecting both sale and purchase support
+
+### Dashboard & Charts
+- **Removed** "Impozit de Plată" tile (redundant)
+- **Charts follow selected year** — all charts (Total Impozite, Cursuri de Schimb, Salariu Minim) now show years up to the selected year, matching Comparație pe Ani behavior
+- **Year-specific data isolation** — charts compute taxes independently per year without cross-year data pollution
+- **No-cache headers** for locale JSON files to prevent stale translations after updates
+
+### Display Improvements
+- **Normalized dates** — all dates displayed as `YYYY.MM.DD` format throughout the app
+- **Withholding table** shows both BIK and Withholding columns with date, sorted chronologically
+- **Income table totals** computed from actual rows (including deductions with +/- math)
+
+### Bug Fixes
+- **Stock withholding double-counting** — fixed duplicate `total += val` in withholding API
+- **Stale data on purge** — purging files now properly clears all related data from parsed_data.json, trades.json, stock_awards.json, and ledger.json
+- **Trade confirmation purge** — fixed variable name bug (`filename` → `safeName`) in ledger purge call
+- **CASS calculation** — BIK deduction correctly reduces CASS base; withholding no longer incorrectly subtracted from capital gains base
+
+---
+
 ## v1.4.5 (2026-04-15)
 
 ### Tax Compliance Fixes

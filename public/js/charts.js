@@ -338,19 +338,33 @@ const Charts = (() => {
     });
   }
 
-  function createExchangeRates(canvasId, ratesData, windowSize) {
+  function createExchangeRates(canvasId, ratesData, windowSize, focusYear) {
     const c = colors();
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
 
     const ws = windowSize || 5;
     const allYears = Object.keys(ratesData).sort();
-    const windowYears = allYears.slice(-ws);
+    let windowYears;
+    if (focusYear) {
+      const idx = allYears.indexOf(String(focusYear));
+      if (idx >= 0) {
+        const start = Math.max(0, Math.min(idx - Math.floor(ws / 2), allYears.length - ws));
+        windowYears = allYears.slice(start, start + ws);
+      } else {
+        windowYears = allYears.slice(-ws);
+      }
+    } else {
+      windowYears = allYears.slice(-ws);
+    }
     const rates = windowYears.map(y => ratesData[y]);
 
     if (chartInstances[canvasId]) {
+      const chart = chartInstances[canvasId];
+      chart.data.labels = windowYears;
+      chart.data.datasets[0].data = rates;
+      chart.update();
       setupChartNav('exch-rate', allYears, ws, (winYears) => {
-        const chart = chartInstances[canvasId];
         chart.data.labels = winYears;
         chart.data.datasets[0].data = winYears.map(y => ratesData[y]);
         chart.update();
@@ -403,19 +417,33 @@ const Charts = (() => {
     });
   }
 
-  function createMinSalaryChart(canvasId, salaryData, windowSize) {
+  function createMinSalaryChart(canvasId, salaryData, windowSize, focusYear) {
     const c = colors();
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
 
     const ws = windowSize || 5;
     const allYears = Object.keys(salaryData).sort();
-    const windowYears = allYears.slice(-ws);
+    let windowYears;
+    if (focusYear) {
+      const idx = allYears.indexOf(String(focusYear));
+      if (idx >= 0) {
+        const start = Math.max(0, Math.min(idx - Math.floor(ws / 2), allYears.length - ws));
+        windowYears = allYears.slice(start, start + ws);
+      } else {
+        windowYears = allYears.slice(-ws);
+      }
+    } else {
+      windowYears = allYears.slice(-ws);
+    }
     const values = windowYears.map(y => salaryData[y]);
 
     if (chartInstances[canvasId]) {
+      const chart = chartInstances[canvasId];
+      chart.data.labels = windowYears;
+      chart.data.datasets[0].data = values;
+      chart.update();
       setupChartNav('min-salary', allYears, ws, (winYears) => {
-        const chart = chartInstances[canvasId];
         chart.data.labels = winYears;
         chart.data.datasets[0].data = winYears.map(y => salaryData[y]);
         chart.update();
@@ -468,29 +496,46 @@ const Charts = (() => {
     });
   }
 
-  function createD212PaymentChart(canvasId, paymentData, windowSize) {
+  function createD212PaymentChart(canvasId, paymentData, windowSize, focusYear) {
     const c = colors();
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
 
     const ws = windowSize || 5;
     const allYears = Object.keys(paymentData).sort();
-    const windowYears = allYears.slice(-ws);
-    const paid = windowYears.map(y => paymentData[y].paid || 0);
-    const taxes = windowYears.map(y => paymentData[y].tax || 0);
-    const cass = windowYears.map(y => paymentData[y].cass || 0);
+    let windowYears;
+    if (focusYear) {
+      const idx = allYears.indexOf(String(focusYear));
+      if (idx >= 0) {
+        const start = Math.max(0, Math.min(idx - Math.floor(ws / 2), allYears.length - ws));
+        windowYears = allYears.slice(start, Math.min(start + ws, allYears.length));
+      } else {
+        windowYears = allYears.slice(-ws);
+      }
+    } else {
+      windowYears = allYears.slice(-ws);
+    }
+    const paid = windowYears.map(y => paymentData[y]?.paid || 0);
+    const taxes = windowYears.map(y => paymentData[y]?.tax || 0);
+    const cass = windowYears.map(y => paymentData[y]?.cass || 0);
 
-    const buildUpdateFn = () => (winYears) => {
+    const updateFn = (winYears) => {
       const chart = chartInstances[canvasId];
       chart.data.labels = winYears;
-      chart.data.datasets[0].data = winYears.map(y => paymentData[y].paid || 0);
-      chart.data.datasets[1].data = winYears.map(y => paymentData[y].tax || 0);
-      chart.data.datasets[2].data = winYears.map(y => paymentData[y].cass || 0);
+      chart.data.datasets[0].data = winYears.map(y => paymentData[y]?.paid || 0);
+      chart.data.datasets[1].data = winYears.map(y => paymentData[y]?.tax || 0);
+      chart.data.datasets[2].data = winYears.map(y => paymentData[y]?.cass || 0);
       chart.update();
     };
 
     if (chartInstances[canvasId]) {
-      setupChartNav('d212-pay', allYears, ws, buildUpdateFn());
+      const chart = chartInstances[canvasId];
+      chart.data.labels = windowYears;
+      chart.data.datasets[0].data = paid;
+      chart.data.datasets[1].data = taxes;
+      chart.data.datasets[2].data = cass;
+      chart.update();
+      setupChartNav('d212-pay', allYears, ws, updateFn);
       return;
     }
 
