@@ -1170,8 +1170,8 @@ function extractAnafD212Xml(pdfBuffer) {
   // See ANAF schema: mfp:anaf:dgti:d212:declaratie:v11
   const result = {
     year: 0,
-    dividends: { grossUSD: 0, grossRON: 0, foreignTaxUSD: 0, foreignTaxRON: 0, taxDueRON: 0 },
-    capitalGains: { saleUSD: 0, saleRON: 0, costUSD: 0, costRON: 0, salaryDeductionRON: 0, taxableRON: 0, taxDueRON: 0 },
+    dividends: { grossUSD: 0, grossRON: 0, foreignTaxUSD: 0, foreignTaxRON: 0, taxDueRON: 0, creditFiscalRON: 0, difImpozitRON: 0 },
+    capitalGains: { saleUSD: 0, saleRON: 0, costUSD: 0, costRON: 0, salaryDeductionRON: 0, taxableRON: 0, taxDueRON: 0, difImpozitRON: 0 },
     totalTax: 0,
     cassContribution: 0,
     exchangeRate: 0,
@@ -1205,11 +1205,19 @@ function extractAnafD212Xml(pdfBuffer) {
       // Capital gains (Câștiguri din transferul titlurilor de valoare)
       result.capitalGains.taxableRON = getAttr('str_venit_net_anual');
       result.capitalGains.taxDueRON = getAttr('str_impozit_datorat_Ro');
+      result.capitalGains.difImpozitRON = getAttr('str_dif_impozit_datorat');
     } else if (code === '2018') {
       // Dividends (Venituri din dividende — dubla impunere)
+      // Per ANAF D-212 instructions:
+      //   str_impozit_datorat_Ro = tax calculated in Romania (before credit)
+      //   str_impozit_platit = foreign tax paid (e.g., US withholding)
+      //   str_credit_fiscal = min(impRo, impSt) = fiscal credit applied
+      //   str_dif_impozit_datorat = impRo - creditFiscal = actual amount owed (0 if credit covers it)
       result.dividends.grossRON = getAttr('str_venit_brut') || getAttr('str_venit_net_anual');
       result.dividends.taxDueRON = getAttr('str_impozit_datorat_Ro');
       result.dividends.foreignTaxRON = getAttr('str_impozit_platit');
+      result.dividends.creditFiscalRON = getAttr('str_credit_fiscal');
+      result.dividends.difImpozitRON = getAttr('str_dif_impozit_datorat');
     }
   }
 
@@ -1236,8 +1244,8 @@ function extractAnafD212Xml(pdfBuffer) {
 function parseAnafD212FlatText(text, year) {
   const result = {
     year,
-    dividends: { grossUSD: 0, grossRON: 0, foreignTaxUSD: 0, foreignTaxRON: 0, taxDueRON: 0 },
-    capitalGains: { saleUSD: 0, saleRON: 0, costUSD: 0, costRON: 0, salaryDeductionRON: 0, taxableRON: 0, taxDueRON: 0 },
+    dividends: { grossUSD: 0, grossRON: 0, foreignTaxUSD: 0, foreignTaxRON: 0, taxDueRON: 0, creditFiscalRON: 0, difImpozitRON: 0 },
+    capitalGains: { saleUSD: 0, saleRON: 0, costUSD: 0, costRON: 0, salaryDeductionRON: 0, taxableRON: 0, taxDueRON: 0, difImpozitRON: 0 },
     totalTax: 0,
     cassContribution: 0,
     exchangeRate: 0,
@@ -1308,6 +1316,7 @@ function parseAnafD212FlatText(text, year) {
     if (cgNums.length >= 4) {
       result.capitalGains.taxableRON = cgNums[0];
       result.capitalGains.taxDueRON = cgNums[2];
+      result.capitalGains.difImpozitRON = cgNums[3];
     }
 
     // Section 2 (second country): Dividends
@@ -1324,9 +1333,12 @@ function parseAnafD212FlatText(text, year) {
       divNums = extractNums(countrySections[1] + 1, Math.min(countrySections[1] + 1 + 9, endIdx2));
     }
     if (divNums.length >= 7) {
+      // Per ANAF D-212: [-4]=impRo, [-3]=impSt, [-2]=creditFiscal, [-1]=difImpozit
       result.dividends.grossRON = divNums[0];
-      result.dividends.taxDueRON = divNums[divNums.length - 4];    // impRo
-      result.dividends.foreignTaxRON = divNums[divNums.length - 3]; // impSt
+      result.dividends.taxDueRON = divNums[divNums.length - 4];    // impRo (before credit)
+      result.dividends.foreignTaxRON = divNums[divNums.length - 3]; // impSt (foreign tax paid)
+      result.dividends.creditFiscalRON = divNums[divNums.length - 2]; // credit fiscal
+      result.dividends.difImpozitRON = divNums[divNums.length - 1];  // actual amount owed after credit
     }
 
     // Summary section: everything after the last country section's dividends data
@@ -1343,8 +1355,8 @@ function parseAnafD212FlatText(text, year) {
     const summaryNums = extractNums(summaryStart, lines.length);
     // Summary layout (2023): [0,0,0,0, 18770, 0, 0, 18770, 18000, 1800, 1842, 1842, 0, 0, 0, 1800, 1800, 1800]
     // Summary layout (2024): [1690, 1690, 1690, 1690]
-    // Total tax = capitalGains.taxDueRON (already extracted)
-    result.totalTax = result.capitalGains.taxDueRON;
+    // Total tax = sum of difImpozit for all sections (actual amounts owed after credits)
+    result.totalTax = result.capitalGains.difImpozitRON + result.dividends.difImpozitRON;
 
     // Find CASS: look for a value that repeats 2-3 times in the summary and != totalTax
     const freq = {};
@@ -1368,17 +1380,19 @@ function parseAnafD212FlatText(text, year) {
       singleNums = extractNums(countrySections[0] + 1, Math.min(countrySections[0] + 1 + 9, lines.length));
     }
     if (singleNums.length >= 7) {
-      // Dividends only (old format 9 nums, new 7 nums)
+      // Dividends only: [-4]=impRo, [-3]=impSt, [-2]=creditFiscal, [-1]=difImpozit
       result.dividends.grossRON = singleNums[0];
-      result.dividends.taxDueRON = singleNums[singleNums.length - 4];    // impRo
-      result.dividends.foreignTaxRON = singleNums[singleNums.length - 3]; // impSt
-      // totalTax = difImp (last number) — 0 if credit covers tax
-      result.totalTax = singleNums[singleNums.length - 1];
+      result.dividends.taxDueRON = singleNums[singleNums.length - 4];    // impRo (before credit)
+      result.dividends.foreignTaxRON = singleNums[singleNums.length - 3]; // impSt (foreign tax paid)
+      result.dividends.creditFiscalRON = singleNums[singleNums.length - 2]; // credit fiscal
+      result.dividends.difImpozitRON = singleNums[singleNums.length - 1];  // actual amount owed after credit
+      result.totalTax = singleNums[singleNums.length - 1]; // difImpozit
     } else if (singleNums.length >= 4) {
       // Capital gains only
       result.capitalGains.taxableRON = singleNums[0];
       result.capitalGains.taxDueRON = singleNums[2];
-      result.totalTax = singleNums[2];
+      result.capitalGains.difImpozitRON = singleNums[3];
+      result.totalTax = singleNums[3]; // difImpozit
     }
   }
 

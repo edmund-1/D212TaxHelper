@@ -1,6 +1,6 @@
 # D212 Asistent Fiscal - Ghid de Utilizare
 
-**Versiune ghid:** 2.4 | **Versiune aplicație:** 3.2.4 | **Ultima actualizare:** 15.04.2026
+**Versiune ghid:** 2.5 | **Versiune aplicație:** 1.4.5 | **Ultima actualizare:** 15.04.2026
 
 ---
 
@@ -93,7 +93,7 @@ Aplicația rulează la **http://localhost:3000**.
 
 | Element | Descriere |
 |---------|-----------|
-| **Versiunea aplicației** (ex: v2.4.0) | Click pentru a vedea istoricul complet de versiuni |
+| **Versiunea aplicației** (ex: v1.1.4) | Click pentru a vedea istoricul complet de versiuni |
 | **Sursa datelor** | Arată de unde provin datele (ANAF, BNR, Fidelity, XTB) |
 | **Contact** | Link email către autor |
 | **Repornire Server** | Repornește serverul Node.js (pagina se reîncarcă automat) |
@@ -616,7 +616,7 @@ Vezi istoricul complet făcând click pe numărul versiunii din footer-ul aplica
 - [CHANGELOG.en.md](CHANGELOG.en.md) (Engleză)
 - [CHANGELOG.ro.md](CHANGELOG.ro.md) (Română)
 
-### Versiunea curentă: v3.2.1 (14.04.2026)
+### Versiunea curentă: v1.4.1 (14.04.2026)
 
 **Modificări majore:**
 - Tooltip-uri detaliate pe toate rândurile de venituri (rețineri, credite, deduceri)
@@ -625,7 +625,7 @@ Vezi istoricul complet făcând click pe numărul versiunii din footer-ul aplica
 - Notă de subsol cu exemplu deducere 40% pe chirii/drepturi IP
 - 4 tipuri noi de venituri, corecturi conformitate ANAF, refacere panou principal
 
-### Versiunea anterioară: v3.2.0 (14.04.2026)
+### Versiunea anterioară: v1.4.0 (14.04.2026)
 
 4 tipuri noi de venituri (chirii, drepturi IP, jocuri noroc, alte surse), câmpuri impozit dividende SUA/RO, cote corectate 2019-2022, conformitate CASS, 5 căsuțe panou, grafic salariu minim, pornire asincronă.
 

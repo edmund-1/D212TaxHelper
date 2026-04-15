@@ -1,6 +1,6 @@
 # D212 Tax Helper - User Guide
 
-**Guide version:** 2.4 | **App version:** 3.2.4 | **Last updated:** 2026-04-15
+**Guide version:** 2.5 | **App version:** 1.4.5 | **Last updated:** 2026-04-15
 
 ---
 
@@ -93,7 +93,7 @@ The application runs at **http://localhost:3000**.
 
 | Element | Description |
 |---------|-------------|
-| **App version** (e.g., v2.4.0) | Click to view the full changelog |
+| **App version** (e.g., v1.1.4) | Click to view the full changelog |
 | **Data source** | Shows where data comes from (ANAF, BNR, Fidelity, XTB) |
 | **Contact** | Email link to the author |
 | **Restart Server** | Restarts the Node.js server (page reloads automatically) |
@@ -622,7 +622,7 @@ See the full changelog by clicking the version number in the app footer, or view
 - [CHANGELOG.en.md](CHANGELOG.en.md) (English)
 - [CHANGELOG.ro.md](CHANGELOG.ro.md) (Romanian)
 
-### Current Version: v3.2.1 (2026-04-14)
+### Current Version: v1.4.1 (2026-04-14)
 
 **Major changes:**
 - Detailed hover tooltips on all income rows (withholding, credits, deductions)
@@ -631,7 +631,7 @@ See the full changelog by clicking the version number in the app footer, or view
 - 40% deduction footnote with example on rental/royalty rows
 - 4 new income types, ANAF tax compliance fixes, dashboard overhaul
 
-### Previous Version: v3.2.0 (2026-04-14)
+### Previous Version: v1.4.0 (2026-04-14)
 
 4 new income types (rental, royalties, gambling, other), US/RO dividend tax fields, tax rate fixes for 2019-2022, CASS compliance, 5 dashboard tiles, minimum salary chart, async startup.
 
