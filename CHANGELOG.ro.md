@@ -1,6 +1,19 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
-## v3.2.4 (2026-04-15)
+## v1.4.5 (2026-04-15)
+
+### Corecturi Conformitate Fiscală
+- **Credit fiscal ANAF D-212** — la importul declarațiilor ANAF, aplicația folosește acum corect `difImpozitDatorat` (împozitul efectiv de plată după credit) în loc de `impozitDatoratRO` (impozit brut înainte de credit). Pentru dividende SUA cu convenție de dublă impunere, impozitul pe dividende apare ca **0** când impozitul reținut în SUA acoperă obligația fiscală românească.
+- **Credit fiscal & impozit străin** — noi câmpuri `creditFiscalRON` și `difImpozitRON` extrase din PDF-urile ANAF (XFA și randate), propagate corect în Panou Principal, Detalii Venituri și Calcul Impozite
+- **difImpozit câștiguri capital** — impozitul pe câștiguri capital folosește acum `difImpozitRON` din D-212 când este disponibil
+- **Fallback impozit străin dividende SUA** — `foreignTaxRON` folosește corect datele D-212 când nu există raport Fidelity/1042-S
+
+### Versiune
+- **Schema unificată de versiuni** — toate versiunile renumerotate în seria 1.x.x pentru consistență
+
+---
+
+## v1.4.4 (2026-04-15)
 
 ### Îmbunătățiri Panou Principal
 - **6 grafice** — reorganizate pe două rânduri a câte 3: Structura Veniturilor, Structura Impozitelor, Comparație pe Ani (rândul 1) și Total Impozite, Cursuri de Schimb, Salariu Minim (rândul 2)
@@ -17,7 +30,7 @@
 
 ---
 
-## v3.2.3 (2026-04-14)
+## v1.4.3 (2026-04-14)
 
 ### Funcționalități Noi
 - **Import ANAF D-212 (PDF-uri XFA)** — importă PDF-urile oficiale ANAF Declarația Unică D-212 extragând datele XML încorporate direct din stream-urile FlateDecode (fără OCR)
@@ -32,7 +45,7 @@
 
 ---
 
-## v3.2.2 (2026-04-14)
+## v1.4.2 (2026-04-14)
 
 ### Corecturi
 - **Insigna OCR blocată pe Lite după upgrade** — insigna motorului OCR se actualizează imediat după upgrade la Full sau downgrade la Lite, fără a necesita repornirea serverului
@@ -40,7 +53,7 @@
 
 ---
 
-## v3.2.1 (2026-04-14)
+## v1.4.1 (2026-04-14)
 
 ### Îmbunătățiri UX
 - **Tooltip-uri detaliate** pe toate rândurile tabelului de venituri explicând tratamentul fiscal:
@@ -54,7 +67,7 @@
 
 ---
 
-## v3.2.0 (2026-04-14)
+## v1.4.0 (2026-04-14)
 
 ### Noi Tipuri de Venituri
 - **Venituri din Chirii** — deducere forfetara 40%, impozit 10%/16%, eligibil CASS
@@ -91,7 +104,7 @@
 
 ---
 
-## v3.1.2 (2026-04-09)
+## v1.3.2 (2026-04-09)
 
 ### Îmbunătățiri
 - **Bară de progres pe butonul Upload** — gradient verde se umple stânga-dreapta în timpul procesării; pentru fișiere multiple arată progresul per fișier
@@ -101,7 +114,7 @@
 
 ---
 
-## v3.1.1 (2026-04-09)
+## v1.3.1 (2026-04-09)
 
 ### Corecturi
 - **Linkuri Changelog în Ghid** — click pe CHANGELOG.en.md / CHANGELOG.ro.md din Ghid deschide acum o fereastră Changelog suprapusă în loc să navigheze în afară
@@ -111,7 +124,7 @@
 
 ---
 
-## v3.1.0 (2026-04-09)
+## v1.3.0 (2026-04-09)
 
 ### Gestionare Motor OCR
 - **Butoane Upgrade la Full / Downgrade la Lite** — comutare între PaddleOCR și Tesseract.js direct din tab-ul Importă Document
@@ -138,7 +151,7 @@
 
 ---
 
-## v3.0.1 (2026-04-08)
+## v1.2.1 (2026-04-08)
 
 ### Îmbunătățiri
 - **Ștergere multiplă în Date Brute** — căsuțe de selectare pe fiecare rând cu "Selectează tot" și bara "Șterge Selectate"
@@ -147,7 +160,7 @@
 
 ---
 
-## v3.0.0 (2026-04-08)
+## v1.2.0 (2026-04-08)
 
 ### Funcționalitate nouă: Integrare PaddleOCR
 - **PaddleOCR (PP-StructureV3)** — înlocuiește Tesseract.js ca motor OCR principal pentru extragere superioară de text din documente scanate
@@ -161,7 +174,7 @@
 ### Detalii tehnice
 - `ocr_service.py` — serviciu CLI Python folosind API-ul PaddleOCR 3.x `predict()`
 - `setup_paddleocr.js` — descarcă Python Embeddable + instalează pachetele PaddleOCR
-- PaddlePaddle fixat la v3.0.0 (v3.3.1 are crash OneDNN pe Windows)
+- PaddlePaddle fixat la 3.0.0 (PaddlePaddle 3.3.1 are crash OneDNN pe Windows)
 - `paddlex[ocr]` extra necesar pentru pipeline-ul complet OCR
 - Fișierele temporare Multer redenumite cu extensia corectă (.pdf/.jpg) pentru detectarea formatului PaddleOCR
 - Tipurile de documente auto-validate ocolesc verificarea generică de calitate OCR
@@ -169,7 +182,7 @@
 
 ---
 
-## v2.4.0 (2026-04-08)
+## v1.1.4 (2026-04-08)
 
 ### Funcționalități noi
 - **Parser Tradeville Portfolio** — România (Tradeville) - Fișă de Portofoliu (Câștiguri Capital)
@@ -188,7 +201,7 @@
 
 ---
 
-## v2.3.0 (2026-04-08)
+## v1.1.3 (2026-04-08)
 
 ### Corecturi calcul (Audit conformitate ANAF)
 - Impozit dividende SUA: calculează corect creditul fiscal pentru 2026+ (RO 16% - SUA 10% = 6% de plată)
@@ -222,7 +235,7 @@
 
 ---
 
-## v2.2.0 (2026-04-07)
+## v1.1.2 (2026-04-07)
 
 ### Actualizări
 - **Express 5.2.1** — actualizat de la v4 (gestionare îmbunătățită erori async, suport Brotli)
@@ -240,7 +253,7 @@
 
 ---
 
-## v2.1.0 (2026-04-07)
+## v1.1.1 (2026-04-07)
 
 ### Funcționalități noi
 - **Parser Morgan Stanley Stock Plan Statement** — extras anual cu vânzări, RSU releases, dividende, reținere IRS
@@ -265,7 +278,7 @@
 
 ---
 
-## v2.0.0 (2026-03-29)
+## v1.1.0 (2026-03-29)
 
 ### Principal
 - Aplicația redenumită din „ANAF Panou Financiar" în „D212 Asistent Fiscal"

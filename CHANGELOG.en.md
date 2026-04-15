@@ -1,6 +1,19 @@
 # D212 Tax Helper - Changelog
 
-## v3.2.4 (2026-04-15)
+## v1.4.5 (2026-04-15)
+
+### Tax Compliance Fixes
+- **ANAF D-212 fiscal credit** — when importing ANAF declarations, the app now correctly uses `difImpozitDatorat` (actual tax to pay after credit) instead of `impozitDatoratRO` (gross tax before credit). For US dividends with double taxation treaty, this means dividend tax shows as **0** when the US-withheld tax covers the Romanian tax obligation.
+- **Credit fiscal & foreign tax** — new fields `creditFiscalRON` and `difImpozitRON` extracted from both XFA and rendered ANAF PDFs, properly flowing through Dashboard, Income Details, and Tax Calculation screens
+- **Capital gains difImpozit** — capital gains tax now uses `difImpozitRON` from D-212 when available (handles cases where foreign credits apply)
+- **US dividend foreign tax fallback** — `foreignTaxRON` now correctly falls back to D-212 data when no Fidelity/1042-S/investment report is present
+
+### Version Numbering
+- **Unified version scheme** — all versions renumbered to 1.x.x series for consistency (v2.0.0→v1.1.0, v3.0.0→v1.2.0, etc.)
+
+---
+
+## v1.4.4 (2026-04-15)
 
 ### Dashboard Improvements
 - **6 charts layout** — reorganized into two rows of 3: Income Breakdown, Tax Breakdown, Year Comparison (row 1) and Total Taxes, Exchange Rates, Minimum Salary (row 2)
@@ -17,7 +30,7 @@
 
 ---
 
-## v3.2.3 (2026-04-14)
+## v1.4.3 (2026-04-14)
 
 ### New Features
 - **ANAF D-212 import (XFA PDFs)** — imports official ANAF Declarație Unică D-212 PDFs by extracting embedded XML data directly from FlateDecode streams (no OCR needed)
@@ -32,7 +45,7 @@
 
 ---
 
-## v3.2.2 (2026-04-14)
+## v1.4.2 (2026-04-14)
 
 ### Bug Fixes
 - **OCR badge stuck on Lite after upgrade** — the OCR engine badge now updates immediately after upgrading to Full or downgrading to Lite, without needing a server restart
@@ -40,7 +53,7 @@
 
 ---
 
-## v3.2.1 (2026-04-14)
+## v1.4.1 (2026-04-14)
 
 ### UX Improvements
 - **Detailed hover tooltips** on all income table rows explaining tax treatment:
@@ -54,7 +67,7 @@
 
 ---
 
-## v3.2.0 (2026-04-14)
+## v1.4.0 (2026-04-14)
 
 ### New Income Types
 - **Rental Income (Chirii)** — 40% flat deduction, 10%/16% tax, CASS eligible
@@ -91,7 +104,7 @@
 
 ---
 
-## v3.1.2 (2026-04-09)
+## v1.3.2 (2026-04-09)
 
 ### Improvements
 - **Progress bar on Upload button** — green gradient fills left-to-right during document processing; for multiple files shows per-file progress
@@ -101,7 +114,7 @@
 
 ---
 
-## v3.1.1 (2026-04-09)
+## v1.3.1 (2026-04-09)
 
 ### Fixes
 - **Changelog links in Guide** — clicking CHANGELOG.en.md / CHANGELOG.ro.md links in the Guide now opens a stacked Changelog modal instead of navigating away
@@ -111,7 +124,7 @@
 
 ---
 
-## v3.1.0 (2026-04-09)
+## v1.3.0 (2026-04-09)
 
 ### OCR Engine Management
 - **Upgrade to Full / Downgrade to Lite buttons** — switch between PaddleOCR and Tesseract.js directly from the Import tab
@@ -138,7 +151,7 @@
 
 ---
 
-## v3.0.1 (2026-04-08)
+## v1.2.1 (2026-04-08)
 
 ### Improvements
 - **Bulk delete in Raw Data** — checkboxes on each file row with "Select All" and "Delete Selected" toolbar
@@ -147,7 +160,7 @@
 
 ---
 
-## v3.0.0 (2026-04-08)
+## v1.2.0 (2026-04-08)
 
 ### New Feature: PaddleOCR Integration
 - **PaddleOCR (PP-StructureV3)** — replaced Tesseract.js as primary OCR engine for superior text extraction from scanned documents
@@ -161,7 +174,7 @@
 ### Technical Details
 - `ocr_service.py` — Python CLI service using PaddleOCR 3.x `predict()` API
 - `setup_paddleocr.js` — downloads Python Embeddable + installs PaddleOCR packages
-- PaddlePaddle pinned to v3.0.0 (v3.3.1 has OneDNN crash on Windows)
+- PaddlePaddle pinned to 3.0.0 (PaddlePaddle 3.3.1 has OneDNN crash on Windows)
 - `paddlex[ocr]` extra required for full OCR pipeline
 - Multer temp files renamed with correct extension (.pdf/.jpg) for PaddleOCR format detection
 - Self-validated document types skip generic OCR quality gate
@@ -170,7 +183,7 @@
 
 ---
 
-## v2.4.0 (2026-04-08)
+## v1.1.4 (2026-04-08)
 
 ### New Features
 - **Tradeville Portfolio parser** — Romania (Tradeville) - Fișă de Portofoliu (Capital Gains)
@@ -189,7 +202,7 @@
 
 ---
 
-## v2.3.0 (2026-04-08)
+## v1.1.3 (2026-04-08)
 
 ### Calculation Fixes (ANAF Compliance Audit)
 - US dividend tax: correctly computes credit fiscal difference for 2026+ (RO 16% - US 10% = 6% to pay)
@@ -223,7 +236,7 @@
 
 ---
 
-## v2.2.0 (2026-04-07)
+## v1.1.2 (2026-04-07)
 
 ### Upgrades
 - **Express 5.2.1** — upgraded from v4 (improved async error handling, Brotli encoding support)
@@ -241,7 +254,7 @@
 
 ---
 
-## v2.1.0 (2026-04-07)
+## v1.1.1 (2026-04-07)
 
 ### New Features
 - **Morgan Stanley Stock Plan Statement parser** — yearly statement with sales, RSU releases, dividends, IRS withholding
@@ -266,7 +279,7 @@
 
 ---
 
-## v2.0.0 (2026-03-29)
+## v1.1.0 (2026-03-29)
 
 ### Major
 - Renamed app from "ANAF Financial Dashboard" to "D212 Tax Helper"

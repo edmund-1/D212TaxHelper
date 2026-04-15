@@ -609,11 +609,15 @@ const App = (() => {
     // Romania taxes at divTaxRate. Credit fiscal = min(RO tax, US tax paid).
     // Difference to pay = max(0, RO tax - US credit).
     const usForeignTaxUSD = (yd.usDivTaxPaid !== undefined && yd.usDivTaxPaid !== '' ? parseFloat(yd.usDivTaxPaid) : null) ?? fd.dividends?.foreignTaxUSD ?? f1042sTaxUSD ?? inv.taxesWithheld ?? 0;
-    const usForeignTaxRON = fd.dividends?.foreignTaxRON || (usForeignTaxUSD * rate);
+    const usForeignTaxRON = fd.dividends?.foreignTaxRON || decl.dividends?.foreignTaxRON || (usForeignTaxUSD * rate);
     // US dividends: RO tax due minus credit for US tax already paid
+    // If D-212 has been imported (ANAF-validated), use its values directly
     const usDivTaxDueRON = dividendsRON * divTaxRate;
-    const usDivCreditRON = Math.min(usDivTaxDueRON, usForeignTaxRON);
-    const usDivTax = fd.dividends?.toPayRON ?? Math.max(0, usDivTaxDueRON - usDivCreditRON);
+    const hasAnafDecl = decl.anafXml || decl.anafFlatText;
+    const usDivCreditRON = hasAnafDecl ? (decl.dividends?.creditFiscalRON || 0) : Math.min(usDivTaxDueRON, usForeignTaxRON);
+    const usDivTax = hasAnafDecl
+      ? (decl.dividends?.difImpozitRON || 0)
+      : (fd.dividends?.toPayRON ?? Math.max(0, usDivTaxDueRON - usDivCreditRON));
     // Romania dividends: rate due but Romania broker withholds tax at source (credit fiscal covers it)
     const roDivTaxDue = dividendsRON_ro * divTaxRate;
     const roDivTaxNet = Math.max(0, roDivTaxDue - (roDivTaxWithheld || 0));
@@ -637,7 +641,16 @@ const App = (() => {
     const usGrossIncomeRON = capitalGainsTaxableRON + dividendsRON;
     const usNetIncomeRON = usNetGainsRON + dividendsRON;
 
-    const capitalGainsTaxRON = fd.capitalGains?.taxPaidRON || decl.capitalGains?.taxDueRON || (usNetGainsRON * capGainsTaxRate + roGainsTaxNet);
+    let capitalGainsTaxRON;
+    if (fd.capitalGains?.taxPaidRON) {
+      capitalGainsTaxRON = fd.capitalGains.taxPaidRON;
+    } else if (hasAnafDecl && decl.capitalGains?.difImpozitRON != null) {
+      capitalGainsTaxRON = decl.capitalGains.difImpozitRON;
+    } else if (decl.capitalGains?.taxDueRON) {
+      capitalGainsTaxRON = decl.capitalGains.taxDueRON;
+    } else {
+      capitalGainsTaxRON = usNetGainsRON * capGainsTaxRate + roGainsTaxNet;
+    }
     const interestTaxRate = (tr.roInterestRate != null ? tr.roInterestRate / 100 : (year >= 2026 ? 0.16 : 0.10));
     const interestTaxGross = interestIncomeRON * interestTaxRate;
     const interestTaxPaid = (yd.interestTaxPaid !== undefined && yd.interestTaxPaid !== '' ? parseFloat(yd.interestTaxPaid) : null) ?? adv.interestTax ?? 0;
@@ -751,8 +764,8 @@ const App = (() => {
       // Historical paid data
       usTotalPaid: usTotalPaid,
       usDivToPayRON: fd.dividends?.toPayRON ?? null,
-      usDivCreditRON: fd.dividends?.creditRON ?? 0,
-      usDivForeignTaxRON: fd.dividends?.foreignTaxRON ?? usForeignTaxRON,
+      usDivCreditRON: fd.dividends?.creditRON ?? usDivCreditRON,
+      usDivForeignTaxRON: fd.dividends?.foreignTaxRON ?? decl.dividends?.foreignTaxRON ?? usForeignTaxRON,
       usDivForeignTaxUSD: fd.dividends?.foreignTaxUSD ?? usForeignTaxUSD,
       // Gambling income
       gamblingIncome: gamblingIncomeTotal,
