@@ -256,6 +256,7 @@ function addMSTrades(sales, sourceFile) {
 /**
  * Recalculate all cost basis and BIK allocations across all years.
  * Uses FIFO: oldest vest lots / ESPP lots consumed first.
+ * ESPP purchases without assigned_year are excluded from the FIFO pool.
  */
 function recalculateAllocations(ledger) {
   // Gather all active entries
@@ -271,15 +272,29 @@ function recalculateAllocations(ledger) {
     .filter(e => e.type === 'sale' && !e.deleted)
     .sort((a, b) => a.sortKey - b.sortKey);
 
-  // Build ESPP lot pool: each ESPP purchase is a lot with shares + cost
-  const esppPool = esppPurchases.map(e => ({
-    id: e.id,
-    year: e.year,
-    shares: e.data.shares,
-    costPerShareUSD: e.data.shares > 0 ? e.data.accumulatedContributionsUSD / e.data.shares : 0,
-    totalCostUSD: e.data.accumulatedContributionsUSD || 0,
-    remaining: e.data.shares
-  }));
+  // Look up assigned_year from DB for each ESPP purchase
+  const dbEspp = db.getEsppPurchases();
+  const assignedYearMap = {};
+  for (const p of dbEspp) {
+    // Match by refNumber (most reliable) or by date+shares
+    if (p.refNumber) assignedYearMap[p.refNumber] = p._assignedYear;
+  }
+
+  // Build ESPP lot pool: ONLY include purchases that have been assigned to a year
+  const esppPool = [];
+  for (const e of esppPurchases) {
+    const refNum = e.data.refNumber || '';
+    const assignedYear = assignedYearMap[refNum];
+    if (assignedYear == null) continue; // Skip unassigned ESPP purchases
+    esppPool.push({
+      id: e.id,
+      year: assignedYear, // Use assigned year, not upload year
+      shares: e.data.shares,
+      costPerShareUSD: e.data.shares > 0 ? e.data.accumulatedContributionsUSD / e.data.shares : 0,
+      totalCostUSD: e.data.accumulatedContributionsUSD || 0,
+      remaining: e.data.shares
+    });
+  }
 
   // Build BIK pool: each vest entry has a BIK amount (RON) - no share count
   const bikPool = vests.map(e => ({
@@ -347,9 +362,12 @@ function recalculateAllocations(ledger) {
     }
   }
 
-  // Also track ESPP purchases per year
+  // Also track ESPP purchases per assigned year (only assigned ones)
   for (const purch of esppPurchases) {
-    const yr = purch.year;
+    const refNum = purch.data.refNumber || '';
+    const assignedYear = assignedYearMap[refNum];
+    if (assignedYear == null) continue; // Skip unassigned
+    const yr = assignedYear;
     if (!allocations[yr]) {
       allocations[yr] = {
         esppCostUSD: 0, esppSharesConsumed: 0, bikAllocatedRON: 0,
@@ -521,6 +539,16 @@ function migrateFromExisting(dataDir) {
   return migrated;
 }
 
+/**
+ * Reload the ledger, recalculate all allocations, and save.
+ * Used after ESPP year assignments change.
+ */
+function recalculate() {
+  const l = load();
+  recalculateAllocations(l);
+  save(l);
+}
+
 module.exports = {
   load,
   save,
@@ -528,6 +556,7 @@ module.exports = {
   addTrade,
   addMSTrades,
   recalculateAllocations,
+  recalculate,
   purgeBySourceFile,
   purgeVestsByYear,
   getAllocations,

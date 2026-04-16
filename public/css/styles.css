@@ -708,6 +708,50 @@ footer {
 /* ============ Declaratie Helper ============ */
 .declaratie-helper { border-left: 3px solid var(--accent); }
 
+/* ============ ESPP Assignment ============ */
+.espp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+.espp-toolbar.hidden { display: none; }
+.espp-select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.espp-assign-btn, .espp-unassign-btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+}
+.espp-assign-btn { background: var(--accent); color: #fff; }
+.espp-assign-btn:hover:not(:disabled) { opacity: 0.85; }
+.espp-assign-btn:disabled, .espp-unassign-btn:disabled { opacity: 0.5; cursor: default; }
+.espp-unassign-btn { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
+.espp-unassign-btn:hover:not(:disabled) { background: var(--border); }
+#espp-year-select {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+.espp-row-unassigned { opacity: 0.55; }
+.espp-unassigned { color: var(--text-muted); font-style: italic; font-size: 0.85em; }
+.espp-assigned-cell { white-space: nowrap; }
+
 /* ============ Input Year Banner ============ */
 .input-year-banner {
   background: var(--bg-secondary);

@@ -1023,6 +1023,41 @@ app.get('/api/trades', (req, res) => {
   }
 });
 
+// GET /api/espp-purchases - Get all ESPP purchases across all years with assignment info
+app.get('/api/espp-purchases', (req, res) => {
+  try {
+    res.json({ purchases: db.getEsppPurchases() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/espp-purchases/assign - Assign ESPP purchases to a fiscal year
+app.post('/api/espp-purchases/assign', (req, res) => {
+  try {
+    const { tradeIds, assignedYear } = req.body;
+    if (!Array.isArray(tradeIds) || tradeIds.length === 0) {
+      return res.status(400).json({ error: 'tradeIds must be a non-empty array' });
+    }
+    if (assignedYear !== null && (!Number.isInteger(assignedYear) || assignedYear < 2000 || assignedYear > 2100)) {
+      return res.status(400).json({ error: 'assignedYear must be an integer year or null to unassign' });
+    }
+    let updated;
+    if (assignedYear === null) {
+      updated = db.unassignTradeYear(tradeIds);
+    } else {
+      updated = db.assignTradeYear(tradeIds, assignedYear);
+    }
+    // Recalculate ledger allocations
+    ledger.recalculate();
+    log('INFO', 'ESPP year assignment', { tradeIds, assignedYear, updated });
+    res.json({ success: true, updated });
+  } catch (err) {
+    log('ERROR', 'ESPP assign failed', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/ledger/allocations - Get FIFO cost basis and BIK allocations
 app.get('/api/ledger/allocations', (req, res) => {
   try {

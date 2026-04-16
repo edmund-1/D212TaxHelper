@@ -1342,54 +1342,14 @@ const App = (() => {
   async function renderTradesTable() {
     const tbody = document.getElementById('trades-tbody');
     const tfoot = document.getElementById('trades-tfoot');
-    const esppTbody = document.getElementById('espp-tbody');
-    const esppTfoot = document.getElementById('espp-tfoot');
-    const esppCard = document.getElementById('espp-purchases-card');
     if (!tbody) return;
     try {
       const resp = await fetch(`/api/trades?year=${selectedYear}`);
       const data = await resp.json();
-      if (!data.trades || data.trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.noTradeConfirmations') + '</td></tr>';
-        tfoot.innerHTML = '';
-        if (esppCard) esppCard.style.display = 'none';
-        if (esppTbody) esppTbody.innerHTML = '';
-        if (esppTfoot) esppTfoot.innerHTML = '';
-        return;
-      }
-      const sales = data.trades.filter(t => t.transactionType !== 'purchase');
-      const purchases = data.trades.filter(t => t.transactionType === 'purchase');
+      const sales = (data.trades || []).filter(t => t.transactionType !== 'purchase');
 
-      // ESPP Purchases table
-      if (purchases.length > 0 && esppCard && esppTbody) {
-        esppCard.style.display = '';
-        esppTbody.innerHTML = purchases.map((t, i) => `<tr>
-          <td>${i + 1}</td>
-          <td>${esc(normalizeDate(t.saleDate || '-'))}</td>
-          <td>${esc(t.symbol || '-')}</td>
-          <td>${t.shares || '-'}</td>
-          <td>${t.pricePerShare ? t.pricePerShare.toFixed(4) : '-'}</td>
-          <td>${fmtUSD(t.marketValue || 0)}</td>
-          <td>${fmtUSD(t.esppGain || 0)}</td>
-          <td>${fmtUSD(t.accumulatedContributions || 0)}</td>
-        </tr>`).join('');
-        const totalMktVal = purchases.reduce((s, t) => s + (t.marketValue || 0), 0);
-        const totalGain = purchases.reduce((s, t) => s + (t.esppGain || 0), 0);
-        const totalContrib = purchases.reduce((s, t) => s + (t.accumulatedContributions || 0), 0);
-        const totalPurchShares = purchases.reduce((s, t) => s + (t.shares || 0), 0);
-        esppTfoot.innerHTML = `<tr>
-          <td colspan="3"><strong>${I18n.t('income.total')} (${purchases.length} ${I18n.t('misc.purchases') || 'purchases'})</strong></td>
-          <td><strong>${parseFloat(totalPurchShares.toFixed(6))}</strong></td>
-          <td></td>
-          <td><strong>${fmtUSD(totalMktVal)}</strong></td>
-          <td><strong>${fmtUSD(totalGain)}</strong></td>
-          <td><strong>${fmtUSD(totalContrib)}</strong></td>
-        </tr>`;
-      } else if (esppCard) {
-        esppCard.style.display = 'none';
-        if (esppTbody) esppTbody.innerHTML = '';
-        if (esppTfoot) esppTfoot.innerHTML = '';
-      }
+      // ESPP Purchases — rendered separately from all years
+      await renderEsppTable();
 
       // Sales table
       if (sales.length === 0) {
@@ -1420,6 +1380,162 @@ const App = (() => {
       }
     } catch {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.errorLoadingTrades') + '</td></tr>';
+    }
+  }
+
+  // ============ ESPP PURCHASES TABLE ============
+  async function renderEsppTable() {
+    const esppTbody = document.getElementById('espp-tbody');
+    const esppTfoot = document.getElementById('espp-tfoot');
+    const esppCard = document.getElementById('espp-purchases-card');
+    const toolbar = document.getElementById('espp-toolbar');
+    const selectAllCb = document.getElementById('espp-select-all');
+    const headerCb = document.getElementById('espp-header-cb');
+    const yearSelect = document.getElementById('espp-year-select');
+    const assignBtn = document.getElementById('espp-assign-btn');
+    const unassignBtn = document.getElementById('espp-unassign-btn');
+    if (!esppTbody || !esppCard) return;
+
+    try {
+      const resp = await fetch('/api/espp-purchases');
+      const data = await resp.json();
+      const purchases = data.purchases || [];
+
+      if (purchases.length === 0) {
+        esppCard.style.display = 'none';
+        esppTbody.innerHTML = '';
+        esppTfoot.innerHTML = '';
+        return;
+      }
+
+      esppCard.style.display = '';
+      toolbar.classList.remove('hidden');
+
+      // Populate year dropdown (current + nearby years)
+      const currentYr = selectedYear || new Date().getFullYear();
+      const years = [];
+      for (let y = currentYr - 5; y <= currentYr + 1; y++) years.push(y);
+      yearSelect.innerHTML = years.map(y =>
+        `<option value="${y}" ${y === currentYr ? 'selected' : ''}>${y}</option>`
+      ).join('');
+
+      // Render rows with checkboxes and assigned year
+      esppTbody.innerHTML = purchases.map((t, i) => {
+        const assignedLabel = t._assignedYear ? String(t._assignedYear) : `<span class="espp-unassigned">${I18n.t('espp.notAssigned')}</span>`;
+        const rowClass = t._assignedYear ? '' : 'espp-row-unassigned';
+        return `<tr class="${rowClass}" data-db-id="${t._dbId}">
+          <td><input type="checkbox" class="espp-row-cb" data-db-id="${t._dbId}"></td>
+          <td>${i + 1}</td>
+          <td>${esc(normalizeDate(t.saleDate || '-'))}</td>
+          <td>${esc(t.symbol || '-')}</td>
+          <td>${t.shares || '-'}</td>
+          <td>${t.pricePerShare ? t.pricePerShare.toFixed(4) : '-'}</td>
+          <td>${fmtUSD(t.marketValue || 0)}</td>
+          <td>${fmtUSD(t.esppGain || 0)}</td>
+          <td>${fmtUSD(t.accumulatedContributions || 0)}</td>
+          <td class="espp-assigned-cell">${assignedLabel}</td>
+        </tr>`;
+      }).join('');
+
+      // Totals (only assigned purchases)
+      const assigned = purchases.filter(t => t._assignedYear != null);
+      const totalMktVal = assigned.reduce((s, t) => s + (t.marketValue || 0), 0);
+      const totalGain = assigned.reduce((s, t) => s + (t.esppGain || 0), 0);
+      const totalContrib = assigned.reduce((s, t) => s + (t.accumulatedContributions || 0), 0);
+      const totalPurchShares = assigned.reduce((s, t) => s + (t.shares || 0), 0);
+      const unassignedCount = purchases.length - assigned.length;
+      const unassignedNote = unassignedCount > 0
+        ? ` — <span class="espp-unassigned">${unassignedCount} ${I18n.t('espp.notAssignedCount')}</span>` : '';
+      esppTfoot.innerHTML = `<tr>
+        <td></td>
+        <td colspan="3"><strong>${I18n.t('income.total')} (${assigned.length}/${purchases.length} ${I18n.t('espp.assigned') || 'assigned'})${unassignedNote}</strong></td>
+        <td><strong>${parseFloat(totalPurchShares.toFixed(6))}</strong></td>
+        <td></td>
+        <td><strong>${fmtUSD(totalMktVal)}</strong></td>
+        <td><strong>${fmtUSD(totalGain)}</strong></td>
+        <td><strong>${fmtUSD(totalContrib)}</strong></td>
+        <td></td>
+      </tr>`;
+
+      // Selection logic
+      function getSelectedIds() {
+        return [...esppTbody.querySelectorAll('.espp-row-cb:checked')].map(cb => Number(cb.dataset.dbId));
+      }
+      function updateToolbar() {
+        const selected = getSelectedIds();
+        assignBtn.disabled = selected.length === 0;
+        unassignBtn.disabled = selected.length === 0;
+      }
+
+      // Checkbox events
+      esppTbody.querySelectorAll('.espp-row-cb').forEach(cb => {
+        cb.addEventListener('change', updateToolbar);
+      });
+      const allCbs = () => esppTbody.querySelectorAll('.espp-row-cb');
+      const syncHeaderCb = () => {
+        const cbs = allCbs();
+        const allChecked = cbs.length > 0 && [...cbs].every(c => c.checked);
+        if (headerCb) headerCb.checked = allChecked;
+        if (selectAllCb) selectAllCb.checked = allChecked;
+      };
+      esppTbody.addEventListener('change', syncHeaderCb);
+
+      // Select all (both header checkbox and toolbar checkbox)
+      const toggleAll = (checked) => { allCbs().forEach(cb => { cb.checked = checked; }); updateToolbar(); };
+      if (headerCb) headerCb.onchange = () => { toggleAll(headerCb.checked); if (selectAllCb) selectAllCb.checked = headerCb.checked; };
+      if (selectAllCb) selectAllCb.onchange = () => { toggleAll(selectAllCb.checked); if (headerCb) headerCb.checked = selectAllCb.checked; };
+
+      // Assign button
+      assignBtn.onclick = async () => {
+        const ids = getSelectedIds();
+        if (ids.length === 0) return;
+        const yr = parseInt(yearSelect.value, 10);
+        assignBtn.disabled = true;
+        try {
+          const r = await fetch('/api/espp-purchases/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tradeIds: ids, assignedYear: yr })
+          });
+          const result = await r.json();
+          if (result.success) {
+            showToast(I18n.t('espp.assignSuccess', { count: result.updated, year: yr }), 'success');
+            invalidateComputeCache();
+            await renderEsppTable();
+            renderAll();
+          } else {
+            showToast(result.error, 'error');
+          }
+        } catch (err) { showToast(err.message, 'error'); }
+        assignBtn.disabled = false;
+      };
+
+      // Unassign button
+      unassignBtn.onclick = async () => {
+        const ids = getSelectedIds();
+        if (ids.length === 0) return;
+        unassignBtn.disabled = true;
+        try {
+          const r = await fetch('/api/espp-purchases/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tradeIds: ids, assignedYear: null })
+          });
+          const result = await r.json();
+          if (result.success) {
+            showToast(I18n.t('espp.unassignSuccess', { count: result.updated }), 'success');
+            invalidateComputeCache();
+            await renderEsppTable();
+            renderAll();
+          } else {
+            showToast(result.error, 'error');
+          }
+        } catch (err) { showToast(err.message, 'error'); }
+        unassignBtn.disabled = false;
+      };
+
+    } catch {
+      esppCard.style.display = 'none';
     }
   }
 

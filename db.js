@@ -91,6 +91,16 @@ function initSchema() {
 
     INSERT OR IGNORE INTO schema_version (version) VALUES (1);
   `);
+
+  // Migration v2: Add assigned_year column to trades (ESPP year assignment)
+  const currentVersion = _db.prepare('SELECT MAX(version) as v FROM schema_version').get().v || 1;
+  if (currentVersion < 2) {
+    const cols = _db.prepare("PRAGMA table_info(trades)").all().map(c => c.name);
+    if (!cols.includes('assigned_year')) {
+      _db.exec('ALTER TABLE trades ADD COLUMN assigned_year INTEGER DEFAULT NULL');
+    }
+    _db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (2)').run();
+  }
 }
 
 // ============ TRANSACTIONS ============
@@ -220,6 +230,48 @@ function deleteTradesExceptSource(source) {
 function clearTrades() {
   const db = getDb();
   db.prepare('DELETE FROM trades').run();
+}
+
+// ============ ESPP YEAR ASSIGNMENT ============
+
+function assignTradeYear(tradeIds, assignedYear) {
+  const db = getDb();
+  const stmt = db.prepare('UPDATE trades SET assigned_year = ? WHERE id = ?');
+  const run = db.transaction((ids, yr) => {
+    let updated = 0;
+    for (const id of ids) {
+      const result = stmt.run(yr, id);
+      updated += result.changes;
+    }
+    return updated;
+  });
+  return run(tradeIds, assignedYear);
+}
+
+function unassignTradeYear(tradeIds) {
+  const db = getDb();
+  const stmt = db.prepare('UPDATE trades SET assigned_year = NULL WHERE id = ?');
+  const run = db.transaction((ids) => {
+    let updated = 0;
+    for (const id of ids) {
+      const result = stmt.run(id);
+      updated += result.changes;
+    }
+    return updated;
+  });
+  return run(tradeIds);
+}
+
+function getEsppPurchases() {
+  const db = getDb();
+  return db.prepare(
+    "SELECT id, year, assigned_year, data FROM trades WHERE transaction_type = 'purchase' ORDER BY sale_date, id"
+  ).all().map(r => ({
+    ...JSON.parse(r.data),
+    _dbId: r.id,
+    _uploadYear: r.year,
+    _assignedYear: r.assigned_year
+  }));
 }
 
 // ============ STOCK AWARDS (replaces stock_awards.json) ============
@@ -492,6 +544,9 @@ module.exports = {
   deleteTradesBySource,
   deleteTradesExceptSource,
   clearTrades,
+  assignTradeYear,
+  unassignTradeYear,
+  getEsppPurchases,
   // Stock awards
   getAllStockAwards,
   addStockAward,
