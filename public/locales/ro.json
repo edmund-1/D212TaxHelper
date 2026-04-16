@@ -520,6 +520,15 @@
     "installing": "Se instalează actualizarea... Serverul va reporni automat.",
     "restarting": "Actualizare instalată. Se repornește serverul...",
     "success": "Actualizat cu succes la v{version}! Pagina se va reîncărca.",
-    "failed": "Actualizarea a eșuat: {error}"
-  }
+    "failed": "Actualizarea a eșuat: {error}"  },
+  "espp": {
+    "selectAll": "Selecteaz\u0103 tot",
+    "assign": "Asigneaz\u0103 la an",
+    "unassign": "Deasigneaz\u0103",
+    "assignedYear": "An asignat",
+    "notAssigned": "Neasignat",
+    "notAssignedCount": "neasignate",
+    "assigned": "asignate",
+    "assignSuccess": "{count} achizi\u021bie(\u021bii) ESPP asignat(e) la {year}",
+    "unassignSuccess": "{count} achizi\u021bie(\u021bii) ESPP deasignat(e)"  }
 }

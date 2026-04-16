@@ -177,10 +177,17 @@
 
       <div class="card" id="espp-purchases-card" style="display:none;">
         <h2 data-i18n="income.esppPurchases">US ESPP Stock Purchases</h2>
+        <div id="espp-toolbar" class="espp-toolbar hidden">
+          <label class="espp-select-all-label"><input type="checkbox" id="espp-select-all"> <span data-i18n="espp.selectAll">Select All</span></label>
+          <select id="espp-year-select" title="Assign to year"></select>
+          <button type="button" id="espp-assign-btn" class="btn-primary espp-assign-btn" data-i18n="espp.assign" disabled>Assign</button>
+          <button type="button" id="espp-unassign-btn" class="btn-secondary espp-unassign-btn" data-i18n="espp.unassign" disabled>Unassign</button>
+        </div>
         <div class="table-responsive">
           <table id="espp-table">
             <thead>
               <tr>
+                <th style="width:2rem;"><input type="checkbox" id="espp-header-cb" title="Select all"></th>
                 <th>#</th>
                 <th data-i18n="income.date">Date</th>
                 <th data-i18n="income.symbol">Symbol</th>
@@ -189,6 +196,7 @@
                 <th data-i18n="income.marketValue">Market Value (USD)</th>
                 <th data-i18n="income.esppGain">Gain (USD)</th>
                 <th data-i18n="income.contributions">Contributions (USD)</th>
+                <th data-i18n="espp.assignedYear">Assigned Year</th>
               </tr>
             </thead>
             <tbody id="espp-tbody"></tbody>

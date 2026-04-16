@@ -523,5 +523,16 @@
     "restarting": "Update installed. Restarting server...",
     "success": "Successfully updated to v{version}! Page will reload.",
     "failed": "Update failed: {error}"
+  },
+  "espp": {
+    "selectAll": "Select All",
+    "assign": "Assign to Year",
+    "unassign": "Unassign",
+    "assignedYear": "Assigned Year",
+    "notAssigned": "Not assigned",
+    "notAssignedCount": "unassigned",
+    "assigned": "assigned",
+    "assignSuccess": "{count} ESPP purchase(s) assigned to {year}",
+    "unassignSuccess": "{count} ESPP purchase(s) unassigned"
   }
 }
