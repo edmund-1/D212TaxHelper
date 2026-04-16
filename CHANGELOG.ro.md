@@ -10,6 +10,11 @@
 - **Eliminat apel API duplicat** — `/api/stock-withholding` era apelat de două ori la încărcarea paginii (în `loadAllData` și `render`); acum apelat o singură dată
 - **Încărcare inițială paralelă** — `loadAllData()` și `/api/version` acum apelate simultan în loc de secvențial
 
+### Verificare Automată Actualizări
+- **Notificare actualizare** — la pornire, aplicația verifică pe GitHub dacă există versiuni noi și afișează un banner care poate fi închis dacă este disponibilă o versiune mai nouă
+- **Link de descărcare** — banner-ul trimite direct la descărcarea ZIP portabilă cea mai recentă
+- **Închidere per versiune** — închiderea banner-ului reține versiunea în localStorage; nu va mai apărea până nu se publică o versiune mai nouă
+
 ### UX Upgrade PaddleOCR
 - **Progres per pachet** — `setup_paddleocr.js` instalează acum pachetele unul câte unul cu mesaje `[1/7] Instalare paddlepaddle==3.0.0 ...` în loc de o instalare silențioasă în bloc
 - **Fără blocare la 99%** — bara de progres pip dezactivată (`--progress-bar off`) în timpul upgrade-ului pentru a preveni afișarea înghețată
