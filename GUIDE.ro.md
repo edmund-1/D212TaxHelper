@@ -97,6 +97,7 @@ Aplicația rulează la **http://localhost:3000**.
 | **Sursa datelor** | Arată de unde provin datele (ANAF, BNR, Fidelity, XTB) |
 | **Contact** | Link email către autor |
 | **Repornire Server** | Repornește serverul Node.js (pagina se reîncarcă automat) |
+| **Banner actualizare** | Apare în partea de jos a paginii când o versiune mai nouă este disponibilă pe GitHub. Click pe **Descarcă** pentru a obține ultimul ZIP, sau închide (×) pentru a ascunde până la următoarea versiune. |
 | **↑ Sus** | Buton de derulare în sus (apare când derulezi în jos) |
 
 ---

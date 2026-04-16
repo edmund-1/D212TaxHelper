@@ -1059,6 +1059,53 @@ app.get('/api/version', (req, res) => {
   res.json({ version: pkg.version, name: pkg.name });
 });
 
+// GET /api/check-update - Check GitHub for latest release
+app.get('/api/check-update', async (req, res) => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    const currentVersion = pkg.version;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const ghRes = await fetch('https://api.github.com/repos/edmund-1/D212TaxHelper/releases/latest', {
+      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'D212TaxHelper' },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!ghRes.ok) {
+      return res.json({ updateAvailable: false, currentVersion, error: `GitHub API ${ghRes.status}` });
+    }
+    const release = await ghRes.json();
+    const latestVersion = (release.tag_name || '').replace(/^v/, '');
+    const updateAvailable = _isNewerVersion(currentVersion, latestVersion);
+    const downloadUrl = (release.assets || []).find(a => a.name.endsWith('.zip'))?.browser_download_url
+      || release.html_url;
+    res.json({
+      updateAvailable,
+      currentVersion,
+      latestVersion,
+      releaseUrl: release.html_url,
+      downloadUrl,
+      releaseName: release.name || `v${latestVersion}`,
+      publishedAt: release.published_at
+    });
+  } catch (err) {
+    log('WARN', 'Update check failed', { error: err.message });
+    res.json({ updateAvailable: false, error: err.message });
+  }
+});
+
+// Compare semver: returns true if latest > current
+function _isNewerVersion(current, latest) {
+  if (!current || !latest) return false;
+  const c = current.split('.').map(Number);
+  const l = latest.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((l[i] || 0) > (c[i] || 0)) return true;
+    if ((l[i] || 0) < (c[i] || 0)) return false;
+  }
+  return false;
+}
+
 // GET /api/changelog/:lang - Changelog content
 app.get('/api/changelog/:lang', (req, res) => {
   const lang = req.params.lang === 'ro' ? 'ro' : 'en';

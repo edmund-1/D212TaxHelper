@@ -181,6 +181,9 @@ const App = (() => {
       if (vEl) vEl.textContent = vData.version || '?';
     }
 
+    // Check for updates (non-blocking)
+    checkForUpdates();
+
     // Changelog modal
     const vLink = document.getElementById('app-version-link');
     const clModal = document.getElementById('changelog-modal');
@@ -2789,6 +2792,39 @@ const App = (() => {
     toast.textContent = msg;
     toast.className = `toast ${type}`;
     setTimeout(() => { toast.className = 'toast hidden'; }, 3000);
+  }
+
+  // ============ Update Checker ============
+  async function checkForUpdates() {
+    try {
+      const res = await fetch('/api/check-update');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.updateAvailable) return;
+
+      // Don't show if user dismissed this version
+      const dismissed = localStorage.getItem('update-dismissed-version');
+      if (dismissed === data.latestVersion) return;
+
+      const banner = document.getElementById('update-banner');
+      const textEl = document.getElementById('update-banner-text');
+      const linkEl = document.getElementById('update-banner-link');
+      const dismissBtn = document.getElementById('update-banner-dismiss');
+
+      textEl.textContent = I18n.t('update.available', {
+        current: data.currentVersion,
+        latest: data.latestVersion
+      });
+      linkEl.href = data.downloadUrl || data.releaseUrl;
+      linkEl.textContent = I18n.t('update.download');
+
+      banner.classList.remove('hidden');
+
+      dismissBtn.addEventListener('click', () => {
+        banner.classList.add('hidden');
+        localStorage.setItem('update-dismissed-version', data.latestVersion);
+      }, { once: true });
+    } catch { /* silently ignore network errors */ }
   }
 
   // Init on DOM ready

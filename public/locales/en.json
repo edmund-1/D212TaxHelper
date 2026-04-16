@@ -510,5 +510,9 @@
     "ch2CassBaseFormula": "= 6 × minimum gross salary ({sm} RON) = {base} RON",
     "ch2CassDue": "2. CASS due (row 1 × 10%)",
     "ch2Note": "Chapter II is for opting to pay CASS for the NEXT year. Fill only if you expect investment income."
+  },
+  "update": {
+    "available": "Update available: v{current} → v{latest}",
+    "download": "Download"
   }
 }

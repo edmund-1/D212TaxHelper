@@ -423,6 +423,52 @@ textarea.raw-text-box {
   border-color: var(--accent);
 }
 
+/* ============ Update Banner ============ */
+.update-banner {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  color: var(--text-primary);
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  animation: slideUp 0.4s ease;
+}
+.update-banner.hidden { display: none; }
+.update-banner-btn {
+  background: var(--accent);
+  color: #fff;
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.update-banner-btn:hover { opacity: 0.85; }
+.update-banner-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+}
+.update-banner-dismiss:hover { color: var(--text-primary); }
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(1rem); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
 /* ============ Toast ============ */
 .toast {
   position: fixed;

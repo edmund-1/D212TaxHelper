@@ -508,5 +508,9 @@
     "ch2CassBaseFormula": "= 6 × salariu minim brut ({sm} RON) = {base} RON",
     "ch2CassDue": "2. CASS datorat (rd.1 × 10%)",
     "ch2Note": "Capitolul II este pentru optarea la plata CASS pentru ANUL URMĂTOR. Se completează doar dacă estimați venituri din investiții."
+  },
+  "update": {
+    "available": "Actualizare disponibilă: v{current} → v{latest}",
+    "download": "Descarcă"
   }
 }

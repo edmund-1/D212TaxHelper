@@ -18,6 +18,7 @@ A local web application that helps Romanian tax residents calculate and prepare 
 - **Bilingual** — full Romanian and English interface
 - **Offline & private** — runs entirely on your computer, no data is sent anywhere
 - **Dark theme** — responsive design
+- **Auto-update checker** — notifies you when a new version is available on GitHub with a direct download link
 - **Portable version** — self-contained folder with embedded Node.js (no installation needed)
 
 ## Quick Start
