@@ -21,6 +21,7 @@ const PYTHON_PATHS = [
 
 let _paddleOcrAvailable = null; // cached detection result
 let _pythonSizeMB = null; // cached python dir size (computed once)
+let _upgradeInProgress = false; // true while PaddleOCR upgrade is running
 
 function findPython() {
   for (const p of PYTHON_PATHS) {
@@ -232,6 +233,8 @@ setImmediate(computePythonSizeMB);
 
 // GET /api/ocr-status - Return OCR engine availability
 app.get('/api/ocr-status', (req, res) => {
+  // Recompute python size live during upgrade so progress bar works
+  if (_upgradeInProgress) computePythonSizeMB();
   // If async detection hasn't completed yet, return "detecting" status
   if (_paddleOcrAvailable === null) {
     return res.json({
@@ -2712,6 +2715,7 @@ app.post('/api/ocr-upgrade', (req, res) => {
     return res.json({ success: false, error: 'PaddleOCR is already installed.' });
   }
   _paddleOcrAvailable = null; // reset again so post-install check is fresh
+  _upgradeInProgress = true;
   log('INFO', 'PaddleOCR upgrade requested — starting installation...');
   const { execFile: ef } = require('child_process');
   ef(process.execPath, [path.join(__dirname, 'setup_paddleocr.js'), '--target', __dirname], {
@@ -2720,6 +2724,7 @@ app.post('/api/ocr-upgrade', (req, res) => {
     maxBuffer: 50 * 1024 * 1024,
     windowsHide: true,
   }, (err, stdout, stderr) => {
+    _upgradeInProgress = false;
     if (err) {
       log('ERROR', 'PaddleOCR upgrade failed: ' + err.message);
       log('ERROR', stderr || stdout);
