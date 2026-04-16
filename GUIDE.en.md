@@ -97,7 +97,7 @@ The application runs at **http://localhost:3000**.
 | **Data source** | Shows where data comes from (ANAF, BNR, Fidelity, XTB) |
 | **Contact** | Email link to the author |
 | **Restart Server** | Restarts the Node.js server (page reloads automatically) |
-| **Update banner** | Appears at the bottom of the page when a newer version is available on GitHub. Click **Download** to get the latest ZIP, or dismiss (×) to hide it until the next release. |
+| **Update banner** | Appears at the bottom of the page when a newer version is available on GitHub. Click **Update** to download and install the new version directly from the app. Your data and documents are preserved. The banner reappears on every startup until you install the update. |
 | **↑ Top** | Scroll-to-top button (appears when you scroll down) |
 
 ---

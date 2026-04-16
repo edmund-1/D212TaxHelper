@@ -18,7 +18,7 @@ O aplicație web locală care ajută rezidenții fiscali din România să calcul
 - **Bilingv** — interfață completă în Română și Engleză
 - **Offline și privat** — rulează în totalitate pe calculatorul tău, nicio dată nu este trimisă nicăieri
 - **Temă întunecată** — design responsiv
-- **Verificare automată actualizări** — te notifică când o versiune nouă este disponibilă pe GitHub cu link direct de descărcare
+- **Verificare automată actualizări** — verifică pe GitHub la pornire dacă există versiuni noi; descarcă, instalează și repornește direct din aplicație, păstrând toate datele
 - **Versiune portabilă** — folder independent cu Node.js inclus (fără instalare)
 
 ## Pornire rapidă
