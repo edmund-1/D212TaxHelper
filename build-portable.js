@@ -176,7 +176,7 @@ async function build() {
   const npmPath = path.join(nodeDir, 'npm.cmd');
   const nodePath = path.join(nodeDir, 'node.exe');
   execSync(
-    `"${nodePath}" "${path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')}" install --omit=dev`,
+    `"${nodePath}" "${path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')}" install --omit=dev --loglevel=error`,
     { cwd: appDir, stdio: 'inherit', env: { ...process.env, PATH: nodeDir + ';' + process.env.PATH } }
   );
 
