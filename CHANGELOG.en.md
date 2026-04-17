@@ -20,6 +20,11 @@
 ### Self-Update Fixes
 - **ZIP extraction fix** — self-update now uses `tar` (handles long paths in node_modules) with PowerShell `Expand-Archive` as fallback, fixing "Failed to extract ZIP" errors on paths exceeding 260 characters
 - **Update progress bar & timer** — the installing step now shows a visible progress bar and elapsed time counter (M:SS) throughout the install and server restart phases
+- **EBUSY crash fix** — self-update no longer crashes with an HTML error page when Windows locks staging files during cleanup; all `fs.rmSync` calls in update handlers are now wrapped in try/catch (leftover files are cleaned on the next run)
+
+### Other
+- Updated GitHub repository from `edmund-1` to `edspat`
+- Added manual download installation instructions (no Git required)
 
 ---
 

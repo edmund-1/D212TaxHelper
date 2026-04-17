@@ -28,11 +28,31 @@ O aplicație web locală care ajută rezidenții fiscali din România să calcul
 - [Node.js](https://nodejs.org/) 18+ (recomandat: v22 LTS)
 - Un browser modern (Chrome, Edge, Firefox)
 
-### Instalare și rulare
+### Opțiunea A — Git Clone
 
 ```bash
 git clone https://github.com/edspat/D212TaxHelper.git
 cd D212TaxHelper
+npm install
+npm start
+```
+
+### Opțiunea B — Descărcare manuală (fără Git)
+
+1. Mergi la [ultima versiune](https://github.com/edspat/D212TaxHelper/releases/latest)
+2. Descarcă `D212TaxHelper-Portable-v*.zip`
+3. Extrage arhiva ZIP într-un folder oarecare
+4. Dublu-click pe `Start.bat` — browserul se deschide automat
+
+Atât — versiunea portabilă include Node.js, nu necesită instalare.
+
+### Opțiunea C — Sursă ZIP (necesită Node.js)
+
+1. Click pe butonul verde **Code** de pe [pagina repository-ului](https://github.com/edspat/D212TaxHelper) → **Download ZIP**
+2. Extrage arhiva ZIP într-un folder oarecare
+3. Deschide un terminal în folderul extras și rulează:
+
+```bash
 npm install
 npm start
 ```
