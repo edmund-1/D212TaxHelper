@@ -1,6 +1,6 @@
 # D212 Asistent Fiscal - Ghid de Utilizare
 
-**Versiune ghid:** 2.7 | **Versiune aplicație:** 1.5.0 | **Ultima actualizare:** 16.04.2026
+**Versiune ghid:** 2.8 | **Versiune aplicație:** 1.5.1 | **Ultima actualizare:** 17.04.2026
 
 ---
 
@@ -208,15 +208,17 @@ Defalcarea detaliată a calculului CASS:
 - Listează tipurile de venituri supuse CASS
 - Confirmă că CAS (pensie 25%) NU se aplică pentru venituri din investiții
 
-**Sistemul de paliere CASS (2025):**
+**Sistemul de paliere CASS pentru venituri din investiții (2025):**
+
+Conform instrucțiunilor D212 pct. 52.1.1–52.1.3, CASS pentru venituri din investiții este plafonat la **24SM** (3 paliere).
+Palierul 60SM se aplică doar activităților independente (PFA), nu veniturilor din investiții.
 
 | Palier | Interval venituri | Baza CASS | Suma CASS |
 |--------|-------------------|-----------|-----------|
 | <6 SM | < 24.300 RON | - | 0 |
 | 6-12 SM | 24.300 - 48.600 | 24.300 | 2.430 |
 | 12-24 SM | 48.600 - 97.200 | 48.600 | 4.860 |
-| 24-60 SM | 97.200 - 243.000 | 97.200 | 9.720 |
-| >60 SM | > 243.000 | 243.000 | 24.300 |
+| ≥24 SM | ≥ 97.200 | 97.200 | 9.720 |
 
 *SM = salariu minim brut (4.050 RON/lună în 2025)*
 
@@ -377,7 +379,7 @@ Sunt 4 scenarii pentru câștigurile de capital din vânzări prin brokerul SUA:
 | **Acțiuni gratuite (vesting <1 an)** | Impozabil = [Vânzare − Comision] × curs − Valoare impozitată ca salariu. Impozit = Impozabil × 10% |
 | **Acțiuni gratuite (vesting ≥1 an)** | Impozabil = [Vânzare − Comision] × curs. Impozit = Impozabil × 10% |
 
-*„Valoare impozitată ca salariu" = sumele menționate în fluturaș sub „stock withholding", „SPP gain BIK" sau „Stock award BIK".*
+*„Valoare impozitată ca salariu" = sumele menționate în fluturaș sub „Stock award BIK" și/sau „ESPP gain BIK". Acestea reprezintă venitul (FMV la vesting) deja impozitat ca salariu, și sunt deduse din câștigurile de capital ca bază de cost conform D212 Rd.2 „Cheltuieli deductibile". Notă: „Stock withholding" este impozitul plătit pe BIK (afișat ca „deja plătit"), nu baza de cost.*
 
 ### Venituri din dobânzi
 

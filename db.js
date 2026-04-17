@@ -101,6 +101,16 @@ function initSchema() {
     }
     _db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (2)').run();
   }
+
+  // Migration v3: Add assigned_year column to stock_awards (BIK year assignment)
+  const currentVersionV3 = _db.prepare('SELECT MAX(version) as v FROM schema_version').get().v || 1;
+  if (currentVersionV3 < 3) {
+    const saCols = _db.prepare("PRAGMA table_info(stock_awards)").all().map(c => c.name);
+    if (!saCols.includes('assigned_year')) {
+      _db.exec('ALTER TABLE stock_awards ADD COLUMN assigned_year INTEGER DEFAULT NULL');
+    }
+    _db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (3)').run();
+  }
 }
 
 // ============ TRANSACTIONS ============
@@ -214,6 +224,11 @@ function addTradeIfNotDuplicate(trade) {
     'SELECT id FROM trades WHERE sale_date = ? AND ABS(shares - ?) < 0.001 AND ABS(net_proceeds - ?) < 0.01'
   ).get(trade.saleDate || '', trade.shares || 0, trade.netProceeds || 0);
   if (existing) return false;
+  // Also dedup by shares + netProceeds + year (cross-source: trade date vs settlement date may differ by 1-3 days)
+  const crossDedup = db.prepare(
+    'SELECT id FROM trades WHERE year = ? AND ABS(shares - ?) < 0.001 AND ABS(net_proceeds - ?) < 0.01'
+  ).get(trade.year || 0, trade.shares || 0, trade.netProceeds || 0);
+  if (crossDedup) return false;
   return addTrade(trade);
 }
 
@@ -279,6 +294,8 @@ function getEsppPurchases() {
 function getAllStockAwards() {
   const db = getDb();
   return db.prepare('SELECT * FROM stock_awards ORDER BY sort_key, id').all().map(row => ({
+    _dbId: row.id,
+    _assignedYear: row.assigned_year,
     datastat: row.datastat,
     stock_award_bik: row.stock_award_bik,
     espp_gain_bik: row.espp_gain_bik,
@@ -312,6 +329,32 @@ function addStockAward(row) {
 function clearStockAwards() {
   const db = getDb();
   db.prepare('DELETE FROM stock_awards').run();
+}
+
+function assignStockAwardYear(ids, assignedYear) {
+  const db = getDb();
+  const stmt = db.prepare('UPDATE stock_awards SET assigned_year = ? WHERE id = ?');
+  const run = db.transaction((ids, yr) => {
+    let updated = 0;
+    for (const id of ids) {
+      updated += stmt.run(yr, id).changes;
+    }
+    return updated;
+  });
+  return run(ids, assignedYear);
+}
+
+function unassignStockAwardYear(ids) {
+  const db = getDb();
+  const stmt = db.prepare('UPDATE stock_awards SET assigned_year = NULL WHERE id = ?');
+  const run = db.transaction((ids) => {
+    let updated = 0;
+    for (const id of ids) {
+      updated += stmt.run(id).changes;
+    }
+    return updated;
+  });
+  return run(ids);
 }
 
 function computeStockAwardSortKey(dateStr) {
@@ -551,6 +594,8 @@ module.exports = {
   getAllStockAwards,
   addStockAward,
   clearStockAwards,
+  assignStockAwardYear,
+  unassignStockAwardYear,
   // Ledger
   loadLedger,
   saveLedger,

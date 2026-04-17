@@ -708,6 +708,36 @@ footer {
 /* ============ Declaratie Helper ============ */
 .declaratie-helper { border-left: 3px solid var(--accent); }
 
+/* ============ OCR Type Hint ============ */
+.ocr-type-hint {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+}
+.ocr-type-hint.hidden { display: none; }
+.ocr-type-hint-warn { background: rgba(255, 193, 7, 0.1); color: var(--warning); border: 1px solid rgba(255, 193, 7, 0.25); }
+.ocr-type-hint-ok { background: rgba(76, 175, 80, 0.1); color: var(--success); border: 1px solid rgba(76, 175, 80, 0.25); }
+
+/* ============ Upload File Status ============ */
+.upload-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+.upload-file-icon { flex-shrink: 0; width: 1.5em; text-align: center; }
+.upload-file-name { font-weight: 500; }
+.upload-file-result { margin-left: auto; color: var(--text-secondary); font-size: 0.8rem; }
+.upload-file-pending { opacity: 0.5; }
+.upload-file-processing { opacity: 1; background: var(--bg-secondary); }
+.upload-file-success { opacity: 1; }
+.upload-file-warning .upload-file-result { color: var(--warning); }
+.upload-file-error .upload-file-result { color: var(--danger); }
+
 /* ============ ESPP Assignment ============ */
 .espp-toolbar {
   display: flex;
@@ -749,7 +779,17 @@ footer {
   font-size: 0.85rem;
 }
 .espp-row-unassigned { opacity: 0.55; }
+.espp-row-assigned { opacity: 0.65; background: rgba(76, 175, 80, 0.05); }
 .espp-unassigned { color: var(--text-muted); font-style: italic; font-size: 0.85em; }
+.espp-assigned-badge {
+  display: inline-block;
+  background: rgba(76, 175, 80, 0.15);
+  color: var(--success);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
 .espp-assigned-cell { white-space: nowrap; }
 
 /* ============ Input Year Banner ============ */

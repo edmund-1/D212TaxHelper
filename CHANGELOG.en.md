@@ -1,5 +1,24 @@
 # D212 Tax Helper - Changelog
 
+## v1.5.1 (2026-04-17)
+
+### ANAF D212 Compliance Fixes (deep audit against [Instrucțiuni D212 2736/2025](https://static.anaf.ro/static/10/Anaf/formulare/Instructiuni_D212_2736_2025.pdf))
+
+- **CRITICAL: BIK cost basis** — `salaryTaxedRON` (deducted from capital gains as cost basis) now correctly uses `stock_award_bik + espp_gain_bik` (the income amount already taxed as salary) instead of `stock_withholding` (the tax paid on the BIK). Per D212 Section 2 Rd.2 "Cheltuieli deductibile", the **cost basis** (FMV at vesting for RSU) must be deducted, not the tax amount. Previously, capital gains were overstated by the difference between BIK income and withholding tax.
+- **CRITICAL: CASS 60SM tier** — investment income CASS is now correctly capped at **24SM** (3-tier: 6SM / 12SM / 24SM) per D212 pct. 52.1.1–52.1.3. The 60SM tier applies **only** to independent activities (pct. 49.1.2.1). Previously, investment income above 243,000 RON would compute CASS at 24,300 RON instead of the correct 9,720 RON (a 149% overcharge).
+- **CRITICAL: CASS base components** — capital gains, rental, and royalty income no longer subtract tax withheld for CASS threshold calculation. Per D212 pct. 51, only dividends and interest use net-of-tax amounts ("diminuate cu impozitul reținut"). Capital gains use "câștigul net" (gains minus losses, not gains minus tax).
+- **BUG FIX: dividendsRON fallback** — when only Form 1042-S data exists (USD-only), `dividendsRON` is now auto-computed as `dividendsUSD × exchangeRate`. Previously, dividend tax was calculated as zero when no RON value was available.
+- **BUG FIX: other income in CASS** — "other income" (`alte surse`) is now included in the CASS threshold calculation per D212 pct. 50.1 lit. f) and pct. 51.
+
+### ESPP Year Assignment
+- **Assign ESPP purchases to fiscal years** — ESPP stock purchases can now be assigned to specific fiscal years for BIK deduction and cost basis allocation. Unassigned purchases are excluded from tax calculations.
+- **Bulk select/assign** — select multiple stock award entries and assign/unassign them to a year with one click
+
+### Build
+- Suppressed prebuild-install deprecation warning during portable build
+
+---
+
 ## v1.5.0 (2026-04-16)
 
 ### Performance

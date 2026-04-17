@@ -1,5 +1,24 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v1.5.1 (2026-04-17)
+
+### Corecturi Conformitate ANAF D212 (audit complet conform [Instrucțiuni D212 2736/2025](https://static.anaf.ro/static/10/Anaf/formulare/Instructiuni_D212_2736_2025.pdf))
+
+- **CRITIC: Bază de cost BIK** — `salaryTaxedRON` (dedus din câștigurile de capital ca bază de cost) folosește acum corect `stock_award_bik + espp_gain_bik` (venitul deja impozitat ca salariu) în loc de `stock_withholding` (impozitul plătit pe BIK). Conform D212 Secțiunea 2 Rd.2 „Cheltuieli deductibile", **baza de cost** (FMV la vesting pentru RSU) trebuie dedusă, nu suma impozitului. Anterior, câștigurile de capital erau supraevaluate cu diferența dintre venitul BIK și impozitul reținut.
+- **CRITIC: Palier CASS 60SM** — CASS pentru venituri din investiții este acum corect plafonat la **24SM** (3 paliere: 6SM / 12SM / 24SM) conform D212 pct. 52.1.1–52.1.3. Palierul 60SM se aplică **doar** activităților independente (pct. 49.1.2.1). Anterior, veniturile din investiții peste 243.000 RON calculau CASS la 24.300 RON în loc de 9.720 RON (suprataxare de 149%).
+- **CRITIC: Componente bază CASS** — câștigurile de capital, veniturile din chirii și redevențe nu mai scad impozitul reținut pentru calculul pragului CASS. Conform D212 pct. 51, doar dividendele și dobânzile folosesc sumele nete de impozit („diminuate cu impozitul reținut"). Câștigurile de capital folosesc „câștigul net" (câștiguri minus pierderi, nu câștiguri minus impozit).
+- **CORECȚIE: Fallback dividendeRON** — când există doar date din Formularul 1042-S (doar USD), `dividendeRON` se calculează automat ca `dividendeUSD × cursDeSchimb`. Anterior, impozitul pe dividende era calculat ca zero când nu exista o valoare în RON.
+- **CORECȚIE: Alte venituri în CASS** — „alte venituri" (`alte surse`) sunt acum incluse în calculul pragului CASS conform D212 pct. 50.1 lit. f) și pct. 51.
+
+### Alocare ESPP pe An
+- **Alocarea achizițiilor ESPP pe ani fiscali** — achizițiile de acțiuni ESPP pot fi acum alocate pe ani fiscali specifici pentru deducerea BIK și alocarea bazei de cost. Achizițiile nealocate sunt excluse din calculele fiscale.
+- **Selectare/alocare în bloc** — selectează mai multe intrări stock award și alocă-le/dezalocă-le pe un an cu un singur click
+
+### Build
+- Suprimat avertismentul de depreciere prebuild-install în build-ul portabil
+
+---
+
 ## v1.5.0 (2026-04-16)
 
 ### Performanță
