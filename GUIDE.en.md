@@ -59,14 +59,19 @@ This application is specifically designed for:
 
 ### Starting the application
 
-**Option A — From source:**
+**Option A — Portable version (recommended):**
+1. Download the latest `D212TaxHelper-Portable-v*.zip` from [Releases](https://github.com/edspat/D212TaxHelper/releases/latest)
+2. Extract the ZIP to any folder
+3. Double-click `Start.bat`. The browser opens automatically.
+
+**Option B — From source (requires Node.js):**
 ```bash
 cd D212TaxHelper
 npm install          # first time only
 node server.js
 ```
 
-**Option B — Portable version:**
+**Option C — Portable version (already installed):**
 Double-click `Start.bat`. The browser opens automatically.
 
 The application runs at **http://localhost:3000**.

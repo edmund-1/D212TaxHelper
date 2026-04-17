@@ -59,14 +59,19 @@ Aplicația este concepută special pentru:
 
 ### Pornirea aplicației
 
-**Opțiunea A — Din sursă:**
+**Opțiunea A — Versiune portabilă (recomandat):**
+1. Descarcă ultimul `D212TaxHelper-Portable-v*.zip` de pe [Releases](https://github.com/edspat/D212TaxHelper/releases/latest)
+2. Extrage arhiva ZIP într-un folder oarecare
+3. Dublu-click pe `Start.bat`. Browserul se deschide automat.
+
+**Opțiunea B — Din sursă (necesită Node.js):**
 ```bash
 cd D212TaxHelper
 npm install          # doar prima dată
 node server.js
 ```
 
-**Opțiunea B — Versiune portabilă:**
+**Opțiunea C — Versiune portabilă (deja instalată):**
 Dublu-click pe `Start.bat`. Browserul se deschide automat.
 
 Aplicația rulează la **http://localhost:3000**.
