@@ -1,6 +1,6 @@
 # D212 Tax Helper - User Guide
 
-**Guide version:** 2.7 | **App version:** 1.5.0 | **Last updated:** 2026-04-16
+**Guide version:** 2.8 | **App version:** 1.5.1 | **Last updated:** 2026-04-17
 
 ---
 
@@ -210,15 +210,17 @@ Detailed breakdown of the CASS calculation:
 - Lists which income types are subject to CASS
 - Confirms CAS (pension 25%) does NOT apply to investment income
 
-**CASS Tier System (2025):**
+**CASS Tier System for Investment Income (2025):**
+
+Per D212 instructions pct. 52.1.1–52.1.3, investment income CASS is capped at **24SM** (3 tiers).
+The 60SM tier applies only to independent activities (PFA), not investment income.
 
 | Tier | Income Range | CASS Base | CASS Amount |
 |------|-------------|-----------|-------------|
 | <6 SM | < 24,300 RON | - | 0 |
 | 6-12 SM | 24,300 - 48,600 | 24,300 | 2,430 |
 | 12-24 SM | 48,600 - 97,200 | 48,600 | 4,860 |
-| 24-60 SM | 97,200 - 243,000 | 97,200 | 9,720 |
-| >60 SM | > 243,000 | 243,000 | 24,300 |
+| ≥24 SM | ≥ 97,200 | 97,200 | 9,720 |
 
 *SM = minimum gross salary (4,050 RON/month in 2025)*
 
@@ -383,7 +385,7 @@ There are 4 scenarios for capital gains from US broker sales:
 | **Stock award (vesting <1yr)** | Taxable = [Sale − Fees] × rate − Amount taxed as salary. Tax = Taxable × 10% |
 | **Stock award (vesting ≥1yr)** | Taxable = [Sale − Fees] × rate. Tax = Taxable × 10% |
 
-*"Amount taxed as salary" = values recorded on your payslip as "stock withholding", "SPP gain BIK", or "Stock award BIK".*
+*"Amount taxed as salary" = values recorded on your payslip as "Stock award BIK" and/or "ESPP gain BIK". These represent the income (FMV at vesting) already taxed as salary, and are deducted from capital gains as cost basis per D212 Rd.2 "Cheltuieli deductibile". Note: "Stock withholding" is the tax paid on the BIK (shown as "already paid"), not the cost basis.*
 
 ### Interest Income
 

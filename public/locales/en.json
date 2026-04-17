@@ -265,7 +265,7 @@
     "typeXtbDividends": "Romania (XTB) - Dividends & Interest Report",
     "typeXtbPortfolio": "Romania (XTB) - Portfolio Statement (Capital Gains)",
     "typeTradevillePortfolio": "Romania (Tradeville) - Portfolio Statement (Capital Gains)",
-    "typeFidelityStatement": "US (Fidelity) - Stock Plan Statement (Monthly)",
+    "typeFidelityStatement": "US (Fidelity) - Stock Plan Statement (Periodic)",
     "typeMSStatement": "US (Morgan Stanley) - Stock Plan Statement (Yearly)",
     "file": "PDF or Image File",
     "chooseFiles": "Choose Files",
@@ -279,7 +279,11 @@
     "ocrManualHint": "Please enter the data manually in the Add Data tab, or upload the text-based PDF version from ANAF.",
     "ocrTradevilleHint": "OCR could not extract table data from this document. The Tradeville Portfolio Statement uses a complex table format that OCR cannot parse reliably. Please enter the data manually in the Add Data tab \u2192 'Romania Broker Capital Gains (per country)'.",
     "ocrFidelityStatementHint": "This PDF contains complex multi-column tables that could not be parsed with the current OCR engine. For best results with Fidelity Stock Plan Statements, we recommend upgrading to the Full version (PaddleOCR) which has superior table extraction. Go to Settings \u2192 Upgrade to Full.",
-    "processing": "Processing... OCR on images may take a moment.",
+    "ocrFidelityStatementParseFailed": "Could not extract data from this Fidelity Stock Plan Statement. The document format may not be supported. Please enter the data manually in the Add Data tab.",
+    "ocrFidelityStatementEmpty": "This is an initial Fidelity statement with no account activity (Beginning/Ending Account Value show dashes). This is normal for the first statement — there is no data to import.",    "ocrFidelityStatementNoActivity": "This Fidelity statement has no MSFT stock activity (no sales, vests, dividends, or ESPP purchases). This is normal for months with no transactions \u2014 you can skip this file.",    "processing": "Processing... OCR on images may take up to a few minutes.",
+    "elapsed": "Elapsed",
+    "ocrTypeHint": "\u26a0 This document type may require OCR processing. Scanned PDFs or those with complex tables take longer to process.",
+    "textTypeHint": "\u2713 This document type uses direct text extraction (fast).",
     "ocrEnginePaddle": "OCR Engine: PaddleOCR (PP-StructureV3)",
     "ocrEngineTesseract": "OCR Engine: Tesseract.js (Lite)",
     "ocrUpgradeBtn": "Upgrade to Full",
@@ -383,6 +387,7 @@
     "purchases": "purchases",
     "esppGainTooltip": "ESPP gain (discount)",
     "esppConsumedTooltip": "ESPP cost deducted (FIFO)",
+    "costBasisTooltip": "ESPP contributions deducted (actual amount paid for shares)",
     "bikBreakdownTooltip": "Stock award BIK from imported documents, allocated via FIFO to sales in this year",
     "taxableAfterBik": "Taxable after BIK",
     "editingBanner": "Editing data for fiscal year",
@@ -534,5 +539,9 @@
     "assigned": "assigned",
     "assignSuccess": "{count} ESPP purchase(s) assigned to {year}",
     "unassignSuccess": "{count} ESPP purchase(s) unassigned"
+  },
+  "bik": {
+    "assignSuccess": "{count} stock award(s) assigned to {year}",
+    "unassignSuccess": "{count} stock award(s) unassigned"
   }
 }

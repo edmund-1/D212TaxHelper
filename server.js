@@ -188,9 +188,9 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '1h',
+  maxAge: 0,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.json')) {
+    if (filePath.endsWith('.json') || filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache');
     }
   }
@@ -552,8 +552,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       fs.copyFileSync(req.file.path, paddleFilePath);
     }
 
-    // Types that benefit from PaddleOCR table extraction
-    const TABLE_TYPES = ['tradeville_portfolio', 'investment', 'declaratie', 'ms_statement'];
+    // Types that benefit from PaddleOCR table extraction (scanned PDFs with complex tables)
+    const TABLE_TYPES = ['tradeville_portfolio', 'declaratie', 'ms_statement'];
     const preferPaddleOcr = TABLE_TYPES.includes(type);
     const paddleStatus = checkPaddleOcrAvailable();
 
@@ -829,14 +829,41 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     if (type === 'fidelity_statement') {
       const parsed = parseFidelityStatement(text, parsedYear);
 
-      // Validate: check if MSFT data was found
-      if (parsed.sales.length === 0 && parsed.vests.length === 0 && parsed.dividends.length === 0 && parsed.esppPurchases.length === 0 && parsed.dividendsYTD === 0) {
+      // Check for empty/initial statement (Beginning/Ending Account Value are dashes)
+      const isEmptyStatement = /(?:Beginning|Ending)\s+Account\s+Value\s*\*{0,2}\s*-\s*-/i.test(text)
+        && parsed.sales.length === 0 && parsed.vests.length === 0 && parsed.esppPurchases.length === 0;
+
+      if (isEmptyStatement) {
         return res.json({
           success: false,
           ocrLowQuality: true,
           year: parsedYear,
           type,
-          messageKey: 'import.ocrFidelityStatementHint'
+          messageKey: 'import.ocrFidelityStatementEmpty'
+        });
+      }
+
+      // Validate: check if MSFT data was found
+      if (parsed.sales.length === 0 && parsed.vests.length === 0 && parsed.dividends.length === 0 && parsed.esppPurchases.length === 0 && parsed.dividendsYTD === 0) {
+        // Check if it's a valid statement with no MSFT activity (vs. unparseable)
+        const hasValidPeriod = parsed.period && parsed.period.length > 5;
+        const hasAccountValue = /Stock Plan Account Value|Account Value/i.test(text);
+        if (hasValidPeriod || hasAccountValue) {
+          return res.json({
+            success: false,
+            ocrLowQuality: true,
+            year: parsedYear,
+            type,
+            messageKey: 'import.ocrFidelityStatementNoActivity'
+          });
+        }
+        const hasPaddleOcr = checkPaddleOcrAvailable().available;
+        return res.json({
+          success: false,
+          ocrLowQuality: true,
+          year: parsedYear,
+          type,
+          messageKey: hasPaddleOcr ? 'import.ocrFidelityStatementParseFailed' : 'import.ocrFidelityStatementHint'
         });
       }
 
@@ -1009,6 +1036,40 @@ app.get('/api/stock-withholding', (req, res) => {
   }
 });
 
+// GET /api/stock-awards - Get all stock awards with assignment info
+app.get('/api/stock-awards', (req, res) => {
+  try {
+    res.json({ awards: db.getAllStockAwards() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/stock-awards/assign - Assign stock awards to a fiscal year
+app.post('/api/stock-awards/assign', (req, res) => {
+  try {
+    const { ids, assignedYear } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids must be a non-empty array' });
+    }
+    if (assignedYear !== null && (!Number.isInteger(assignedYear) || assignedYear < 2000 || assignedYear > 2100)) {
+      return res.status(400).json({ error: 'assignedYear must be an integer year or null to unassign' });
+    }
+    let updated;
+    if (assignedYear === null) {
+      updated = db.unassignStockAwardYear(ids);
+    } else {
+      updated = db.assignStockAwardYear(ids, assignedYear);
+    }
+    ledger.recalculate();
+    log('INFO', 'Stock award year assignment', { ids, assignedYear, updated });
+    res.json({ success: true, updated });
+  } catch (err) {
+    log('ERROR', 'Stock award assign failed', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/trades - Get all Fidelity trade confirmations
 app.get('/api/trades', (req, res) => {
   try {
@@ -1019,41 +1080,6 @@ app.get('/api/trades', (req, res) => {
     const totalShares = trades.reduce((s, t) => s + (t.shares || 0), 0);
     res.json({ trades, totalProceeds, totalNet, totalShares, count: trades.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/espp-purchases - Get all ESPP purchases across all years with assignment info
-app.get('/api/espp-purchases', (req, res) => {
-  try {
-    res.json({ purchases: db.getEsppPurchases() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/espp-purchases/assign - Assign ESPP purchases to a fiscal year
-app.post('/api/espp-purchases/assign', (req, res) => {
-  try {
-    const { tradeIds, assignedYear } = req.body;
-    if (!Array.isArray(tradeIds) || tradeIds.length === 0) {
-      return res.status(400).json({ error: 'tradeIds must be a non-empty array' });
-    }
-    if (assignedYear !== null && (!Number.isInteger(assignedYear) || assignedYear < 2000 || assignedYear > 2100)) {
-      return res.status(400).json({ error: 'assignedYear must be an integer year or null to unassign' });
-    }
-    let updated;
-    if (assignedYear === null) {
-      updated = db.unassignTradeYear(tradeIds);
-    } else {
-      updated = db.assignTradeYear(tradeIds, assignedYear);
-    }
-    // Recalculate ledger allocations
-    ledger.recalculate();
-    log('INFO', 'ESPP year assignment', { tradeIds, assignedYear, updated });
-    res.json({ success: true, updated });
-  } catch (err) {
-    log('ERROR', 'ESPP assign failed', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -1360,15 +1386,16 @@ app.get('/api/tax-rates', (req, res) => {
       roCapitalGainsShort: { rate: 0.03, label: 'Romania Stock Sales <1yr (3%)' },
     },
     // CASS tiered thresholds 2025 (salariu minim brut 4,050 RON)
+    // Investment income: max 24SM cap (D212 pct. 52.1.1-52.1.3)
+    // 60SM cap applies only to independent activities (PFA)
     cassInfo: {
       minSalary2025: 4050,
-      note: 'CAS (pension 25%) does NOT apply for investment income. CASS uses tiered brackets.',
+      note: 'CAS (pension 25%) does NOT apply for investment income. CASS uses tiered brackets. Investment income capped at 24SM.',
       tiers: [
         { label: '<6SM (<24,300)', cass: 0 },
         { label: '6-12SM (24,300-48,600)', cass: 2430 },
         { label: '12-24SM (48,600-97,200)', cass: 4860 },
-        { label: '24-60SM (97,200-243,000)', cass: 9720 },
-        { label: '>60SM (>243,000)', cass: 24300 },
+        { label: '≥24SM (≥97,200)', cass: 9720 },
       ]
     },
     // BNR exchange rates (annual averages - Serii anuale, valori medii)

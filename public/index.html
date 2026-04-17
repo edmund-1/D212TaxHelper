@@ -138,14 +138,22 @@
       <div class="card">
         <h2 data-i18n="income.stockWithholding">Stock Withholding Deductions</h2>
         <p class="subtitle" data-i18n="income.stockUploadHint">Upload your Stock Award Document in the Import Document tab to populate this table.</p>
+        <div id="bik-toolbar" class="espp-toolbar hidden">
+          <label class="espp-select-all-label"><input type="checkbox" id="bik-select-all"> <span data-i18n="espp.selectAll">Select All</span></label>
+          <select id="bik-year-select" title="Assign to year"></select>
+          <button type="button" id="bik-assign-btn" class="btn-primary espp-assign-btn" data-i18n="espp.assign" disabled>Assign</button>
+          <button type="button" id="bik-unassign-btn" class="btn-secondary espp-unassign-btn" data-i18n="espp.unassign" disabled>Unassign</button>
+        </div>
         <div class="table-responsive">
           <table id="withholding-table">
             <thead>
               <tr>
+                <th style="width:2rem;"><input type="checkbox" id="bik-header-cb" title="Select all"></th>
                 <th>#</th>
                 <th data-i18n="income.date">Date</th>
                 <th data-i18n="income.bikRON">BIK (RON)</th>
                 <th data-i18n="income.whRON">Withholding (RON)</th>
+                <th data-i18n="espp.assignedYear">Assigned Year</th>
               </tr>
             </thead>
             <tbody id="withholding-tbody"></tbody>
@@ -177,17 +185,10 @@
 
       <div class="card" id="espp-purchases-card" style="display:none;">
         <h2 data-i18n="income.esppPurchases">US ESPP Stock Purchases</h2>
-        <div id="espp-toolbar" class="espp-toolbar hidden">
-          <label class="espp-select-all-label"><input type="checkbox" id="espp-select-all"> <span data-i18n="espp.selectAll">Select All</span></label>
-          <select id="espp-year-select" title="Assign to year"></select>
-          <button type="button" id="espp-assign-btn" class="btn-primary espp-assign-btn" data-i18n="espp.assign" disabled>Assign</button>
-          <button type="button" id="espp-unassign-btn" class="btn-secondary espp-unassign-btn" data-i18n="espp.unassign" disabled>Unassign</button>
-        </div>
         <div class="table-responsive">
           <table id="espp-table">
             <thead>
               <tr>
-                <th style="width:2rem;"><input type="checkbox" id="espp-header-cb" title="Select all"></th>
                 <th>#</th>
                 <th data-i18n="income.date">Date</th>
                 <th data-i18n="income.symbol">Symbol</th>
@@ -196,7 +197,6 @@
                 <th data-i18n="income.marketValue">Market Value (USD)</th>
                 <th data-i18n="income.esppGain">Gain (USD)</th>
                 <th data-i18n="income.contributions">Contributions (USD)</th>
-                <th data-i18n="espp.assignedYear">Assigned Year</th>
               </tr>
             </thead>
             <tbody id="espp-tbody"></tbody>
@@ -617,18 +617,19 @@
               <label data-i18n="import.type">Document Type</label>
               <select id="upload-type" name="type" required>
                 <option value="" disabled selected data-i18n="import.selectType">-- Select Document Type --</option>
-                <option value="trade_confirmation" data-i18n="import.typeTradeConfirmation">Fidelity Trade Confirmation (Sale / Purchase)</option>
-                <option value="investment" data-i18n="import.typeInvestment">Fidelity Investment Report</option>
-                <option value="fidelity_statement" data-i18n="import.typeFidelityStatement">Fidelity Stock Plan Statement (Monthly)</option>
-                <option value="ms_statement" data-i18n="import.typeMSStatement">Morgan Stanley Statement</option>
-                <option value="form_1042s" data-i18n="import.typeForm1042S">Tax Form - 1042-S</option>
-                <option value="xtb_dividends" data-i18n="import.typeXtbDividends">XTB Dividends Report</option>
-                <option value="xtb_portfolio" data-i18n="import.typeXtbPortfolio">XTB Portfolio</option>
-                <option value="tradeville_portfolio" data-i18n="import.typeTradevillePortfolio">Tradeville Portfolio</option>
-                <option value="declaratie" data-i18n="import.typeDeclaratie">Tax Declaration D-212</option>
-                <option value="adeverinta" data-i18n="import.typeAdeverinta">Income Certificate</option>
-                <option value="stock_award" data-i18n="import.typeStockAward">Stock Award Document</option>
+                <option value="adeverinta" data-i18n="import.typeAdeverinta">ANAF - Income Certificate (Adeverinta Venit)</option>
+                <option value="declaratie" data-i18n="import.typeDeclaratie">ANAF - Tax Declaration D-212 (Declaratie Unica)</option>
+                <option value="stock_award" data-i18n="import.typeStockAward">MSFT - Stock Award Document</option>
+                <option value="tradeville_portfolio" data-i18n="import.typeTradevillePortfolio">Romania (Tradeville) - Portfolio Statement (Capital Gains)</option>
+                <option value="xtb_portfolio" data-i18n="import.typeXtbPortfolio">Romania (XTB) - Portfolio Statement (Capital Gains)</option>
+                <option value="xtb_dividends" data-i18n="import.typeXtbDividends">Romania (XTB) - Dividends & Interest Report</option>
+                <option value="trade_confirmation" data-i18n="import.typeTradeConfirmation">US (Fidelity) - Trade Confirmation (Sale / Purchase)</option>
+                <option value="fidelity_statement" data-i18n="import.typeFidelityStatement">US (Fidelity) - Stock Plan Statement (Monthly)</option>
+                <option value="investment" data-i18n="import.typeInvestment">US (Fidelity) - Investment Report (Yearly)</option>
+                <option value="ms_statement" data-i18n="import.typeMSStatement">US (Morgan Stanley) - Stock Plan Statement (Yearly)</option>
+                <option value="form_1042s" data-i18n="import.typeForm1042S">Tax Form - 1042-S (US Withholding)</option>
               </select>
+              <div id="ocr-type-hint" class="ocr-type-hint hidden"></div>
             </div>
           </div>
           <div class="form-row">

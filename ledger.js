@@ -272,38 +272,41 @@ function recalculateAllocations(ledger) {
     .filter(e => e.type === 'sale' && !e.deleted)
     .sort((a, b) => a.sortKey - b.sortKey);
 
-  // Look up assigned_year from DB for each ESPP purchase
-  const dbEspp = db.getEsppPurchases();
-  const assignedYearMap = {};
-  for (const p of dbEspp) {
-    // Match by refNumber (most reliable) or by date+shares
-    if (p.refNumber) assignedYearMap[p.refNumber] = p._assignedYear;
-  }
-
-  // Build ESPP lot pool: ONLY include purchases that have been assigned to a year
-  const esppPool = [];
-  for (const e of esppPurchases) {
-    const refNum = e.data.refNumber || '';
-    const assignedYear = assignedYearMap[refNum];
-    if (assignedYear == null) continue; // Skip unassigned ESPP purchases
-    esppPool.push({
-      id: e.id,
-      year: assignedYear, // Use assigned year, not upload year
-      shares: e.data.shares,
-      costPerShareUSD: e.data.shares > 0 ? e.data.accumulatedContributionsUSD / e.data.shares : 0,
-      totalCostUSD: e.data.accumulatedContributionsUSD || 0,
-      remaining: e.data.shares
-    });
-  }
-
-  // Build BIK pool: each vest entry has a BIK amount (RON) - no share count
-  const bikPool = vests.map(e => ({
+  // Build ESPP lot pool: all ESPP purchases participate in FIFO automatically
+  const esppPool = esppPurchases.map(e => ({
     id: e.id,
     year: e.year,
-    sortKey: e.sortKey,
-    bikRON: e.data.bikRON || 0,
-    remaining: e.data.bikRON || 0
+    shares: e.data.shares,
+    costPerShareUSD: e.data.shares > 0 ? e.data.accumulatedContributionsUSD / e.data.shares : 0,
+    totalCostUSD: e.data.accumulatedContributionsUSD || 0,
+    remaining: e.data.shares
   }));
+
+  // Build BIK pool: only include stock awards that have been assigned to a year
+  const dbAwards = db.getAllStockAwards();
+  const bikAssignedMap = {};
+  for (const a of dbAwards) {
+    // Build key from date + bik + withholding for matching
+    const key = `${a.datastat}|${(a.stock_award_bik || 0).toFixed(2)}|${(a.stock_withholding || 0).toFixed(2)}`;
+    bikAssignedMap[key] = a._assignedYear;
+  }
+
+  const bikPool = [];
+  for (const e of vests) {
+    const date = e.data.date || '';
+    const bik = (e.data.stockAwardBikRON || 0);
+    const wh = (e.data.withholdingRON || 0);
+    const key = `${date}|${bik.toFixed(2)}|${wh.toFixed(2)}`;
+    const assignedYear = bikAssignedMap[key];
+    if (assignedYear == null) continue; // Skip unassigned BIK entries
+    bikPool.push({
+      id: e.id,
+      year: assignedYear,
+      sortKey: e.sortKey,
+      bikRON: e.data.bikRON || 0,
+      remaining: e.data.bikRON || 0
+    });
+  }
 
   // Allocations per year
   const allocations = {};
@@ -362,12 +365,9 @@ function recalculateAllocations(ledger) {
     }
   }
 
-  // Also track ESPP purchases per assigned year (only assigned ones)
+  // Also track ESPP purchases per year
   for (const purch of esppPurchases) {
-    const refNum = purch.data.refNumber || '';
-    const assignedYear = assignedYearMap[refNum];
-    if (assignedYear == null) continue; // Skip unassigned
-    const yr = assignedYear;
+    const yr = purch.year;
     if (!allocations[yr]) {
       allocations[yr] = {
         esppCostUSD: 0, esppSharesConsumed: 0, bikAllocatedRON: 0,
