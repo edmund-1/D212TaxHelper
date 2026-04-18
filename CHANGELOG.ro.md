@@ -3,7 +3,7 @@
 ## v1.5.3 (2026-04-19)
 
 ### Suport Temă Luminoasă/Întunecată/Auto
-- **Trei moduri de temă** — Întunecată, Luminoasă și Auto (urmează preferința sistemului/browserului `prefers-color-scheme`). Comutare prin butonul 🌙/☀️ din antet.
+- **Trei moduri de temă** — Întunecată (🌙), Luminoasă (☀️) și Auto (🖥️ urmează preferința sistemului/browserului `prefers-color-scheme`). Ciclul comutării: Auto → Întunecată → Luminoasă → Auto.
 - **Audit accesibilitate WCAG 2.1 AA** — toate perechile de culori verificate pentru conformitate contrast:
   - Dark `--text-muted` actualizat de la `#6e7681` la `#848d97` (4.52–5.62:1 pe toate fundalurile)
   - Light `--text-muted` actualizat de la `#8b949e` la `#636c76` (5.01–5.33:1 pe toate fundalurile)
