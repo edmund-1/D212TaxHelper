@@ -96,8 +96,8 @@ const App = (() => {
     if (!btn) return;
     if (theme === 'auto') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      btn.textContent = prefersDark ? '🌙' : '☀️';
-      btn.title = 'Theme: System';
+      btn.textContent = '🖥️';
+      btn.title = 'Theme: Auto (System)';
     } else if (theme === 'dark') {
       btn.textContent = '🌙';
       btn.title = 'Theme: Dark';
@@ -117,15 +117,8 @@ const App = (() => {
 
     themeToggle.addEventListener('click', () => {
       const current = document.documentElement.getAttribute('data-theme');
-      let next;
-      if (current === 'auto') {
-        // Auto → opposite of system preference
-        next = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
-      } else if (current === 'dark') {
-        next = 'light';
-      } else {
-        next = 'dark';
-      }
+      // Cycle: auto → dark → light → auto
+      const next = current === 'auto' ? 'dark' : current === 'dark' ? 'light' : 'auto';
       applyTheme(next);
       localStorage.setItem('theme', next);
       render(); // re-draw charts with new theme colors

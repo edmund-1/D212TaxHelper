@@ -92,7 +92,7 @@ The application runs at **http://localhost:3000**.
 | **☰ (Hamburger)** | Toggles the navigation menu on narrow screens |
 | **Tab buttons** | 6 tabs: Dashboard, Income Details, Tax Calculation, Add Data, Import Document, Raw Data |
 | **Language selector** | Switch between **RO** (Romanian) and **EN** (English). All labels, hints, and translations update instantly. |
-| **🌙/☀️ Theme toggle** | Cycle between **Dark**, **Light**, and **Auto** (follows system preference). Choice is saved in your browser. Charts automatically re-render with the new theme colors. |
+| **🖥️/🌙/☀️ Theme toggle** | Cycle between **Auto** (🖥️ follows system preference), **Dark** (🌙), and **Light** (☀️). Choice is saved in your browser. Charts automatically re-render with the new theme colors. |
 | **Year selector** | Choose the fiscal year you're viewing/editing. The dropdown shows all years with BNR exchange rates (2019-2025) plus any year with imported data. All tabs update when you change the year. |
 
 ### Footer bar

@@ -92,7 +92,7 @@ Aplicația rulează la **http://localhost:3000**.
 | **☰ (Hamburger)** | Afișează/ascunde meniul de navigare pe ecrane mici |
 | **Butoane tab-uri** | 6 tab-uri: Panou Principal, Detalii Venituri, Calcul Impozite, Adaugă Date, Importă Document, Date Brute |
 | **Selector limbă** | Comută între **RO** (Română) și **EN** (Engleză). Toate etichetele și indicațiile se actualizează instant. |
-| **🌙/☀️ Comutare temă** | Ciclează între **Întunecată**, **Luminoasă** și **Auto** (urmează preferința sistemului). Alegerea se salvează în browser. Graficele se re-desenează automat cu culorile noii teme. |
+| **🖥️/🌙/☀️ Comutare temă** | Ciclează între **Auto** (🖥️ urmează preferința sistemului), **Întunecată** (🌙) și **Luminoasă** (☀️). Alegerea se salvează în browser. Graficele se re-desenează automat cu culorile noii teme. |
 | **Selector an** | Alege anul fiscal vizualizat/editat. Lista afișează anii care au date, plus anul fiscal implicit (anul precedent). Toate tab-urile se actualizează la schimbarea anului. |
 
 ### Bara de jos (Footer)

@@ -3,7 +3,7 @@
 ## v1.5.3 (2026-04-19)
 
 ### Light/Dark/Auto Theme Support
-- **Three theme modes** — Dark, Light, and Auto (follows system/browser `prefers-color-scheme`). Toggle via the 🌙/☀️ button in the header.
+- **Three theme modes** — Dark (🌙), Light (☀️), and Auto (🖥️ follows system/browser `prefers-color-scheme`). Toggle cycles: Auto → Dark → Light → Auto.
 - **WCAG 2.1 AA accessibility audit** — all color pairs verified for contrast compliance:
   - Dark `--text-muted` upgraded from `#6e7681` to `#848d97` (4.52–5.62:1 on all backgrounds)
   - Light `--text-muted` upgraded from `#8b949e` to `#636c76` (5.01–5.33:1 on all backgrounds)
