@@ -3191,21 +3191,23 @@ const App = (() => {
       const installProgressFill = document.getElementById('update-install-progress-fill');
       const installTimer = document.getElementById('update-install-timer');
       const installingText = document.getElementById('update-installing-text');
-      const installBaseLabel = I18n.t('update.installing');
+      const installFullLabel = I18n.t('update.installing');
       const installCompleteLabel = I18n.t('update.complete') || 'complete';
       let installPercent = 0;
+      installingText.textContent = installFullLabel + ' 0% ' + installCompleteLabel;
       const installStart = performance.now();
       const installInterval = setInterval(() => {
-        if (installPercent < 90) {
-          installPercent += 1;
-          installProgressFill.style.width = installPercent + '%';
-          installingText.textContent = installBaseLabel.replace('...', '') + '... ' + installPercent + '% ' + installCompleteLabel;
-        }
+        // Fast ramp: +5% up to 60%, then +2% up to 85%, then +1% up to 95%
+        if (installPercent < 60) installPercent += 5;
+        else if (installPercent < 85) installPercent += 2;
+        else if (installPercent < 95) installPercent += 1;
+        installProgressFill.style.width = installPercent + '%';
+        installingText.textContent = installFullLabel + ' ' + installPercent + '% ' + installCompleteLabel;
         const elapsed = performance.now() - installStart;
         const mins = Math.floor(elapsed / 60000);
         const secs = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
         installTimer.textContent = mins + ':' + secs;
-      }, 500);
+      }, 300);
 
       const instRes = await fetch('/api/update/install', { method: 'POST' });
       clearInterval(installInterval);
@@ -3216,7 +3218,7 @@ const App = (() => {
       }
 
       installProgressFill.style.width = '100%';
-      installingText.textContent = installBaseLabel.replace('...', '') + '... 100% ' + installCompleteLabel;
+      installingText.textContent = installFullLabel + ' 100% ' + installCompleteLabel;
 
       // Show success and poll for server restart
       stepInstalling.classList.add('hidden');
