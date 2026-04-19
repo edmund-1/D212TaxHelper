@@ -3187,12 +3187,36 @@ const App = (() => {
       stepInstalling.classList.remove('hidden');
       closeBtn.style.display = 'none'; // prevent closing during install
 
+      // Animate install progress bar + timer + percentage text
+      const installProgressFill = document.getElementById('update-install-progress-fill');
+      const installTimer = document.getElementById('update-install-timer');
+      const installingText = document.getElementById('update-installing-text');
+      const installBaseLabel = I18n.t('update.installing');
+      const installCompleteLabel = I18n.t('update.complete') || 'complete';
+      let installPercent = 0;
+      const installStart = performance.now();
+      const installInterval = setInterval(() => {
+        if (installPercent < 90) {
+          installPercent += 1;
+          installProgressFill.style.width = installPercent + '%';
+          installingText.textContent = installBaseLabel.replace('...', '') + '... ' + installPercent + '% ' + installCompleteLabel;
+        }
+        const elapsed = performance.now() - installStart;
+        const mins = Math.floor(elapsed / 60000);
+        const secs = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
+        installTimer.textContent = mins + ':' + secs;
+      }, 500);
+
       const instRes = await fetch('/api/update/install', { method: 'POST' });
+      clearInterval(installInterval);
       const instData = await instRes.json();
 
       if (!instRes.ok || !instData.success) {
         throw new Error(instData.error || 'Install failed');
       }
+
+      installProgressFill.style.width = '100%';
+      installingText.textContent = installBaseLabel.replace('...', '') + '... 100% ' + installCompleteLabel;
 
       // Show success and poll for server restart
       stepInstalling.classList.add('hidden');
