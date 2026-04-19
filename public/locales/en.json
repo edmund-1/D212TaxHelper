@@ -536,7 +536,7 @@
     "confirmInstall": "Download complete. Install now? Your data and documents will be preserved.",
     "installNow": "Install Now",
     "cancel": "Cancel",
-    "installing": "Installing update... The server will restart automatically.",
+    "installing": "Installing update. The server will restart automatically...",
     "restarting": "Update installed. Restarting server...",
     "success": "Successfully updated to v{version}! Page will reload.",
     "failed": "Update failed: {error}"

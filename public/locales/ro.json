@@ -536,7 +536,7 @@
     "confirmInstall": "Descărcare completă. Instalați acum? Datele și documentele vor fi păstrate.",
     "installNow": "Instalează Acum",
     "cancel": "Anulează",
-    "installing": "Se instalează actualizarea... Serverul va reporni automat.",
+    "installing": "Se instalează actualizarea. Serverul va reporni automat...",
     "restarting": "Actualizare instalată. Se repornește serverul...",
     "success": "Actualizat cu succes la v{version}! Pagina se va reîncărca.",
     "failed": "Actualizarea a eșuat: {error}"  },
