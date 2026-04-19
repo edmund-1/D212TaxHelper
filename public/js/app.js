@@ -90,48 +90,7 @@ const App = (() => {
     } catch { return isoDate; }
   }
 
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    const btn = document.getElementById('theme-toggle');
-    if (!btn) return;
-    if (theme === 'auto') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      btn.textContent = '🖥️';
-      btn.title = 'Theme: Auto (System)';
-    } else if (theme === 'dark') {
-      btn.textContent = '🌙';
-      btn.title = 'Theme: Dark';
-    } else {
-      btn.textContent = '☀️';
-      btn.title = 'Theme: Light';
-    }
-    // Update charts if they exist (theme colors change)
-    if (typeof Charts !== 'undefined' && Charts.refreshAll) Charts.refreshAll();
-  }
-
   async function init() {
-    // ---- Theme ----
-    const themeToggle = document.getElementById('theme-toggle');
-    const savedTheme = localStorage.getItem('theme') || 'auto';
-    applyTheme(savedTheme);
-
-    themeToggle.addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme');
-      // Cycle: auto → dark → light → auto
-      const next = current === 'auto' ? 'dark' : current === 'dark' ? 'light' : 'auto';
-      applyTheme(next);
-      localStorage.setItem('theme', next);
-      render(); // re-draw charts with new theme colors
-    });
-
-    // Re-detect when system preference changes (only matters in auto mode)
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if ((localStorage.getItem('theme') || 'auto') === 'auto') {
-        applyTheme('auto');
-        render();
-      }
-    });
-
     // Load language
     const langSelect = document.getElementById('lang-select');
     const savedLang = localStorage.getItem('lang') || 'ro';
@@ -738,18 +697,12 @@ const App = (() => {
     // Romania taxes at divTaxRate. Credit fiscal = min(RO tax, US tax paid).
     // Difference to pay = max(0, RO tax - US credit).
     const usForeignTaxUSD = (yd.usDivTaxPaid !== undefined && yd.usDivTaxPaid !== '' ? parseFloat(yd.usDivTaxPaid) : null) ?? fd.dividends?.foreignTaxUSD ?? usDivTaxPaidUSD ?? 0;
-    const usForeignTaxRON = fd.dividends?.foreignTaxRON || decl.dividends?.foreignTaxRON || Math.ceil(usForeignTaxUSD * rate);
+    const usForeignTaxRON = fd.dividends?.foreignTaxRON || decl.dividends?.foreignTaxRON || (usForeignTaxUSD * rate);
     // US dividends: RO tax due minus credit for US tax already paid
     // If D-212 has been imported (ANAF-validated), use its values directly
     const usDivTaxDueRON = dividendsRON * divTaxRate;
     const hasAnafDecl = decl.anafXml || decl.anafFlatText;
-    // If US effective withholding rate >= RO rate (within 0.5% tolerance for rounding),
-    // the credit fiscal fully covers the Romanian tax — nothing to pay.
-    const effectiveUSRate = dividendsUSD > 0 ? (usForeignTaxUSD / dividendsUSD) : 0;
-    const rateFullyCovered = effectiveUSRate >= (divTaxRate - 0.005);
-    const usDivCreditRON = hasAnafDecl ? (decl.dividends?.creditFiscalRON || 0)
-      : rateFullyCovered ? usDivTaxDueRON
-      : Math.min(usDivTaxDueRON, usForeignTaxRON);
+    const usDivCreditRON = hasAnafDecl ? (decl.dividends?.creditFiscalRON || 0) : Math.min(usDivTaxDueRON, usForeignTaxRON);
     const usDivTax = hasAnafDecl
       ? (decl.dividends?.difImpozitRON || 0)
       : (fd.dividends?.toPayRON ?? Math.max(0, usDivTaxDueRON - usDivCreditRON));
@@ -773,12 +726,7 @@ const App = (() => {
     // US income: deduct salary-taxed BIK from US capital gains as cost basis
     // BIK (stock_award_bik) = income already taxed as salary in Romania, deducted from capital gains
     // Stock withholding = tax/CASS paid on the BIK through payroll (shown as "already paid", not deducted from base)
-    const usNetGainsBeforeLosses = Math.max(0, capitalGainsTaxableRON - salaryTaxedRON);
-
-    // Prior year losses (D212 Rd.5-6): carryforward up to 7 years, offset max 70% of current year gains
-    const priorLosses = parseFloat(yd.priorLosses) || 0;
-    const lossOffset = usNetGainsBeforeLosses > 0 ? Math.min(priorLosses, Math.floor(usNetGainsBeforeLosses * 0.7)) : 0;
-    const usNetGainsRON = Math.max(0, usNetGainsBeforeLosses - lossOffset);
+    const usNetGainsRON = Math.max(0, capitalGainsTaxableRON - salaryTaxedRON);
     const usGrossIncomeRON = capitalGainsTaxableRON + dividendsRON;
     const usNetIncomeRON = usNetGainsRON + dividendsRON;
 
@@ -947,9 +895,6 @@ const App = (() => {
       usGrossIncomeRON,
       usNetIncomeRON,
       usNetGainsRON,
-      // Prior year losses (D212 Rd.5-6)
-      priorLosses,
-      lossOffset,
       incomeTaxGross,
       totalAlreadyPaid
     };
@@ -963,17 +908,6 @@ const App = (() => {
     document.getElementById('already-paid-value').textContent = fmt(data.totalAlreadyPaid);
     document.getElementById('cass-value').textContent = fmt(data.cassTax);
     document.getElementById('total-tax-value').textContent = fmt(data.incomeTaxOnly);
-
-    // Show losses tile only when prior losses exist
-    const lossCard = document.getElementById('card-losses');
-    if (lossCard) {
-      if (data.lossOffset > 0) {
-        lossCard.style.display = '';
-        document.getElementById('loss-offset-value').textContent = '-' + fmt(data.lossOffset);
-      } else {
-        lossCard.style.display = 'none';
-      }
-    }
 
     // Charts - only show if there's actual financial data
     const allYears = Object.keys(appData.years || {}).map(Number).sort((a, b) => a - b);
@@ -1107,30 +1041,19 @@ const App = (() => {
         cat: I18n.t('income.usGains') + data.usBrokerLabel + (data.tradeCount ? ` (${data.tradeCount} ${I18n.t('misc.sales') || 'sales'})` : ''),
         usd: data.capitalGainsSaleUSD || data.tradeProceedsUSD || 0,
         rate: data.exchangeRate,
-        ron: Math.round(data.usNetGainsRON),
+        ron: Math.round((data.capitalGainsSaleUSD || data.tradeProceedsUSD || 0) * data.exchangeRate),
         usTaxRate: '-',
         usTaxPaid: 0,
         taxRate: (data.capGainsTaxRate * 100) + '%',
         paid: 0,
-        tax: Math.round(data.usNetGainsRON * data.capGainsTaxRate),
-        tooltip: (data.capitalGainsCostUSD > 0 || data.salaryTaxedRON > 0 || data.lossOffset > 0) ? (() => {
-          const saleUSD = data.capitalGainsSaleUSD || data.tradeProceedsUSD || 0;
-          const costUSD = data.capitalGainsCostUSD || 0;
-          const fmtN = (v) => v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-          const fmtR = (v) => Math.round(v).toLocaleString('ro-RO');
-          let tip = '';
-          if (costUSD > 0) tip += '(' + fmtN(saleUSD) + ' - ' + fmtN(costUSD) + ') × ' + data.exchangeRate.toFixed(4) + ' = ' + fmtR((saleUSD - costUSD) * data.exchangeRate) + ' RON';
-          if (data.salaryTaxedRON > 0) tip += (tip ? ' → ' : '') + '- BIK ' + fmtR(data.salaryTaxedRON);
-          if (data.lossOffset > 0) tip += (tip ? ' → ' : '') + '- ' + (I18n.t('taxes.earnPriorLossOffset') || 'Prior losses') + ' ' + fmtR(data.lossOffset);
-          tip += (tip ? ' = ' : '') + fmtR(data.usNetGainsRON) + ' RON';
-          return tip;
-        })() : undefined
+        tax: Math.round(data.capitalGainsTaxableRON * data.capGainsTaxRate),
+        tooltip: undefined
       },
       ...(data.capitalGainsCostUSD > 0 ? [{
         cat: '↳ ' + (I18n.t('misc.costBasisTooltip') || 'ESPP contributions deducted'),
         usd: -data.capitalGainsCostUSD,
-        rate: '-',
-        ron: '-',
+        rate: data.exchangeRate,
+        ron: -Math.round(data.capitalGainsCostUSD * data.exchangeRate),
         usTaxRate: '-',
         usTaxPaid: 0,
         taxRate: '-',
@@ -1150,19 +1073,6 @@ const App = (() => {
         tax: 0,
         isDeduction: true,
         tooltip: (I18n.t('misc.bikBreakdownTooltip') || 'Stock award BIK from imported documents, allocated via FIFO to sales in this year') + '. ' + (I18n.t('misc.taxableAfterBik') || 'Taxable after BIK') + ': ' + Math.round(Math.max(0, (data.capitalGainsTaxableRON || 0) - data.salaryTaxedRON)).toLocaleString('ro-RO') + ' RON'
-      }] : []),
-      ...(data.lossOffset > 0 ? [{
-        cat: '↳ ' + (I18n.t('income.priorLossDeduction') || 'Prior year losses offset (D212 Rd.5-6)'),
-        usd: '-',
-        rate: '-',
-        ron: -data.lossOffset,
-        usTaxRate: '-',
-        usTaxPaid: 0,
-        taxRate: '-',
-        paid: 0,
-        tax: 0,
-        isDeduction: true,
-        tooltip: (I18n.t('misc.priorLossTooltip') || 'Capital losses from previous years') + ': ' + Math.round(data.priorLosses).toLocaleString('ro-RO') + ' RON. ' + (I18n.t('misc.lossOffsetApplied') || 'Offset applied (max 70%)') + ': ' + Math.round(data.lossOffset).toLocaleString('ro-RO') + ' RON'
       }] : []),
       ...(data.esppPurchaseCount > 0 ? [{
         cat: (I18n.t('income.esppPurchases') || 'US ESPP Stock Purchases') + data.usBrokerLabel + ` (${data.esppPurchaseCount} ${I18n.t('misc.purchases') || 'purchases'})`,
@@ -1304,7 +1214,7 @@ const App = (() => {
     }).join('');
 
     const hasDeduction = (data.rentalGross > 0) || (data.royaltyGross > 0);
-    const totalRON = rows.reduce((s, r) => s + (typeof r.ron === 'number' && !r.isDeduction ? r.ron : 0), 0);
+    const totalRON = rows.reduce((s, r) => s + (typeof r.ron === 'number' ? r.ron : 0), 0);
     const totalTax = rows.reduce((s, r) => s + (r.tax || 0), 0);
     tfoot.innerHTML = `
       <tr>
@@ -1730,10 +1640,8 @@ const App = (() => {
     const stockWithholding = data.stockWithholding || 0;
 
     // Tax computations
-    // US capital gains: taxable = gains after ESPP cost, BIK deduction, and prior loss offset
-    const usNetGainsAfterBIK = Math.max(0, usGainsRON - (data.salaryTaxedRON || 0) - (data.lossOffset || 0));
-    const usGainsTax = usNetGainsAfterBIK * (data.capGainsTaxRate || 0.10);
-    const usDivTax = data.usDivTax || 0;
+    const usGainsTax = usGainsRON > 0 ? Math.max(0, usGainsRON - stockWithholding) * (data.capGainsTaxRate || 0.10) : 0;
+    const usDivTax = data.usDivToPayRON ?? 0;
     const roLongTax = roLong * (data.roLongRate || 0.01);
     const roShortTax = roShort * (data.roShortRate || 0.03);
     const roDivTaxDue = roDivGross * data.divTaxRate;
@@ -1763,22 +1671,12 @@ const App = (() => {
 
     // -- US income --
     html += dataRow('<strong>' + I18n.t('taxes.subsectionUS') + '</strong>', '', { indent: false });
-    const usGainsGross = data.capitalGainsTaxableRON || (data.tradeProceedsUSD || 0) * data.exchangeRate;
-    const hasUsDeductions = (data.salaryTaxedRON > 0 || data.capitalGainsCostUSD > 0 || data.lossOffset > 0);
-    if (hasUsDeductions) {
-      // Show gross first, then deductions, then net
-      html += dataRow(I18n.t('taxes.earnUsGains') + data.usBrokerLabel, fmtR(usGainsGross) + ' RON', { indent: true });
-      const deductions = [];
-      if (data.capitalGainsCostUSD > 0) deductions.push('ESPP: -' + fmtR(data.capitalGainsCostUSD * data.exchangeRate) + ' RON');
-      if (data.salaryTaxedRON > 0) deductions.push('BIK: -' + fmtR(data.salaryTaxedRON) + ' RON');
-      if (data.lossOffset > 0) deductions.push((I18n.t('taxes.earnPriorLossOffset') || 'Prior losses') + ': -' + fmtR(data.lossOffset) + ' RON');
-      html += dataRow((I18n.t('taxes.earnDeductionsApplied') || 'Deductions applied'), deductions.join(', '), { indent: true, muted: true });
-      html += dataRow((I18n.t('taxes.earnUsNet') || 'Net US capital gains'), fmtR(usNetGainsAfterBIK) + ' RON', { indent: true, green: true });
-    } else {
-      html += dataRow(I18n.t('taxes.earnUsGains') + data.usBrokerLabel, fmtR(usNetGainsAfterBIK) + ' RON', { indent: true });
-    }
+    html += dataRow(I18n.t('taxes.earnUsGains') + data.usBrokerLabel, fmtR(usGainsRON) + ' RON', { indent: true });
     html += dataRow(I18n.t('taxes.earnUsDiv') + data.usDivBrokerLabel, fmtR(usDivRON) + ' RON', { indent: true });
-    const usSubtotalIncome = usNetGainsAfterBIK + usDivRON;
+    if (data.salaryTaxedRON > 0) {
+      html += dataRow(I18n.t('taxes.earnSalaryTaxedDeduction') || 'Income already taxed as salary', '-' + fmtR(data.salaryTaxedRON) + ' RON', { indent: true, green: true });
+    }
+    const usSubtotalIncome = usGainsRON + usDivRON - (data.salaryTaxedRON || 0);
     html += dataRow(I18n.t('taxes.subtotalUS'), fmtR(usSubtotalIncome) + ' RON', { indent: true, bold: true, topBorder: true });
 
     // -- Romania income --
@@ -1991,19 +1889,12 @@ const App = (() => {
       const usGainsGrossRON = usGainsGrossUSD * data.exchangeRate;
       const esppCostRON = esppCost * data.exchangeRate;
       const salaryTaxed = data.salaryTaxedRON || 0;
-      // ANAF formula: Taxable = Sale_RON - Cost_RON - BIK_RON - LossOffset
-      const usNetBeforeLosses = Math.max(0, usGainsGrossRON - esppCostRON - salaryTaxed);
-      const priorLossesVal = data.priorLosses || 0;
-      const lossOffsetVal = usNetBeforeLosses > 0 ? Math.min(priorLossesVal, Math.floor(usNetBeforeLosses * 0.7)) : 0;
-      const usNetGainsRON = Math.max(0, usNetBeforeLosses - lossOffsetVal);
+      // ANAF formula: Taxable = Sale_RON - Cost_RON - BIK_RON
+      const usNetGainsRON = Math.max(0, usGainsGrossRON - esppCostRON - salaryTaxed);
       const usCapGainsTax = usNetGainsRON * (data.capGainsTaxRate || 0.10);
       const usDivTaxDue = usDivRON * data.divTaxRate;
       const usTaxPaidRON = data.usDivForeignTaxRON || 0;
-      // If US effective withholding rate >= RO rate (within 0.5% tolerance), credit covers full RO tax
-      const effectiveUSRate = data.dividendsUSD > 0 ? ((data.usDivForeignTaxUSD || 0) / data.dividendsUSD) : 0;
-      const dclRateFullyCovered = effectiveUSRate >= (data.divTaxRate - 0.005);
-      const usDivCredit = dclRateFullyCovered ? usDivTaxDue : Math.min(usDivTaxDue, usTaxPaidRON);
-      const usDivDiff = Math.max(0, usDivTaxDue - usDivCredit);
+      const usDivDiff = Math.max(0, usDivTaxDue - usTaxPaidRON);
 
       foreignTbody.innerHTML = [
         [I18n.t('dcl.sourceCountry'), 'S.U.A.'],
@@ -2014,10 +1905,6 @@ const App = (() => {
         [I18n.t('dcl.esppCostUSD'), fmtD(esppCost) + ' USD' + (data.esppSharesConsumed > 0 ? ' <small>(' + data.esppSharesConsumed + ' ' + (I18n.t('income.shares') || 'shares') + ' ESPP FIFO)</small>' : '')],
         [I18n.t('dcl.esppCostRON'), fmtR(esppCostRON) + ' RON'],
         [I18n.t('dcl.alreadyTaxedSalary'), fmtR(salaryTaxed) + ' RON'],
-        ...(priorLossesVal > 0 ? [
-          ['Rd.5 ' + (I18n.t('dcl.priorLosses') || 'Pierderi reportate din anii precedenți'), fmtR(priorLossesVal) + ' RON'],
-          ['Rd.6 ' + (I18n.t('dcl.lossOffset') || 'Pierdere compensată (max 70% × câștig net)'), fmtR(lossOffsetVal) + ' RON'],
-        ] : []),
         [I18n.t('dcl.taxableCapitalGains'), '<strong>' + fmtR(usNetGainsRON) + ' RON</strong>'],
         [I18n.t('dcl.incomeTaxDue10').replace('10%', (data.capGainsTaxRate * 100) + '%'), '<strong>' + fmtR(usCapGainsTax) + ' RON</strong>'],
         ['--- ' + I18n.t('dcl.sepDividends') + ' ---', ''],
@@ -2026,7 +1913,7 @@ const App = (() => {
         [I18n.t('dcl.divTaxDueRO10').replace('10%', data.divTaxRateLabel), fmtR(usDivTaxDue) + ' RON'],
         [I18n.t('dcl.usTaxWithheldUSD'), fmtD(data.usDivForeignTaxUSD || 0) + ' USD'],
         [I18n.t('dcl.usTaxWithheldRON'), fmtR(usTaxPaidRON) + ' RON'],
-        [I18n.t('dcl.divCreditRecognized'), fmtR(usDivCredit) + ' RON'],
+        [I18n.t('dcl.divCreditRecognized'), fmtR(Math.min(usDivTaxDue, usTaxPaidRON)) + ' RON'],
         [I18n.t('dcl.divDiffToPay'), '<strong>' + fmtR(usDivDiff) + ' RON</strong>'],
       ].map(([f, v]) => {
         const isSep = f.startsWith('---');
@@ -2166,13 +2053,9 @@ const App = (() => {
       const usNetGains = Math.max(0, usGainsGrossRON - esppCostRON - (data.salaryTaxedRON || 0));
       const usGainsTax = usNetGains * (data.capGainsTaxRate || 0.10);
       // US dividends: RO tax - US credit = difference
-      // If US effective withholding rate >= RO rate (within 0.5% tolerance), credit covers full RO tax
       const usDivTaxDue = usDivRON * data.divTaxRate;
       const usTaxPaidRON = data.usDivForeignTaxRON || 0;
-      const summEffectiveUSRate = data.dividendsUSD > 0 ? ((data.usDivForeignTaxUSD || 0) / data.dividendsUSD) : 0;
-      const summRateFullyCovered = summEffectiveUSRate >= (data.divTaxRate - 0.005);
-      const summDivCredit = summRateFullyCovered ? usDivTaxDue : Math.min(usDivTaxDue, usTaxPaidRON);
-      const usDivTax = Math.max(0, usDivTaxDue - summDivCredit);
+      const usDivTax = Math.max(0, usDivTaxDue - usTaxPaidRON);
       // Interest: use dynamic rate, don't double-count
       const interestTax = data.interestTax; // already computed correctly in computeYearData
 
@@ -2292,7 +2175,6 @@ const App = (() => {
     document.getElementById('input-d212-deadline').value = yd.d212Deadline || d212DefaultDeadline(selectedYear);
     document.getElementById('input-stock-withholding').value = yd.stockWithholdingPaid || '';
     document.getElementById('input-salary-taxed').value = yd.salaryTaxedIncome || '';
-    document.getElementById('input-prior-losses').value = yd.priorLosses || '';
 
     // Populate RO gains country rows
     renderRoGainsRows(yd.roGainsCountries || []);
@@ -2415,8 +2297,7 @@ const App = (() => {
       otherIncome: document.getElementById('input-other-income').value,
       otherTaxPaid: document.getElementById('input-other-tax-paid').value,
       stockWithholdingPaid: document.getElementById('input-stock-withholding').value,
-      salaryTaxedIncome: document.getElementById('input-salary-taxed').value,
-      priorLosses: document.getElementById('input-prior-losses').value
+      salaryTaxedIncome: document.getElementById('input-salary-taxed').value
     };
 
     try {
@@ -2790,7 +2671,7 @@ const App = (() => {
       if (result.success) {
         anySuccess = true;
         const filePrefix = fileCount > 1 ? `<strong>${esc(files[fi].name)}</strong> — ` : '';
-        const timeInfo = _elapsed !== '0:00' ? ` <span style="color:var(--text-muted);font-size:0.8rem;">(${_elapsed})</span>` : '';
+        const timeInfo = ` <span style="color:var(--text-muted);font-size:0.8rem;">(${_elapsed})</span>`;
         let resultHtml = `<p style="color: var(--success)">${filePrefix}${I18n.t('import.success')}${timeInfo}</p>`;
         if (result.type === 'trade_confirmation') {
           const t = result.parsed;
@@ -2862,7 +2743,7 @@ const App = (() => {
           const statusRow = document.getElementById(`upload-status-${fi}`);
           const resultSpan = document.getElementById(`upload-result-${fi}`);
           if (statusRow) { statusRow.className = 'upload-file-row upload-file-success'; statusRow.querySelector('.upload-file-icon').textContent = '✅'; }
-          if (resultSpan) resultSpan.textContent = _elapsed !== '0:00' ? `${I18n.t('import.success')} (${_elapsed})` : I18n.t('import.success');
+          if (resultSpan) resultSpan.textContent = `${I18n.t('import.success')} (${_elapsed})`;
         }
       } else if (result.ocrLowQuality) {
         const catList = (result.categories || []).map(c => `<li>${esc(c)}</li>`).join('');
@@ -2883,7 +2764,7 @@ const App = (() => {
           const statusRow = document.getElementById(`upload-status-${fi}`);
           const resultSpan = document.getElementById(`upload-result-${fi}`);
           if (statusRow) { statusRow.className = 'upload-file-row upload-file-warning'; statusRow.querySelector('.upload-file-icon').textContent = '⚠️'; }
-          if (resultSpan) resultSpan.textContent = I18n.t(result.messageKey || 'import.ocrLowQuality');
+          if (resultSpan) resultSpan.textContent = I18n.t('import.ocrLowQuality');
         }
       } else {
         allResultsHtml += `<p style="color: var(--danger)">${esc(files[fi].name)}: ${esc(result.error)}</p>`;
@@ -3256,11 +3137,6 @@ const App = (() => {
 
     downloadText.textContent = I18n.t('update.downloading', { version: data.latestVersion });
 
-    // Timers/intervals tracked for cleanup on error
-    let timerInterval = null;
-    let installProgressInterval = null;
-    let restartProgressInterval = null;
-
     // Animate progress bar (indeterminate-ish since we don't have streaming progress)
     let progressInterval = setInterval(() => {
       const cur = parseFloat(progressFill.style.width) || 0;
@@ -3304,49 +3180,19 @@ const App = (() => {
       stepInstalling.classList.remove('hidden');
       closeBtn.style.display = 'none'; // prevent closing during install
 
-      // Progress bar + timer for install phase
-      const installProgressFill = document.getElementById('update-install-progress-fill');
-      const installTimer = document.getElementById('update-install-timer');
-      installProgressFill.style.width = '5%'; // start visible
-      installTimer.textContent = '0:00';
-      let installSeconds = 0;
-      timerInterval = setInterval(() => {
-        installSeconds++;
-        const mins = Math.floor(installSeconds / 60);
-        const secs = installSeconds % 60;
-        installTimer.textContent = mins + ':' + String(secs).padStart(2, '0');
-      }, 1000);
-      // Smooth progress: 0→60% over ~30s during install, then 60→95% during restart polling
-      let installProgress = 0;
-      installProgressInterval = setInterval(() => {
-        if (installProgress < 60) {
-          installProgress += 1.5;
-          installProgressFill.style.width = Math.min(installProgress, 60) + '%';
-        }
-      }, 500);
-
       const instRes = await fetch('/api/update/install', { method: 'POST' });
       const instData = await instRes.json();
 
       if (!instRes.ok || !instData.success) {
-        clearInterval(timerInterval);
-        clearInterval(installProgressInterval);
         throw new Error(instData.error || 'Install failed');
       }
 
-      // Install API returned — switch to restart polling phase (60→95%)
-      clearInterval(installProgressInterval);
-      installProgress = 60;
-      installProgressFill.style.width = '60%';
-      restartProgressInterval = setInterval(() => {
-        if (installProgress < 95) {
-          installProgress += 0.5;
-          installProgressFill.style.width = installProgress + '%';
-        }
-      }, 300);
-
-      // Update installing text to show restarting phase (keep progress bar + timer visible)
-      document.getElementById('update-installing-text').textContent = I18n.t('update.restarting');
+      // Show success and poll for server restart
+      stepInstalling.classList.add('hidden');
+      stepResult.classList.remove('hidden');
+      resultIcon.textContent = ''; // CSS pseudo-elements handle the mouse animation
+      resultIcon.classList.add('spinner');
+      resultText.textContent = I18n.t('update.restarting');
 
       // Poll until new server is up
       const pollForRestart = setInterval(async () => {
@@ -3354,12 +3200,6 @@ const App = (() => {
           const r = await fetch('/api/version', { cache: 'no-store' });
           if (r.ok) {
             clearInterval(pollForRestart);
-            clearInterval(timerInterval);
-            clearInterval(restartProgressInterval);
-            installProgressFill.style.width = '100%';
-            // Switch to result step
-            stepInstalling.classList.add('hidden');
-            stepResult.classList.remove('hidden');
             resultIcon.textContent = '\u2714';
             resultIcon.classList.remove('spinner');
             resultText.textContent = I18n.t('update.success', { version: instData.version });
@@ -3372,9 +3212,6 @@ const App = (() => {
 
     } catch (err) {
       clearInterval(progressInterval);
-      if (timerInterval) clearInterval(timerInterval);
-      if (installProgressInterval) clearInterval(installProgressInterval);
-      if (restartProgressInterval) clearInterval(restartProgressInterval);
       [stepDownload, stepConfirm, stepInstalling].forEach(s => s.classList.add('hidden'));
       stepResult.classList.remove('hidden');
       resultIcon.textContent = '\u2718';
