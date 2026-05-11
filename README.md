@@ -46,7 +46,8 @@ npm start
 1. Mergi la [ultima versiune](https://github.com/edspat/D212TaxHelper/releases/latest)
 2. Descarcă `D212TaxHelper-Portable-v*.zip`
 3. Extrage arhiva ZIP într-un folder oarecare
-4. Dublu-click pe `Start.bat` — browserul se deschide automat
+4. Opțional: redenumește-l `D212TaxHelper-Portable`
+5. Dublu-click pe `Start.bat` — browserul se deschide automat
 
 Atât — versiunea portabilă include Node.js, nu necesită instalare.
 
