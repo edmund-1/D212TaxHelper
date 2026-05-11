@@ -29,7 +29,7 @@ A local web application that helps Romanian tax residents calculate and prepare 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+ (recommended: v22 LTS) | Mandatory for options A and C. **Option B** => **Just run it** (portable)
-- A modern browser (Chrome, Edge, Firefox)
+- A modern browser (Edge, Chrome, Firefox)
 - Windows
 
 ### Option A — Git Clone
