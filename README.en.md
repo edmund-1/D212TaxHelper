@@ -28,7 +28,7 @@ A local web application that helps Romanian tax residents calculate and prepare 
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+ (recommended: v22 LTS)
+- [Node.js](https://nodejs.org/) 18+ (recommended: v22 LTS) | Mandatory for options A and B. Option B => Just run it (portable)
 - A modern browser (Chrome, Edge, Firefox)
 
 ### Option A — Git Clone
@@ -45,7 +45,8 @@ npm start
 1. Go to the [latest release](https://github.com/edspat/D212TaxHelper/releases/latest)
 2. Download `D212TaxHelper-Portable-v*.zip`
 3. Extract the ZIP to any folder
-4. Double-click `Start.bat` — the browser opens automatically
+4. Optional: rename it `D212TaxHelper-Portable`
+5. Double-click `Start.bat` — the browser opens automatically
 
 That's it — the portable version includes Node.js, no installation needed.
 
