@@ -28,7 +28,7 @@ O aplicație web locală care ajută rezidenții fiscali din România să calcul
 
 ### Cerințe
 
-- [Node.js](https://nodejs.org/) 18+ (recomandat: v22 LTS) | Obligatoriu pentru opțiunile A și C. Opțiunea B => Just run it (e portabilă)
+- [Node.js](https://nodejs.org/) 18+ (recomandat: v22 LTS) | Obligatoriu pentru opțiunile A și C. **Opțiunea B** => **Just run it** (e portabilă)
 - Un browser modern (Chrome, Edge, Firefox)
 - Windows
 
