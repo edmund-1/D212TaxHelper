@@ -1381,6 +1381,29 @@ app.get('/api/doc/:name/:lang', (req, res) => {
   }
 });
 
+// BNR exchange rates (annual averages, single source of truth).
+// Source: https://www.bnr.ro/1975-cursul-de-schimb-serii-statistice
+const BNR_EXCHANGE_RATES = {
+  2019: { usdRon: 4.2379, eurRon: 4.7452, source: 'BNR' },
+  2020: { usdRon: 4.2440, eurRon: 4.8371, source: 'BNR' },
+  2021: { usdRon: 4.1604, eurRon: 4.9204, source: 'BNR' },
+  2022: { usdRon: 4.6885, eurRon: 4.9315, source: 'BNR' },
+  2023: { usdRon: 4.5743, eurRon: 4.9465, source: 'BNR' },
+  2024: { usdRon: 4.5984, eurRon: 4.9746, source: 'BNR' },
+  2025: { usdRon: 4.4705, eurRon: 5.0415, source: 'BNR' },
+};
+
+/** Convert an amount in the given currency code to RON using BNR annual averages. */
+function toRON(amount, currency, year) {
+  const cur = String(currency || 'RON').toUpperCase();
+  if (cur === 'RON' || !amount) return amount || 0;
+  const rates = BNR_EXCHANGE_RATES[year];
+  if (!rates) return amount; // unknown year - leave as-is, caller should warn
+  if (cur === 'EUR') return amount * rates.eurRon;
+  if (cur === 'USD') return amount * rates.usdRon;
+  return amount;
+}
+
 // GET /api/tax-rates - Romanian tax rates reference
 app.get('/api/tax-rates', (req, res) => {
   res.json({
@@ -1407,17 +1430,7 @@ app.get('/api/tax-rates', (req, res) => {
         { label: '≥24SM (≥97,200)', cass: 9720 },
       ]
     },
-    // BNR exchange rates (annual averages - Serii anuale, valori medii)
-    // Source: https://www.bnr.ro/1975-cursul-de-schimb-serii-statistice
-    exchangeRates: {
-      2019: { usdRon: 4.2379, eurRon: 4.7452, source: 'BNR' },
-      2020: { usdRon: 4.2440, eurRon: 4.8371, source: 'BNR' },
-      2021: { usdRon: 4.1604, eurRon: 4.9204, source: 'BNR' },
-      2022: { usdRon: 4.6885, eurRon: 4.9315, source: 'BNR' },
-      2023: { usdRon: 4.5743, eurRon: 4.9465, source: 'BNR' },
-      2024: { usdRon: 4.5984, eurRon: 4.9746, source: 'BNR' },
-      2025: { usdRon: 4.4705, eurRon: 5.0415, source: 'BNR' },
-    },
+    exchangeRates: BNR_EXCHANGE_RATES,
     notes: {
       ro: 'Starting 2025, stocks transferred to Romania broker. Romania broker withholds capital gains tax (1%/3%) but NOT CASS.',
       cas: 'CAS (pension 25%) does NOT apply for investment income (stocks, dividends, interest).',
@@ -1431,15 +1444,7 @@ app.get('/api/tax-rates', (req, res) => {
 // GET /api/exchange-rates - Exchange rates
 // Source: https://www.bnr.ro/1975-cursul-de-schimb-serii-statistice
 app.get('/api/exchange-rates', (req, res) => {
-  res.json({
-    2019: { usdRon: 4.2379, eurRon: 4.7452, source: 'BNR' },
-    2020: { usdRon: 4.2440, eurRon: 4.8371, source: 'BNR' },
-    2021: { usdRon: 4.1604, eurRon: 4.9204, source: 'BNR' },
-    2022: { usdRon: 4.6885, eurRon: 4.9315, source: 'BNR' },
-    2023: { usdRon: 4.5743, eurRon: 4.9465, source: 'BNR' },
-    2024: { usdRon: 4.5984, eurRon: 4.9746, source: 'BNR' },
-    2025: { usdRon: 4.4705, eurRon: 5.0415, source: 'BNR' }
-  });
+  res.json(BNR_EXCHANGE_RATES);
 });
 
 // Helper: parse PDF text based on type
@@ -1939,36 +1944,85 @@ function parseMSStatement(text, year) {
 }
 
 // Parse XTB Dividends & Interest Report (RAPORT DIVIDENDE SI DOBANZI)
+// Captures all rows in the dividends table and the interest table.
+// Each row may be denominated in RON / EUR / USD; non-RON amounts are converted
+// to RON using BNR annual averages and the originals are kept in `rows[]`.
 function parseXtbDividends(text, year) {
   const result = {
     year,
     source: 'XTB Romania',
+    // Aggregated totals (RON) — kept for backwards compatibility with the UI.
     dividends: { grossRON: 0, taxWithheldRON: 0, netRON: 0, category: '' },
-    interest: { grossRON: 0, taxWithheldRON: 0, netRON: 0, payer: '' }
+    interest: { grossRON: 0, taxWithheldRON: 0, netRON: 0, payer: '' },
+    // Detailed per-row breakdown with the original currency preserved.
+    dividendRows: [],
+    interestRows: []
   };
 
-  // Dividends: look for the row after the dividend header
-  // Pattern: number grossRON taxRON netRON category
-  const divMatch = text.match(/(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+(Instrumente[^\n]*)/);
-  if (divMatch) {
-    result.dividends.grossRON = parseFloat(divMatch[2]) || 0;
-    result.dividends.taxWithheldRON = parseFloat(divMatch[3]) || 0;
-    result.dividends.netRON = parseFloat(divMatch[4]) || 0;
-    result.dividends.category = divMatch[5].trim();
+  // Split text at the interest section heading to separate dividends from interest.
+  const splitIdx = text.search(/venit\s+anual\s+din\s+dob[aâ]nzi/i);
+  const dividendsText = splitIdx >= 0 ? text.slice(0, splitIdx) : text;
+  const interestText = splitIdx >= 0 ? text.slice(splitIdx) : '';
+
+  // Row pattern: ordinal | gross | tax | net | description (possibly with currency token).
+  // Currency can be embedded in the description ("(în EUR)") or absent (defaults to RON,
+  // since the XTB report headers state "în RON" by default).
+  const ROW_RE = /^\s*(\d+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+(.+)$/gm;
+
+  for (const m of dividendsText.matchAll(ROW_RE)) {
+    const gross = parseNumber(m[2]);
+    const tax = parseNumber(m[3]);
+    const net = parseNumber(m[4]);
+    const desc = m[5].trim();
+    if (!gross && !tax && !net) continue;
+    // Only accept descriptions that mention instruments / dividends categories
+    if (!/Instrumente|dividende|actiun|acțiun/i.test(desc)) continue;
+    const currency = detectCurrency(desc, text);
+    const grossRON = toRON(gross, currency, year);
+    const taxRON = toRON(tax, currency, year);
+    const netRON = toRON(net, currency, year);
+    result.dividendRows.push({ currency, gross, tax, net, grossRON, taxRON, netRON, category: desc });
+    result.dividends.grossRON += grossRON;
+    result.dividends.taxWithheldRON += taxRON;
+    result.dividends.netRON += netRON;
+    if (!result.dividends.category) result.dividends.category = desc;
   }
 
-  // Interest: look for interest section
-  // Pattern after "dobânzi": number grossRON taxRON netRON payer
-  const interestSection = text.split(/dob[aâ]nzi/i).pop() || '';
-  const intMatch = interestSection.match(/(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([^\n]+)/);
-  if (intMatch) {
-    result.interest.grossRON = parseFloat(intMatch[2]) || 0;
-    result.interest.taxWithheldRON = parseFloat(intMatch[3]) || 0;
-    result.interest.netRON = parseFloat(intMatch[4]) || 0;
-    result.interest.payer = intMatch[5].trim();
+  for (const m of interestText.matchAll(ROW_RE)) {
+    const gross = parseNumber(m[2]);
+    const tax = parseNumber(m[3]);
+    const net = parseNumber(m[4]);
+    const payer = m[5].trim();
+    if (!gross && !tax && !net) continue;
+    if (!/XTB|S\.?A\.?|sucursala|sursa/i.test(payer)) continue;
+    const currency = detectCurrency(payer, text);
+    const grossRON = toRON(gross, currency, year);
+    const taxRON = toRON(tax, currency, year);
+    const netRON = toRON(net, currency, year);
+    result.interestRows.push({ currency, gross, tax, net, grossRON, taxRON, netRON, payer });
+    result.interest.grossRON += grossRON;
+    result.interest.taxWithheldRON += taxRON;
+    result.interest.netRON += netRON;
+    if (!result.interest.payer) result.interest.payer = payer;
   }
 
   return result;
+}
+
+/**
+ * Detect currency for an XTB row.
+ * XTB Romania reports state "în RON" in the column header by default, but rows
+ * may carry their own "(în EUR)" / "(USD)" hint in the description.
+ */
+function detectCurrency(rowText, fullText) {
+  const t = String(rowText || '');
+  if (/\b(în\s+)?EUR\b/i.test(t)) return 'EUR';
+  if (/\b(în\s+)?USD\b/i.test(t)) return 'USD';
+  if (/\bRON\b/i.test(t)) return 'RON';
+  // Fall back to whatever the document header says.
+  if (fullText && /\bîn\s+EUR\b/i.test(fullText) && !/\bîn\s+RON\b/i.test(fullText)) return 'EUR';
+  if (fullText && /\bîn\s+USD\b/i.test(fullText) && !/\bîn\s+RON\b/i.test(fullText)) return 'USD';
+  return 'RON';
 }
 
 // Parse XTB Portfolio Sheet (FISA DE PORTOFOLIU)
@@ -2045,25 +2099,71 @@ function parseXtbPortfolio(text, year) {
   const result = {
     year,
     source: 'XTB Romania',
+    // Aggregated totals (RON) — kept for backwards compatibility.
     longTerm: { gainRON: 0, lossRON: 0, taxWithheldRON: 0 },
     shortTerm: { gainRON: 0, lossRON: 0, taxWithheldRON: 0 },
     country: '',
     currency: 'RON',
     totalGainRON: 0,
-    totalTaxWithheldRON: 0
+    totalTaxWithheldRON: 0,
+    // Detailed per-row breakdown, country + currency preserved.
+    countries: []
   };
 
-  // Pattern: country currency gain loss tax gain loss tax
-  // "Statele Unite RON 5457.00 0.00 55.00 2296.00 0.00 69.00"
-  const rowMatch = text.match(/(Statele Unite|Romania|[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\s+RON\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
-  if (rowMatch) {
-    result.country = rowMatch[1];
-    result.longTerm.gainRON = parseFloat(rowMatch[2]) || 0;
-    result.longTerm.lossRON = parseFloat(rowMatch[3]) || 0;
-    result.longTerm.taxWithheldRON = parseFloat(rowMatch[4]) || 0;
-    result.shortTerm.gainRON = parseFloat(rowMatch[5]) || 0;
-    result.shortTerm.lossRON = parseFloat(rowMatch[6]) || 0;
-    result.shortTerm.taxWithheldRON = parseFloat(rowMatch[7]) || 0;
+  // Pattern: country (one or more lines) | currency | 6 numbers (long: gain/loss/tax, short: gain/loss/tax)
+  // Country names can wrap onto multiple lines, so we match the lookahead for currency RON/EUR/USD.
+  const rowRe = /([A-Za-zĂÂÎȘȚăâîșțţ][A-Za-zĂÂÎȘȚăâîșțţ\s().,\-]*?)\s+(RON|EUR|USD)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)/g;
+
+  for (const m of text.matchAll(rowRe)) {
+    let country = m[1].replace(/\s+/g, ' ').trim();
+    const currency = m[2];
+    const longGain = parseNumber(m[3]);
+    const longLoss = parseNumber(m[4]);
+    const longTax = parseNumber(m[5]);
+    const shortGain = parseNumber(m[6]);
+    const shortLoss = parseNumber(m[7]);
+    const shortTax = parseNumber(m[8]);
+
+    // Filter false-positive matches from the header/legend.
+    if (/^(Câ?știg|Pierdere|Impozit|Moneda|Nr|Cod|RON|EUR|USD)/i.test(country)) continue;
+    if (longGain === 0 && longLoss === 0 && longTax === 0 && shortGain === 0 && shortLoss === 0 && shortTax === 0) continue;
+
+    // Clean trailing ordinal numbers / leading "1 ", "2 " from country (XTB lays them out separately).
+    country = country.replace(/^\d+\s+/, '').replace(/\s+\d+$/, '').trim();
+    // XTB prefixes the country with the instrument category (e.g.
+    // "Instrumente cu detinere (OMI) din Statele Unite"). Extract just the country.
+    const dinMatch = country.match(/\bdin\s+(.+)$/i);
+    if (dinMatch) country = dinMatch[1].trim();
+
+    result.countries.push({
+      country,
+      currency,
+      longGain, longLoss, longTax,
+      shortGain, shortLoss, shortTax,
+      longGainRON: toRON(longGain, currency, year),
+      longLossRON: toRON(longLoss, currency, year),
+      longTaxRON: toRON(longTax, currency, year),
+      shortGainRON: toRON(shortGain, currency, year),
+      shortLossRON: toRON(shortLoss, currency, year),
+      shortTaxRON: toRON(shortTax, currency, year),
+    });
+  }
+
+  // Aggregate totals in RON across all rows.
+  for (const c of result.countries) {
+    result.longTerm.gainRON += c.longGainRON;
+    result.longTerm.lossRON += c.longLossRON;
+    result.longTerm.taxWithheldRON += c.longTaxRON;
+    result.shortTerm.gainRON += c.shortGainRON;
+    result.shortTerm.lossRON += c.shortLossRON;
+    result.shortTerm.taxWithheldRON += c.shortTaxRON;
+  }
+
+  // Backwards-compat scalar fields: pick the first country, mark currency mixed if needed.
+  if (result.countries.length > 0) {
+    result.country = result.countries[0].country;
+    const currencies = new Set(result.countries.map(c => c.currency));
+    result.currency = currencies.size === 1 ? [...currencies][0] : 'MIXED';
   }
 
   result.totalGainRON = result.longTerm.gainRON + result.shortTerm.gainRON - result.longTerm.lossRON - result.shortTerm.lossRON;

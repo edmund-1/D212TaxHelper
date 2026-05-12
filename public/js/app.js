@@ -1536,26 +1536,55 @@ const App = (() => {
     }
 
     const rows = [];
-    // XTB data
-    if (xtbPort.longTerm?.gainRON) {
-      rows.push({
-        cat: I18n.t('income.roGainsLong') + ' (XTB)',
-        country: xtbPort.country || 'USA',
-        gross: xtbPort.longTerm.gainRON,
-        rate: (data.roLongRate * 100) + '%',
-        withheld: xtbPort.longTerm.taxWithheldRON || 0,
-        net: Math.max(0, xtbPort.longTerm.gainRON * data.roLongRate - (xtbPort.longTerm.taxWithheldRON || 0))
-      });
-    }
-    if (xtbPort.shortTerm?.gainRON) {
-      rows.push({
-        cat: I18n.t('income.roGainsShort') + ' (XTB)',
-        country: xtbPort.country || 'USA',
-        gross: xtbPort.shortTerm.gainRON,
-        rate: (data.roShortRate * 100) + '%',
-        withheld: xtbPort.shortTerm.taxWithheldRON || 0,
-        net: Math.max(0, xtbPort.shortTerm.gainRON * data.roShortRate - (xtbPort.shortTerm.taxWithheldRON || 0))
-      });
+    // XTB data: prefer per-country breakdown when available (multi-row report).
+    if (xtbPort.countries && xtbPort.countries.length > 0) {
+      for (const c of xtbPort.countries) {
+        const curSuffix = c.currency && c.currency !== 'RON' ? ' ' + c.currency : '';
+        const longNet = (c.longGainRON || 0) - (c.longLossRON || 0);
+        const shortNet = (c.shortGainRON || 0) - (c.shortLossRON || 0);
+        if (longNet !== 0 || (c.longTaxRON || 0) > 0) {
+          rows.push({
+            cat: I18n.t('income.roGainsLong') + ' (XTB' + curSuffix + ')',
+            country: c.country || 'USA',
+            gross: longNet,
+            rate: (data.roLongRate * 100) + '%',
+            withheld: c.longTaxRON || 0,
+            net: Math.max(0, longNet * data.roLongRate - (c.longTaxRON || 0))
+          });
+        }
+        if (shortNet !== 0 || (c.shortTaxRON || 0) > 0) {
+          rows.push({
+            cat: I18n.t('income.roGainsShort') + ' (XTB' + curSuffix + ')',
+            country: c.country || 'USA',
+            gross: shortNet,
+            rate: (data.roShortRate * 100) + '%',
+            withheld: c.shortTaxRON || 0,
+            net: Math.max(0, shortNet * data.roShortRate - (c.shortTaxRON || 0))
+          });
+        }
+      }
+    } else {
+      // Fallback for legacy single-country XTB data
+      if (xtbPort.longTerm?.gainRON) {
+        rows.push({
+          cat: I18n.t('income.roGainsLong') + ' (XTB)',
+          country: xtbPort.country || 'USA',
+          gross: xtbPort.longTerm.gainRON,
+          rate: (data.roLongRate * 100) + '%',
+          withheld: xtbPort.longTerm.taxWithheldRON || 0,
+          net: Math.max(0, xtbPort.longTerm.gainRON * data.roLongRate - (xtbPort.longTerm.taxWithheldRON || 0))
+        });
+      }
+      if (xtbPort.shortTerm?.gainRON) {
+        rows.push({
+          cat: I18n.t('income.roGainsShort') + ' (XTB)',
+          country: xtbPort.country || 'USA',
+          gross: xtbPort.shortTerm.gainRON,
+          rate: (data.roShortRate * 100) + '%',
+          withheld: xtbPort.shortTerm.taxWithheldRON || 0,
+          net: Math.max(0, xtbPort.shortTerm.gainRON * data.roShortRate - (xtbPort.shortTerm.taxWithheldRON || 0))
+        });
+      }
     }
     // Tradeville data (per country)
     if (tvPort.countries && tvPort.countries.length > 0) {
