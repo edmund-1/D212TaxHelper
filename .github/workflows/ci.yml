@@ -1,0 +1,43 @@
+name: CI
+
+# Runs on every push to develop / main, and on every PR targeting those
+# branches. Keeps the long-running develop branch always-green so the eventual
+# develop → main release PR is a low-risk event.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: tests · node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies (deterministic)
+        run: npm ci
+
+      - name: Syntax check — server.js
+        run: node --check server.js
+
+      - name: Syntax check — public/js/app.js
+        run: node --check public/js/app.js
+
+      - name: i18n completeness
+        run: npm run check-i18n
+
+      - name: Unit + e2e tests
+        run: npm test

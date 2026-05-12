@@ -2,6 +2,8 @@
 
 # D212 Tax Helper
 
+[![CI](https://github.com/edspat/D212TaxHelper/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/edspat/D212TaxHelper/actions/workflows/ci.yml)
+
 A local web application that helps Romanian tax residents calculate and prepare their **Declarație Unică D212** for investment income from US and Romanian brokers.
 
 ## Who is this for?

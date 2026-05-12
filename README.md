@@ -2,6 +2,8 @@
 
 # D212 Asistent Fiscal
 
+[![CI](https://github.com/edspat/D212TaxHelper/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/edspat/D212TaxHelper/actions/workflows/ci.yml)
+
 O aplicație web locală care ajută rezidenții fiscali din România să calculeze și să pregătească **Declarația Unică D212** pentru veniturile din investiții de la brokeri din SUA și România.
 
 ## Pentru cine este?
