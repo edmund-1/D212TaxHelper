@@ -11,7 +11,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const XSD_PATH = process.argv[2] || path.join(process.env.USERPROFILE || '', 'Downloads', 'd212', 'D212.xsd');
+// Default to the in-repo copy under docs/anaf/d212-2025/. Override with an
+// explicit path argument when running against a newer ANAF release that hasn't
+// been added to the repo yet, e.g.:
+//   node scripts/parse-d212-xsd.js ~/Downloads/d212-2026/D212.xsd
+const DEFAULT_XSD = path.join(__dirname, '..', 'docs', 'anaf', 'd212-2025', 'D212.xsd');
+const XSD_PATH = process.argv[2] || DEFAULT_XSD;
 const xml = fs.readFileSync(XSD_PATH, 'utf8');
 const lines = xml.split('\n');
 

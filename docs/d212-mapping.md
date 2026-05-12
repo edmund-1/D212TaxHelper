@@ -300,14 +300,19 @@ These are not D212 compliance gaps but real improvements that surfaced during da
 The XSD structure was extracted via:
 
 ```bash
-node scripts/parse-d212-xsd.js ~/Downloads/d212/D212.xsd > d212-xsd.json
+node scripts/parse-d212-xsd.js > /tmp/d212-xsd.json
 ```
 
-Source files (place under `~/Downloads/d212/`):
+By default the script reads `docs/anaf/d212-2025/D212.xsd` (the in-repo copy). Pass an explicit path argument to point it at a newer ANAF release that hasn't been added to the repo yet.
 
-- `D212.xsd` (schema v1.0.4, 24.11.2025)
-- `business/d212-business*.sch` (5 files, BR-D212-0017..0076 validation rules)
-- `codes/d212-codes.sch` (income category code allow-list)
+Reference documents (all already in-tree under `docs/anaf/d212-2025/`):
+
+- `D212.xsd` — schema v1.0.4 (24.11.2025)
+- `business/d212-business*.sch` — 4 files, BR-D212-0017..0076 validation rules
+- `codes/d212-codes.sch` — income category code allow-list
 - `syntax/d212-syntax.sch`
-- `structura_D212_V1.0.8_17042026.pdf` (human-readable structure doc)
-- `d212_docTehnica_v1.0.8_17042026.xls` (machine-readable structure doc, includes category labels)
+- `structura_D212_v1.0.8_17042026.pdf` — human-readable structure doc
+- `d212_docTehnica_v1.0.8_17042026.xls` — machine-readable structure doc (includes category labels)
+- `Instructiuni_D212_OMF_2736_2025.pdf` — official filling instructions
+
+See `docs/anaf/README.md` and `docs/anaf/d212-2025/README.md` for provenance, versioning policy, and how to handle new ANAF releases.
