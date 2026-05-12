@@ -2836,11 +2836,83 @@ const App = (() => {
   }
 
   // ============ PDF UPLOAD ============
+  /**
+   * Mapping of upload document type → manual fields it will override.
+   * Used to warn the user before an import overwrites their manual entries.
+   * Each entry is a list of keys from yd (year data) considered "manual" for
+   * the given document type. roGainsCountries is an array; everything else is
+   * a scalar where non-empty means user-entered.
+   */
+  const MANUAL_FIELDS_BY_UPLOAD = {
+    xtb_portfolio:        ['roGainsCountries', 'roGainsLong', 'roGainsShort', 'roGainsTaxWithheld'],
+    tradeville_portfolio: ['roGainsCountries', 'roGainsLong', 'roGainsShort', 'roGainsTaxWithheld'],
+    xtb_dividends:        ['xtbDividends', 'roDivTaxPaid',
+                           'roEurDividends', 'roEurDivTaxPaid', 'roUsdDividends', 'roUsdDivTaxPaid',
+                           'roEurInterest', 'roEurInterestTaxPaid', 'roUsdInterest', 'roUsdInterestTaxPaid',
+                           'interestIncome', 'interestTaxPaid'],
+    fidelity_statement:   ['fidelityDividends', 'usDivTaxPaid', 'fidelityGains', 'fidelityCost'],
+    ms_statement:         ['fidelityDividends', 'usDivTaxPaid', 'fidelityGains', 'fidelityCost'],
+    investment:           ['fidelityDividends', 'fidelityGains'],
+    form_1042s:           ['fidelityDividends', 'usDivTaxPaid'],
+    stock_award:          ['salaryTaxedIncome', 'stockWithholdingPaid'],
+    adeverinta:           ['salaryTaxedIncome', 'stockWithholdingPaid'],
+    trade_confirmation:   ['fidelityGains', 'fidelityCost'],
+    declaratie:           ['fidelityDividends', 'usDivTaxPaid', 'fidelityGains', 'fidelityCost',
+                           'xtbDividends', 'roDivTaxPaid', 'roEurDividends', 'roEurDivTaxPaid',
+                           'roUsdDividends', 'roUsdDivTaxPaid', 'roGainsCountries',
+                           'roGainsLong', 'roGainsShort', 'roGainsTaxWithheld',
+                           'roEurInterest', 'roEurInterestTaxPaid', 'roUsdInterest', 'roUsdInterestTaxPaid',
+                           'interestIncome', 'interestTaxPaid', 'salaryTaxedIncome', 'stockWithholdingPaid'],
+  };
+
+  /** Return the manual-field keys for `type` that currently have user-entered values for `year`. */
+  function detectManualConflict(year, type) {
+    const yd = appData.years?.[year] || {};
+    const keys = MANUAL_FIELDS_BY_UPLOAD[type] || [];
+    const hits = [];
+    for (const k of keys) {
+      const v = yd[k];
+      if (k === 'roGainsCountries') {
+        if (Array.isArray(v) && v.length > 0) hits.push(k);
+      } else if (v !== undefined && v !== '' && v !== null && v !== 0) {
+        hits.push(k);
+      }
+    }
+    return hits;
+  }
+
+  /** Send a PUT that clears the given manual fields (sets to empty / []). */
+  async function clearManualFields(year, keys) {
+    if (!keys || !keys.length) return;
+    const payload = {};
+    for (const k of keys) {
+      payload[k] = k === 'roGainsCountries' ? [] : '';
+    }
+    await fetch(`/api/data/${year}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
   async function handleUpload(e) {
     e.preventDefault();
     const yearVal = document.getElementById('upload-year').value;
     const typeVal = document.getElementById('upload-type').value;
     const files = document.getElementById('upload-file').files;
+
+    // Warn before overriding manual entries
+    const conflictingFields = detectManualConflict(parseInt(yearVal, 10), typeVal);
+    if (conflictingFields.length > 0) {
+      const labels = conflictingFields.map(k => I18n.t('import.manualFieldLabels.' + k) || k);
+      const msg = I18n.t('import.overrideManualWarn', {
+        year: yearVal,
+        fields: labels.map(l => '• ' + l).join('\n')
+      });
+      if (!confirm(msg)) {
+        return;
+      }
+    }
 
     const resultDiv = document.getElementById('upload-result');
     const submitBtn = document.getElementById('upload-submit-btn');
@@ -3055,6 +3127,11 @@ const App = (() => {
 
     if (anySuccess) {
       try {
+        // Clear manual fields that this upload type overrides, so the
+        // import becomes the authoritative source going forward.
+        if (conflictingFields.length > 0) {
+          await clearManualFields(parseInt(yearVal, 10), conflictingFields);
+        }
         await loadAllData();
         populateYears();
         const uploadedYear = parseInt(yearVal, 10);
