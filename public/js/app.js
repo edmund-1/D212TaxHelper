@@ -894,6 +894,24 @@ const App = (() => {
     const incomeTaxOnly = incomeTaxGross;
     const totalTax = incomeTaxOnly + cassTax;
 
+    // Refund detection: when a Romanian payer has withheld more tax than what
+    // the D212 calculation actually requires (typically broker capital-gains
+    // withholding before applying same-year or carried-forward losses), the
+    // difference can be claimed back on the declaration. We surface this
+    // separately so the UI can show "X RON de restituit" instead of hiding
+    // over-withholding behind a Math.max(0, ...) clamp.
+    //
+    // Foreign withholding (US 1042-S etc.) is NOT included here — per the
+    // double-taxation treaty it is only creditable up to the RO tax due
+    // (`min(usForeignTaxRON, usDivTaxDueRON)`); the excess is recovered, if
+    // at all, through the foreign jurisdiction, not via D212.
+    const roCapGainsOverwithheld = Math.max(0, (roPortTaxWithheld || 0) - roCapitalGainsTax);
+    const roDivOverwithheld = Math.max(0, (roDivTaxWithheld || 0) - roDivTaxDue);
+    const interestOverwithheld = Math.max(0, interestTaxPaid - interestTaxGross);
+    const refundOwedRON = roCapGainsOverwithheld + roDivOverwithheld + interestOverwithheld;
+    // Net cash flow on D212: positive = pay, negative = refund.
+    const d212NetCashFlowRON = incomeTaxOnly - refundOwedRON;
+
     return {
       dividendsUSD,
       dividendsRON,
@@ -986,7 +1004,13 @@ const App = (() => {
       usNetIncomeRON,
       usNetGainsRON,
       incomeTaxGross,
-      totalAlreadyPaid
+      totalAlreadyPaid,
+      // Refund detection (over-withholding by Romanian payers)
+      refundOwedRON,
+      roCapGainsOverwithheld,
+      roDivOverwithheld,
+      interestOverwithheld,
+      d212NetCashFlowRON
     };
   }
 
@@ -998,6 +1022,18 @@ const App = (() => {
     document.getElementById('already-paid-value').textContent = fmt(data.totalAlreadyPaid);
     document.getElementById('cass-value').textContent = fmt(data.cassTax);
     document.getElementById('total-tax-value').textContent = fmt(data.incomeTaxOnly);
+
+    // Show refund card only when there's a refund owed (Romanian broker over-withholding)
+    const refundCard = document.getElementById('card-refund');
+    const refundValue = document.getElementById('refund-value');
+    if (refundCard && refundValue) {
+      if ((data.refundOwedRON || 0) > 0) {
+        refundCard.style.display = '';
+        refundValue.textContent = fmt(data.refundOwedRON);
+      } else {
+        refundCard.style.display = 'none';
+      }
+    }
 
     // Charts - only show if there's actual financial data
     const allYears = Object.keys(appData.years || {}).map(Number).sort((a, b) => a - b);
@@ -2024,11 +2060,31 @@ const App = (() => {
     // Subtotal income tax
     const incomeTaxToPay = Math.max(0, usGainsTax) + usDivTax + roCapGainsNetOwed + roDivNetOwed + interestTaxRemaining + (data.rentalTaxToPay || 0) + (data.royaltyTaxToPay || 0) + (data.otherTaxToPay || 0);
     html += dataRow(I18n.t('taxes.oweIncomeTaxSubtotal'), '<strong>' + fmtR(incomeTaxToPay) + ' RON</strong>', { topBorder: true });
+    // Refund: when Romanian broker withheld more than the actual tax due (after losses)
+    if ((data.refundOwedRON || 0) > 0) {
+      html += emptyRow();
+      html += `<tr><td colspan="2" style="background:rgba(0,128,0,0.05);font-size:0.85rem;color:var(--success);padding:0.5rem;"><strong>💰 ${I18n.t('taxes.refundDetected')}</strong></td></tr>`;
+      if ((data.roCapGainsOverwithheld || 0) > 0) {
+        html += dataRow(I18n.t('taxes.refundRoCapGains'), '<strong style="color:var(--success);">' + fmtR(data.roCapGainsOverwithheld) + ' RON</strong>', { indent: true });
+      }
+      if ((data.roDivOverwithheld || 0) > 0) {
+        html += dataRow(I18n.t('taxes.refundRoDiv'), '<strong style="color:var(--success);">' + fmtR(data.roDivOverwithheld) + ' RON</strong>', { indent: true });
+      }
+      if ((data.interestOverwithheld || 0) > 0) {
+        html += dataRow(I18n.t('taxes.refundInterest'), '<strong style="color:var(--success);">' + fmtR(data.interestOverwithheld) + ' RON</strong>', { indent: true });
+      }
+      html += dataRow(I18n.t('taxes.refundTotal'), '<strong style="color:var(--success);">' + fmtR(data.refundOwedRON) + ' RON</strong>', { topBorder: true });
+    }
     // CASS
     html += dataRow(I18n.t('taxes.oweCASS'), fmtR(data.cassTax) + ' RON', { indent: true });
     html += emptyRow();
-    const finalToPay = incomeTaxToPay + data.cassTax;
-    html += dataRow(I18n.t('taxes.oweTotalToPay'), '<strong style="color:var(--warning);font-size:1.15rem;">' + fmtR(finalToPay) + ' RON</strong>', { bold: true, topBorder: true, highlight: true });
+    // Final amount: cash flow taking refund into account
+    const finalNet = incomeTaxToPay - (data.refundOwedRON || 0) + data.cassTax;
+    if (finalNet >= 0) {
+      html += dataRow(I18n.t('taxes.oweTotalToPay'), '<strong style="color:var(--warning);font-size:1.15rem;">' + fmtR(finalNet) + ' RON</strong>', { bold: true, topBorder: true, highlight: true });
+    } else {
+      html += dataRow(I18n.t('taxes.refundFinalAmount'), '<strong style="color:var(--success);font-size:1.15rem;">' + fmtR(-finalNet) + ' RON</strong>', { bold: true, topBorder: true, highlight: true });
+    }
 
     // Payment deadline
     const deadlineISO = data.paymentDeadline || d212DefaultDeadline(selectedYear);
