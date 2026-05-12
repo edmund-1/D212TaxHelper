@@ -671,11 +671,27 @@ const App = (() => {
       capitalGainsTaxableRON = (tradeProceedsUSD - costUSD) * rate;
     }
 
-    // Romania broker data from imported reports (XTB + Tradeville)
+    // Romania broker data from imported reports (XTB + Tradeville).
+    // Per Romanian fiscal rules (Cod fiscal art. 119 + D212), capital gains from
+    // transferul titlurilor de valoare are taxed on the NET amount (gain - loss)
+    // for each holding-period bucket (long >= 1yr / short < 1yr) within the year.
+    // Net losses are surfaced as currentYearLossRON for explicit carry-forward.
     const tvPort = yd.tradevillePortfolio || {};
     let dividendsRON_ro = xtbDiv.dividends?.grossRON || 0;
-    let roLongTermGainRON = (xtbPort.longTerm?.gainRON || 0) + (tvPort.longTerm?.gainRON || 0);
-    let roShortTermGainRON = (xtbPort.shortTerm?.gainRON || 0) + (tvPort.shortTerm?.gainRON || 0);
+    const xtbLongGain = xtbPort.longTerm?.gainRON || 0;
+    const xtbLongLoss = xtbPort.longTerm?.lossRON || 0;
+    const xtbShortGain = xtbPort.shortTerm?.gainRON || 0;
+    const xtbShortLoss = xtbPort.shortTerm?.lossRON || 0;
+    const tvLongGain = tvPort.longTerm?.gainRON || 0;
+    const tvLongLoss = tvPort.longTerm?.lossRON || 0;
+    const tvShortGain = tvPort.shortTerm?.gainRON || 0;
+    const tvShortLoss = tvPort.shortTerm?.lossRON || 0;
+    const roLongNet = (xtbLongGain - xtbLongLoss) + (tvLongGain - tvLongLoss);
+    const roShortNet = (xtbShortGain - xtbShortLoss) + (tvShortGain - tvShortLoss);
+    let roLongTermGainRON = Math.max(0, roLongNet);
+    let roShortTermGainRON = Math.max(0, roShortNet);
+    // Loss in either bucket carries forward; expose total for D212 Rd.5-6 next year.
+    let currentYearLossRON = Math.max(0, -roLongNet) + Math.max(0, -roShortNet);
     let capitalGainsRON_ro = roLongTermGainRON + roShortTermGainRON;
     let roDivTaxWithheld = xtbDiv.dividends?.taxWithheldRON || 0;
     let roInterestRON = xtbDiv.interest?.grossRON || 0;
@@ -888,6 +904,7 @@ const App = (() => {
       capitalGainsRON_ro,
       roLongTermGainRON,
       roShortTermGainRON,
+      currentYearLossRON,
       salaryDeduction,
       interestIncomeRON,
       exchangeRate: rate,
@@ -1350,6 +1367,7 @@ const App = (() => {
         <td><strong>${fmt(totalPaid)}</strong></td>
         <td><strong>${fmt(totalTax)}</strong></td>
       </tr>
+      ${(data.currentYearLossRON || 0) > 0 ? `<tr><td colspan="9" style="font-size:0.8rem;color:var(--warning,#b35900);border:none;padding-top:0.5rem;">${I18n.t('income.currentYearLossNote', { amount: fmt(data.currentYearLossRON) })}</td></tr>` : ''}
       ${hasDeduction ? `<tr><td colspan="9" style="font-size:0.75rem;color:var(--text-muted);border:none;padding-top:0.5rem;">* ${I18n.t('income.deductionNote')}</td></tr>` : ''}
     `;
   }

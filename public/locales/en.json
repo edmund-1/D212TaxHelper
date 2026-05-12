@@ -55,6 +55,7 @@
     "esppPurchases": "US ESPP Stock Purchases",
     "salaryTaxedDeduction": "Deduction: income already taxed as salary (BIK)",
     "priorLossDeduction": "Prior year losses offset (D212 Rd.5-6)",
+    "currentYearLossNote": "⚠ Net capital loss from transfer of securities this year: {amount} RON. This loss carries forward up to 7 years (D212 Rd.5-6, offset up to 70% of yearly gains). Add it next year to the \"Prior Year Capital Losses\" field.",
     "roGains": "Romania Stock Sales",
     "roGainsLong": "Romania Stock Sales ≥1yr",
     "roGainsShort": "Romania Stock Sales <1yr",

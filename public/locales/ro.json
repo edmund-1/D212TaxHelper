@@ -55,6 +55,7 @@
     "esppPurchases": "Achiziții Acțiuni ESPP SUA",
     "salaryTaxedDeduction": "Deducere: venit impozitat deja ca salariu (BIK)",
     "priorLossDeduction": "Pierderi fiscale reportate compensate (D212 Rd.5-6)",
+    "currentYearLossNote": "⚠ Pierdere netă din transferul titlurilor de valoare în anul curent: {amount} RON. Această pierdere se reportează în următorii 7 ani (D212 Rd.5-6, compensare max 70% din câștigul anual). Adăug-o anul viitor la câmpul „Pierderi fiscale din anii precedenți”.",
     "roGains": "Vânzări Acțiuni România",
     "roGainsLong": "Vânzări Acțiuni România ≥1an",
     "roGainsShort": "Vânzări Acțiuni România <1an",
