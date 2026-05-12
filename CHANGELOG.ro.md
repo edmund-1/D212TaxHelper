@@ -1,5 +1,61 @@
 # D212 Asistent Fiscal - Istoric versiuni
 
+## v1.6.0 (2026-05-12)
+
+### 🇷🇴 Brokeri noi & venituri în EUR/USD
+- **BT Trade** adăugat în lista brokerilor români (sugestii la „Adaugă Date → Broker România")
+- **Suport complet pentru venituri în EUR și USD prin broker RO** — dividende, dobânzi și câștiguri de capital denominate în EUR sau USD prin broker român (cazul XTB cu acțiuni europene/americane). Câmpuri noi pe „Adaugă Date":
+  - Dividende România (EUR / USD) + impozit reținut
+  - Dobânzi România (EUR / USD) + impozit reținut
+  - Dropdown valută per-rând la „Capital Gains per country" (RON / EUR / USD; default RON pentru compatibilitate)
+- **Cursurile BNR EUR/RON 2019-2025** adăugate (sursa: BNR Serii statistice). Câmp nou „Curs EUR/RON" la „Adaugă Date → Curs de Schimb" paralel cu USD/RON.
+
+### 💰 Două bug-uri real-money fixate
+- **Rambursare nedeclarată** (refund): când brokerul român reține mai mult decât impozitul efectiv datorat (de exemplu pe câștiguri capital, înainte de a aplica pierderile), aplicația ascundea valoarea sub `Math.max(0, ...)`. Acum apare explicit:
+  - Pe Panou Principal: card nou „De Restituit (D212)" (verde, vizibil doar când există)
+  - Pe Calcul Impozite: secțiune dedicată cu breakdown per categorie (câștiguri capital RO, dividende RO, dobânzi); totalul final alternează între „DE PLĂTIT" (galben) și „DE RESTITUIT" (verde)
+  - Pe sample-ul real 2025 ar fi fost ~1 644 RON refundabili ascunși anterior
+- **Pierderi reportate ignorate**: `priorLosses` era colectat dar nu se aplica în calcul. Acum implementează formula oficială din Instr. § 7.3.3: `Rd.6 = min(Rd.5, 0.70 × Rd.3)`, consumând întâi bucket-ul cu rată mai mare (short 3% > long 1%) pentru economie maximă
+
+### 📄 Parsere XTB rescrise (multi-row + multi-currency)
+- **Bug critic fixat**: vechiul parser captura doar primul rând din raportul de portofoliu, pierzând restul țărilor. Pe sample-ul real 2025 cu Irlanda + Statele Unite, pierderea de 17 128 RON din Irlanda era ignorată complet
+- Noul parser captează toate rândurile, fiecare cu valuta sa, și convertește în RON folosind cursurile BNR
+- Capital gains folosesc acum `net = max(0, gain − loss)` per bucket (long / short); pierderea netă a anului curent se expune ca `currentYearLossRON` pentru reportare în anul următor
+
+### ✨ UX
+- **Modal de diff side-by-side** înainte de orice import care ar suprascrie date manuale (Adaugă Date). Utilizatorul vede tabel `Câmp | Valoare actuală | Valoare nouă` și confirmă explicit înainte ca documentul să suprascrie introducerile manuale. Folosește un `dryRun` upload pentru a obține valorile parsate fără să persiste nimic
+- **Date importate pre-completate pe „Adaugă Date"** cu indicator vizual „📄 Importat din XTB" (sau Fidelity). Dacă există manual override, hint-ul menționează valoarea importată ascunsă
+- **Loading splash** între lansare și apariția dashboard-ului (CSS-only, fără dependențe; respectă tema dark/light)
+- **Detalii Venituri**: linii separate pentru dividende/dobânzi în EUR și USD cu coloana rate completată; tabelul Romania Trades afișează rând per țară (cu sufix valută când nu e RON)
+
+### 📚 Documentație ANAF în repo
+- `docs/anaf/d212-2025/` — toate documentele oficiale ANAF / MF ca sursă de adevăr versionată:
+  - `D212.xsd` (schema v1.0.4 din 24.11.2025)
+  - 6 fișiere schematron (76+ reguli BR-D212-*)
+  - `Instructiuni_D212_OMF_2736_2025.pdf` (instrucțiuni oficiale OMF)
+  - `structura_D212_v1.0.8_17042026.pdf` + `d212_docTehnica_v1.0.8.xls`
+  - `nomenclator_caen.xml`
+- `docs/d212-mapping.md` — mapare exhaustivă D212 → app cu citații BT-code pentru fiecare atribut
+- `ROADMAP.md` — listă deschisă de gap-uri rămase cu starter info (path-uri, capcane, criterii de acceptare) pentru contributori
+
+### 🧪 Calitate & infrastructură
+- **Prima suită de teste** (35 cazuri, `node:test`, zero dependențe noi):
+  - `test/rates.test.js` — BNR rates, toRON, parseNumber, detectCurrency
+  - `test/parsers-xtb.test.js` — multi-row, multi-currency, cleanup nume țară
+  - `test/parsers-xtb-e2e.test.js` — pipeline complet pdf-parse + parsere pe PDF-uri sintetice anonimizate generate de `scripts/generate-test-pdfs.js`
+- **CI GitHub Actions** — rulează pe push `develop`/`main` și PR-uri, matrix Node 18/20/22 pe ubuntu-latest (`npm test`, `npm run check-i18n`, `node --check`)
+- **Branch strategy**: `develop` ca integration branch (CI continuu); `main` doar pentru release-uri (PR develop→main + tag)
+- **Skill Claude scoped** la core tax engine (`.github/skills/anaf-tax-engine/SKILL.md`) — viitoare schimbări AI rămân în `lib/`, `computeYearData` și teste; UI styling, build portable, db schema necesită review uman explicit
+
+### 🛠️ Refactor intern
+- Cursurile BNR + `parseNumber` + `toRON` + `detectCurrency` extrase din `server.js` într-un modul dedicat `lib/rates.js` (single source of truth)
+- Parserele XTB mutate în `lib/parsers/xtb.js` (importate în `server.js`); ~190 linii eliminate din `server.js` prin deduplicare
+- Bug latent găsit de teste: regex `\bîn` nu funcționa în JS pentru că `î` (Unicode) nu e word-character fără flag `/u`. Rezolvat cu `(?:^|\s)în`
+
+### 🐛 Bug-uri minore
+- Output-ul de import pentru XTB nu mai afișează `dividends: [object Object] | interest: [object Object]` ci sumar lizibil cu totalurile per categorie
+- `currentYearLossRON` (pierdere netă a anului curent) afișat cu notă/sugestie de adăugare la `priorLosses` anul viitor
+
 ## v1.5.3 (2026-04-19)
 
 ### Suport Temă Luminoasă/Întunecată/Auto
