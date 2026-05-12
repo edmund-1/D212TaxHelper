@@ -2369,6 +2369,48 @@ const App = (() => {
   }
 
   // ============ DATA FORM ============
+  /**
+   * Set a manual input's value from yd[manualKey] when present, otherwise
+   * fall back to a value from an imported document. Adds a small "📄 imported"
+   * hint below the input so the user knows where the value comes from.
+   */
+  function fillInputWithImport(inputId, yd, manualKey, importedVal, sourceLabel) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const manual = yd[manualKey];
+    const hasManual = manual !== undefined && manual !== '' && manual !== null;
+    const importNum = (importedVal != null && Math.abs(importedVal) > 0.005)
+      ? Math.round(importedVal * 100) / 100
+      : null;
+
+    if (hasManual) {
+      input.value = manual;
+    } else if (importNum != null) {
+      input.value = importNum;
+    } else {
+      input.value = '';
+    }
+
+    let hint = input.parentElement.querySelector('.import-hint');
+    if (importNum != null) {
+      if (!hint) {
+        hint = document.createElement('small');
+        hint.className = 'import-hint';
+        hint.style.cssText = 'color:var(--success);font-size:0.7rem;display:block;margin-top:0.2rem;font-style:italic;';
+        input.parentElement.appendChild(hint);
+      }
+      const baseLabel = I18n.t('input.importedFrom');
+      if (hasManual) {
+        hint.textContent = `📄 ${baseLabel} ${sourceLabel}: ${importNum} (${I18n.t('input.manualOverride')})`;
+      } else {
+        hint.textContent = `📄 ${baseLabel} ${sourceLabel}`;
+      }
+      hint.style.display = '';
+    } else if (hint) {
+      hint.style.display = 'none';
+    }
+  }
+
   function populateForm() {
     const yd = appData.years?.[selectedYear] || {};
     const rate = exchangeRates[selectedYear]?.usdRon || 4.57;
@@ -2382,18 +2424,24 @@ const App = (() => {
 
     document.getElementById('input-us-broker').value = yd.usBroker || '';
     document.getElementById('input-ro-broker').value = yd.roBroker || '';
-    document.getElementById('input-us-dividends').value = yd.fidelityDividends || '';
-    document.getElementById('input-us-div-tax').value = yd.usDivTaxPaid || '';
-    document.getElementById('input-ro-dividends').value = yd.xtbDividends || '';
-    document.getElementById('input-ro-div-tax').value = yd.roDivTaxPaid || '';
+
+    // US dividends & gains: imported data may come from Fidelity statements or 1042-S
+    fillInputWithImport('input-us-dividends', yd, 'fidelityDividends', yd.fidelityDividendsYTD, 'Fidelity');
+    fillInputWithImport('input-us-div-tax', yd, 'usDivTaxPaid', yd.fidelityTaxWithheldYTD, 'Fidelity');
+
+    // Romania RON dividends & interest: imported from XTB Dividends report
+    const xtbDiv = yd.xtbDividendsReport || {};
+    fillInputWithImport('input-ro-dividends', yd, 'xtbDividends', xtbDiv.dividends?.grossRON, 'XTB');
+    fillInputWithImport('input-ro-div-tax', yd, 'roDivTaxPaid', xtbDiv.dividends?.taxWithheldRON, 'XTB');
+    fillInputWithImport('input-interest', yd, 'interestIncome', xtbDiv.interest?.grossRON, 'XTB');
+    fillInputWithImport('input-interest-tax-paid', yd, 'interestTaxPaid', xtbDiv.interest?.taxWithheldRON, 'XTB');
+
     document.getElementById('input-ro-eur-dividends').value = yd.roEurDividends || '';
     document.getElementById('input-ro-eur-div-tax').value = yd.roEurDivTaxPaid || '';
     document.getElementById('input-ro-usd-dividends').value = yd.roUsdDividends || '';
     document.getElementById('input-ro-usd-div-tax').value = yd.roUsdDivTaxPaid || '';
     document.getElementById('input-us-gains').value = yd.fidelityGains || '';
     document.getElementById('input-us-cost').value = yd.fidelityCost || '';
-    document.getElementById('input-interest').value = yd.interestIncome || '';
-    document.getElementById('input-interest-tax-paid').value = yd.interestTaxPaid || '';
     document.getElementById('input-ro-eur-interest').value = yd.roEurInterest || '';
     document.getElementById('input-ro-eur-interest-tax').value = yd.roEurInterestTaxPaid || '';
     document.getElementById('input-ro-usd-interest').value = yd.roUsdInterest || '';
@@ -2414,8 +2462,53 @@ const App = (() => {
     document.getElementById('input-stock-withholding').value = yd.stockWithholdingPaid || '';
     document.getElementById('input-salary-taxed').value = yd.salaryTaxedIncome || '';
 
-    // Populate RO gains country rows
-    renderRoGainsRows(yd.roGainsCountries || []);
+    // Populate RO gains country rows: prefer manual; fall back to imported XTB / Tradeville portfolio
+    const manualCountries = yd.roGainsCountries;
+    const xtbCountries = yd.xtbPortfolio?.countries;
+    const tvCountries = yd.tradevillePortfolio?.countries;
+    let rowsToRender;
+    let sourceForRows = null;
+    if (Array.isArray(manualCountries) && manualCountries.length > 0) {
+      rowsToRender = manualCountries;
+    } else if (Array.isArray(xtbCountries) && xtbCountries.length > 0) {
+      rowsToRender = xtbCountries.map(c => ({
+        country: c.country,
+        currency: c.currency || 'RON',
+        longGain: c.longGain || 0,
+        shortGain: c.shortGain || 0,
+        taxWithheld: (c.longTax || 0) + (c.shortTax || 0)
+      }));
+      sourceForRows = 'XTB';
+    } else if (Array.isArray(tvCountries) && tvCountries.length > 0) {
+      rowsToRender = tvCountries.map(c => ({
+        country: c.country,
+        currency: c.currency || 'RON',
+        longGain: c.longGain || 0,
+        shortGain: c.shortGain || 0,
+        taxWithheld: (c.longTax || 0) + (c.shortTax || 0)
+      }));
+      sourceForRows = 'Tradeville';
+    } else {
+      rowsToRender = [];
+    }
+    renderRoGainsRows(rowsToRender);
+    // Show a hint above the country rows when they came from an import
+    const roGainsContainer = document.getElementById('ro-gains-rows');
+    if (roGainsContainer) {
+      let importedHint = roGainsContainer.parentElement.querySelector('.ro-gains-import-hint');
+      if (sourceForRows) {
+        if (!importedHint) {
+          importedHint = document.createElement('p');
+          importedHint.className = 'ro-gains-import-hint';
+          importedHint.style.cssText = 'color:var(--success);font-size:0.8rem;font-style:italic;margin:0 0 0.5rem 0;';
+          roGainsContainer.parentElement.insertBefore(importedHint, roGainsContainer);
+        }
+        importedHint.textContent = `📄 ${I18n.t('input.importedFrom')} ${sourceForRows}`;
+        importedHint.style.display = '';
+      } else if (importedHint) {
+        importedHint.style.display = 'none';
+      }
+    }
 
     // Update fieldset legend with year
     const legend = document.getElementById('legend-rates');
@@ -3263,10 +3356,36 @@ const App = (() => {
           if (p.msDividends) parts.push(`Dividends: $${p.msDividends.toFixed(2)}`);
           if (p.msTaxWithheld) parts.push(`Tax: $${p.msTaxWithheld.toFixed(2)}`);
           resultHtml += parts.length > 0 ? `<p style="margin-top:0.3rem;color:var(--text-secondary);font-size:0.85rem;">${parts.join(' | ')}</p>` : '';
+        } else if (result.type === 'xtb_dividends') {
+          const p = result.parsed || {};
+          const parts = [];
+          if (p.dividends?.grossRON) {
+            parts.push(`${I18n.t('income.dividends')}: ${fmt(p.dividends.grossRON)} RON (${I18n.t('income.taxRON')}: ${fmt(p.dividends.taxWithheldRON)} RON)`);
+          }
+          if (p.interest?.grossRON) {
+            parts.push(`${I18n.t('income.interestIncome')}: ${fmt(p.interest.grossRON)} RON (${I18n.t('income.taxRON')}: ${fmt(p.interest.taxWithheldRON)} RON)`);
+          }
+          if ((p.dividendRows || []).length > 0) parts.push(`${p.dividendRows.length} ${I18n.t('misc.rows') || 'rows'}`);
+          resultHtml += parts.length > 0 ? `<p style="margin-top:0.3rem;color:var(--text-secondary);font-size:0.85rem;">${parts.join(' | ')}</p>` : '';
+        } else if (result.type === 'xtb_portfolio' || result.type === 'tradeville_portfolio') {
+          const p = result.parsed || {};
+          const parts = [];
+          if (Array.isArray(p.countries) && p.countries.length > 0) {
+            const countryList = p.countries.map(c => `${c.country}${c.currency && c.currency !== 'RON' ? ' [' + c.currency + ']' : ''}`).join(', ');
+            parts.push(`${p.countries.length} ${I18n.t('input.country').toLowerCase()}: ${countryList}`);
+          }
+          if (p.longTerm) parts.push(`≥1yr: +${fmt(p.longTerm.gainRON || 0)} / -${fmt(p.longTerm.lossRON || 0)} RON`);
+          if (p.shortTerm) parts.push(`<1yr: +${fmt(p.shortTerm.gainRON || 0)} / -${fmt(p.shortTerm.lossRON || 0)} RON`);
+          if (p.totalTaxWithheldRON) parts.push(`${I18n.t('income.taxRON')}: ${fmt(p.totalTaxWithheldRON)} RON`);
+          resultHtml += parts.length > 0 ? `<p style="margin-top:0.3rem;color:var(--text-secondary);font-size:0.85rem;">${parts.join(' | ')}</p>` : '';
         } else {
-          // Generic: show a compact summary instead of raw JSON
-          const keys = Object.keys(result.parsed || {}).filter(k => k !== 'year');
-          if (keys.length <= 6) {
+          // Generic: show a compact summary, filtering out object/array values
+          const keys = Object.keys(result.parsed || {}).filter(k => {
+            if (k === 'year' || k === 'source') return false;
+            const v = result.parsed[k];
+            return v != null && typeof v !== 'object';
+          });
+          if (keys.length > 0 && keys.length <= 6) {
             resultHtml += `<p style="margin-top:0.3rem;color:var(--text-secondary);font-size:0.85rem;">${keys.map(k => `${k}: ${typeof result.parsed[k] === 'number' ? result.parsed[k].toLocaleString() : esc(String(result.parsed[k]).slice(0, 50))}`).join(' | ')}</p>`;
           }
         }
