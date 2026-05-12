@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "test": "node --test test/*.test.js",
     "check-i18n": "node scripts/check-i18n.js",
     "build": "node build-portable.js",
     "build:full": "node build-portable.js --full",
