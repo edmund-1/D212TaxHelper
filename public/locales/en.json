@@ -461,7 +461,7 @@
     "netAfterEspp": "Net after ESPP deduction",
     "bikBreakdownTooltip": "Stock award BIK from imported documents, allocated via FIFO to sales in this year",
     "taxableAfterBik": "Taxable after BIK",
-    "priorLossTooltip": "Capital losses from previous years (max 7yr carryforward)",
+    "priorLossTooltip": "Carryforward losses available: {available} RON. Applied this year (max 70% of net gain = {cap} RON): {applied} RON. Remaining for future years: {remaining} RON.",
     "lossOffsetApplied": "Offset applied (max 70% of net gain)",
     "editingBanner": "Editing data for fiscal year",
     "rateAndSalaryApply": "The BNR exchange rate and minimum salary apply to this year.",

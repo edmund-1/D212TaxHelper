@@ -461,7 +461,7 @@
     "netAfterEspp": "Net după deducere ESPP",
     "bikBreakdownTooltip": "BIK din documentele Stock Award importate, alocat prin FIFO vânzărilor din acest an",
     "taxableAfterBik": "Impozabil după deducere BIK",
-    "priorLossTooltip": "Pierderi fiscale din anii precedenți (max 7 ani reportare)",
+    "priorLossTooltip": "Pierderi reportate disponibile: {available} RON. Aplicate anul acesta (max 70% din câștigul net = {cap} RON): {applied} RON. Rămase pentru reportare în anii următori: {remaining} RON.",
     "lossOffsetApplied": "Pierdere compensată (max 70% din câștigul net)",
     "editingBanner": "Editezi datele pentru anul fiscal",
     "rateAndSalaryApply": "Cursul BNR și salariul minim se aplică acestui an.",

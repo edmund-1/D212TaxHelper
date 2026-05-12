@@ -795,13 +795,38 @@ const App = (() => {
     // 2019-2022: flat 10% (no long/short distinction)
     // 2023-2025: 1% long (>=1yr), 3% short (<1yr)
     // 2026+: 3% long, 6% short
+    // Romania capital gains tax rates per year:
+    // 2019-2022: flat 10% (no long/short distinction)
+    // 2023-2025: 1% long (>=1yr), 3% short (<1yr)
+    // 2026+: 3% long, 6% short
     const tr = yd.taxRates || {};
     const defaultRoLong = year >= 2026 ? 3 : year >= 2023 ? 1 : 10;
     const defaultRoShort = year >= 2026 ? 6 : year >= 2023 ? 3 : 10;
     const roLongRate = (tr.roCapGainsLongRate != null ? tr.roCapGainsLongRate : defaultRoLong) / 100;
     const roShortRate = (tr.roCapGainsShortRate != null ? tr.roCapGainsShortRate : defaultRoShort) / 100;
-    const roCapitalGainsTax = (roLongTermGainRON * roLongRate) + (roShortTermGainRON * roShortRate);
-    // Romania capital gains: tax already withheld by XTB
+
+    // Apply prior-year capital losses (D212 Rd.5-6) using the formula from
+    // Instructiuni_D212_2736_2025, Section 7.3.3:
+    //   Rd.6 (pierdere fiscala compensata in anul de raportare) =
+    //        min( Rd.5 (priorLosses available), 0.70 * Rd.3 (current year net gain) )
+    // Per Cod Fiscal art. 119, losses can only offset gains "of the same nature".
+    // Our priorLosses input represents Romanian-source carryforward losses (the
+    // most common case from XTB/Tradeville/BT Trade past activity), so we apply
+    // them to RO capital gains only. Within RO, we consume the highest-tax-rate
+    // bucket first (short 3% before long 1%) to minimize the user's tax liability.
+    const priorLossesAvailable = parseFloat(yd.priorLosses) || 0;
+    const totalRoCapGains = roLongTermGainRON + roShortTermGainRON;
+    const maxLossOffset = 0.70 * totalRoCapGains;
+    const priorLossesApplied = Math.min(priorLossesAvailable, maxLossOffset);
+    const priorLossesRemaining = priorLossesAvailable - priorLossesApplied;
+    // Distribute the applied loss: short bucket first (higher rate = bigger tax saving)
+    let consumeFromShort = Math.min(priorLossesApplied, roShortTermGainRON);
+    let roShortAfterLoss = roShortTermGainRON - consumeFromShort;
+    let consumeFromLong = priorLossesApplied - consumeFromShort;
+    let roLongAfterLoss = roLongTermGainRON - consumeFromLong;
+
+    const roCapitalGainsTax = (roLongAfterLoss * roLongRate) + (roShortAfterLoss * roShortRate);
+    // Romania capital gains: tax already withheld by XTB / Tradeville / BT Trade
     const roGainsTaxNet = Math.max(0, roCapitalGainsTax - (roPortTaxWithheld || 0));
 
     // US income: deduct salary-taxed BIK from US capital gains as cost basis
@@ -1010,7 +1035,12 @@ const App = (() => {
       roCapGainsOverwithheld,
       roDivOverwithheld,
       interestOverwithheld,
-      d212NetCashFlowRON
+      d212NetCashFlowRON,
+      // Prior-year loss carryforward (D212 Rd.5-6)
+      priorLossesAvailable,
+      priorLossesApplied,
+      priorLossesRemaining,
+      maxLossOffset
     };
   }
 
@@ -1226,6 +1256,24 @@ const App = (() => {
         tax: 0,
         isDeduction: true,
         tooltip: (I18n.t('misc.bikBreakdownTooltip') || 'Stock award BIK from imported documents, allocated via FIFO to sales in this year') + '. ' + (I18n.t('misc.taxableAfterBik') || 'Taxable after BIK') + ': ' + Math.round(Math.max(0, (data.capitalGainsTaxableRON || 0) - data.salaryTaxedRON)).toLocaleString('ro-RO') + ' RON'
+      }] : []),
+      ...((data.priorLossesApplied || 0) > 0 ? [{
+        cat: '↳ ' + I18n.t('income.priorLossDeduction'),
+        usd: '-',
+        rate: '-',
+        ron: -data.priorLossesApplied,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: '-',
+        paid: 0,
+        tax: 0,
+        isDeduction: true,
+        tooltip: I18n.t('misc.priorLossTooltip', {
+          available: Math.round(data.priorLossesAvailable).toLocaleString('ro-RO'),
+          applied: Math.round(data.priorLossesApplied).toLocaleString('ro-RO'),
+          remaining: Math.round(data.priorLossesRemaining).toLocaleString('ro-RO'),
+          cap: Math.round(data.maxLossOffset).toLocaleString('ro-RO')
+        })
       }] : []),
       ...(data.esppPurchaseCount > 0 ? [{
         cat: (I18n.t('income.esppPurchases') || 'US ESPP Stock Purchases') + data.usBrokerLabel + ` (${data.esppPurchaseCount} ${I18n.t('misc.purchases') || 'purchases'})`,
