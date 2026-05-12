@@ -4,8 +4,9 @@
 > Schema namespace: `mfp:anaf:dgti:d212:declaratie:v11`
 > Filing year (`an_r`) = **2026** for the 2025 fiscal year
 > Validation rules: `Downloads/d212/business/*.sch` (76+ rules BR-D212-0001 ... 0076)
+> Filling instructions: `Instructiuni_D212_2736_2025.pdf` (ANAF official, Order 2736/2025)
 
-This document maps every D212 attribute relevant to **investment income** (dividends, interest, capital gains) to the corresponding source/output in D212TaxHelper. Mapping is based on the official XSD documentation strings and BT (Business Term) codes — not on guesswork.
+This document maps every D212 attribute relevant to **investment income** (dividends, interest, capital gains) to the corresponding source/output in D212TaxHelper. Mapping is based on the official XSD documentation strings + the OMF 2736/2025 instructions — not on guesswork.
 
 Status legend:
 - ✅ Already collected/computed correctly
@@ -74,7 +75,7 @@ Mandatory metadata + flags.
 | `venit_net_anual` | BT-03020 | **Rd.3 = Rd.1 - Rd.2** Net annual income | computed | ✅ |
 | `pierdere` | BT-03021 | **Rd.4 = Rd.2 - Rd.1** Annual loss | `data.currentYearLossRON` (added recently) | ✅ |
 | `pierdere_precedenta` | BT-03022 | **Rd.5** Prior-year losses carried forward (max 7 years) | `yd.priorLosses` | ✅ |
-| `pierdere_compensata` | BT-03023 | **Rd.6** Prior losses compensated this year (max 70% of gain) | `data.priorLossesApplied` | ✅ |
+| `pierdere_compensata` | BT-03023 | **Rd.6** Prior losses compensated this year (max 70% of gain) | `data.priorLossesApplied` (Instr. 7.3.3 formula) | ✅ |
 | `venit_recalculat` | BT-03024 | **Rd.7 = Rd.3 - Rd.6** Taxable income | computed | ✅ |
 | `impozit11` | BT-03026 | Tax due (Rd.7 × 10%) | computed (using rates from year-specific config: 1%/3% for 2023-2025; 3%/6% for 2026+) | ✅ |
 | `impozit_retinut` | BT-03027 | **Rd.9** Tax already withheld by broker | `data.roPortTaxWithheld` | ✅ |
@@ -82,6 +83,12 @@ Mandatory metadata + flags.
 > **Gap:** `cap11.categ_venit` requires a numeric category code per row. App doesn't currently emit one. Code `7` is "Câștiguri din transferul titlurilor de valoare" (capital gains) per Nomenclator_venituri_RO; dividends use a different code; interest yet another.
 
 > **Format issue:** XTB / Tradeville / BT Trade may withhold at source (final tax) and the user simply ticks `scutire`/`reg` to declare without paying additional tax. Current app does not surface this option.
+
+> **Confirmed loss-compensation formula (Instr. 7.3.3, page 17):**
+> Rd.6 = min(Rd.5, 0.70 × Rd.3). Implementation in `computeYearData` consumes short bucket first (3% rate > 1%) to maximize tax saving for the user.
+
+> **Loss "of the same nature" (Cod fiscal art. 119 + Instr. paragraph 7.3.3):**
+> Prior losses from Romanian-source transactions offset Romanian-source gains only; foreign-source losses offset foreign gains only. The two are separate carryforward pools. The app's single `yd.priorLosses` input is treated as the RO pool (common case from XTB/Tradeville/BT Trade history). A separate input for foreign-source losses would be needed for full fidelity — tracked as gap #4.
 
 ---
 
@@ -113,6 +120,9 @@ Mandatory metadata + flags.
 
 > **Strong coverage** of cap14. Most fields are computed correctly.
 
+> **Confirmed credit-fiscal formula (Instr. 39.6.10-11):**
+> `str_credit_fiscal` = `min(str_impozit_platit, str_impozit_datorat_Ro)`. Excess foreign tax above the RO amount due is NOT refundable through D212 — it can only be claimed from the foreign tax authority. Implementation matches: `usDivCreditRON = Math.min(usDivTaxDueRON, usForeignTaxRON)`.
+
 > **Gaps:**
 > - No explicit per-country, per-category grouping in UI. If user has US dividends + US capital gains, those are two separate `cap14` rows. Currently we lump them under "US" in computation.
 > - No support for non-US foreign income (e.g., EU dividends via Romanian broker count as `cap14` if sourced abroad).
@@ -128,13 +138,18 @@ The `oblig_realizat` element holds the FINAL totals that drive CASS. Investment 
 | Attribute | BT | Description | App | Status |
 |---|---|---|---|---|
 | `bifa_cass_real` | BT-01026 | Tick "I had income above threshold" | implicit | ⚠️ |
-| `cass_ven_inv` | BT-01030 | **Total investment income** for CASS base | `data.totalIncome_cass` (subset for investments) | ✅ |
+| `cass_ven_inv` | BT-01030 | **Total investment income** for CASS base. Per Instr. 51: dividends are counted NET of tax; interest is counted NET of tax; capital gains are counted as net gain (gross - cost). | `data.totalIncome_cass` (subset for investments) | ✅ confirmed against Instr. 51 |
 | `cass_total_ven` | BT-01033 | TOTAL non-salary income across all categories | `data.totalIncome` | ✅ |
 | `cass_baza` | BT-01034 | CASS calculation base (months × min salary, depends on threshold tier 6/12/24 SM) | `data.cassInfo.base` | ✅ |
 | `cass_anuala` | BT-01035 | CASS due (Rd.2 × 10%) | `data.cassTax` | ✅ |
 | `cass_datorat` | BT-01037 | Final CASS due | `data.cassTax` | ✅ |
 | `cass_retinut` | BT-01038 | CASS already withheld by payer (rare for investments) | not collected | ❌ |
 | `cass_dif_plus` / `cass_dif_minus` | BT-01039/40 | Diff to pay/refund | computed | ⚠️ implicit |
+
+> **CASS thresholds for investment income (Instr. 52.1.1-3):** 6 SM / 12 SM / 24 SM tiers.
+> The 60 SM cap that applies to independent-activity income does NOT apply here.
+> For 2025: SM = 4,050 RON (HG 1506/2024), so the thresholds are 24,300 / 48,600 / 97,200 RON.
+> CASS is **10%** of the *threshold reached* — not 10% of the actual income.
 
 ### Other CASS sub-categories (for awareness)
 
@@ -224,20 +239,25 @@ From `d212-business*.sch` — rules that affect investment-related fields:
 - Multi-row, multi-currency XTB report parsing
 - Capital gains with `net = max(0, gain - loss)` per long/short bucket
 - Carryforward loss surfaced to user (`currentYearLossRON`)
+- **Prior-year loss application** using D212 Rd.5-6 formula (Instr. 7.3.3): consumes highest-rate bucket first, capped at 70% of net gain
+- **Refund detection**: when a Romanian broker over-withholds, the excess is surfaced (instead of being hidden by `Math.max(0, ...)`)
+- **CASS thresholds for investments** match Instr. 52.1 (6/12/24 SM tiers, not 60 SM)
+- **Credit fiscal** for foreign dividends matches Instr. 39.6.10: `min(taxDueRO, taxPaidAbroad)`
 - 35 unit tests covering parsers + rates
 - Import-vs-manual override workflow with diff dialog
 
 ### ❌ Real gaps to close (sorted by impact)
 
-| # | Gap | Impact | Effort |
-|---|---|---|---|
-| 1 | **Refund (dif_de_restituit) never shown.** `Math.max(0, ...)` hides over-withholding scenarios. The user's 2025 case has ~1,644 RON refundable. | High — real money | Low |
-| 2 | **No explicit per-country, per-category grouping** in UI. cap14 needs one row per (country, category). | Med — affects D212 generation | Med |
-| 3 | **No `str_categ_venit` code emission.** Parsers know `2012` and `2018`, but generic API users can't pick codes. | Med — needed for XML export | Low |
-| 4 | **Loss carryforward not split foreign vs RO.** D212 requires separate `cap11.pierdere_precedenta` and `cap14.str_pierdere_precedenta` rows. App tracks one global pool. | Med | Med |
-| 5 | **Romanian-source investment income via XTB/etc. not declared on cap11.** Currently treated as "final tax at source" implicit — app skips D212 reporting entirely. But CASS base needs it. | High — could cause under-declaration | Med |
-| 6 | **No D212 XML export.** App computes correct values, user manually copies into ANAF tool. Generating valid XML would close the loop. | High — UX | High |
-| 7 | **No personal data collection** for `nume_c`/`cif`/`cont_bancar`. By design, but means we can never produce a fully complete XML. Could add an optional "fill personal data" step that stays local. | Low | Low |
+| # | Gap | Impact | Effort | Status |
+|---|---|---|---|---|
+| 1 | ~~Refund (dif_de_restituit) never shown~~ | High — real money | Low | ✅ DONE (commit 65cdcaa) |
+| 2 | ~~yd.priorLosses collected but not applied to tax~~ | High — real money | Low | ✅ DONE (commit, this one) |
+| 3 | **No explicit per-country, per-category grouping** in UI. cap14 needs one row per (country, category). | Med | Med | open |
+| 4 | **No `str_categ_venit` code emission.** Parsers know `2012` and `2018`, but generic API users can't pick codes. | Med | Low | open |
+| 5 | **Loss carryforward not split foreign vs RO.** D212 requires separate `cap11.pierdere_precedenta` and `cap14.str_pierdere_precedenta` rows. App tracks one global pool. | Med | Med | open |
+| 6 | **Romanian-source investment income via XTB/etc. not declared on cap11.** Currently treated as "final tax at source" implicit — app skips D212 reporting entirely. But CASS base needs it. | High — could cause under-declaration | Med | open |
+| 7 | **No D212 XML export.** App computes correct values, user manually copies into ANAF tool. Generating valid XML would close the loop. | High — UX | High | open |
+| 8 | **No personal data collection** for `nume_c`/`cif`/`cont_bancar`. By design, but means we can never produce a fully complete XML. Could add an optional "fill personal data" step that stays local. | Low | Low | open |
 
 ### 🗑️ Over-collected fields (data we save but never use)
 
