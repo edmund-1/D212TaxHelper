@@ -268,12 +268,30 @@ From `d212-business*.sch` — rules that affect investment-related fields:
 | `usBroker`, `roBroker` (free text) | Only displayed in labels; never used for any computation |
 | `taxRates` overrides | User can override rates per year — useful only when ANAF changes mid-year |
 
+---
+
+## 10. Platform & DX gaps (non-D212 but tracked here)
+
+These are not D212 compliance gaps but real improvements that surfaced during day-to-day usage and review.
+
+| # | Gap | Impact | Effort | Status |
+|---|---|---|---|---|
+| P1 | **No loading screen between Start.bat and dashboard.** Browser opens to a blank page for several seconds while Node starts the server. A simple "Loading D212 Tax Helper..." splash (served from a static file before the SPA loads) would close the UX gap. | Med — first-impression UX | Low | open |
+| P2 | **No "rules and references" page for accountants.** A Romanian fiscal accountant should be able to verify every computation by reading one document: which Cod fiscal article justifies the rate; which D212 instruction paragraph defines the formula; which BNR series provides the exchange rate; which Cass tier applies and why. The page should also have a clearly-marked "Add a rule we missed" section so contributors (especially accountants) can submit additions via PR. Structure example: per income type → applicable law citation → formula → app implementation citation (`server.js:LINE`, `app.js:LINE`). | High — gives the tool authority + makes review by professionals viable | Med | open |
+| P3 | **No ANAF audit-package export.** Generates a zip containing every supporting document (broker raw statements, parsed XML, computed values per category, the methodology page, the BNR rates used). Filename pattern: `D212-audit-pack-{year}-{YYYYMMDD}.zip`. The package would be the user's defensive bundle if ANAF requests proof of declared amounts. | High — real money / legal | Med | open |
+| P4 | **No focused Claude/AI skill for the ANAF tax computation module.** Currently when working with AI on this repo, all changes — UI, parsers, server, CSS — happen in one shared mental space. A dedicated skill file at `.github/skills/anaf-tax-engine/SKILL.md` would scope AI changes to `lib/rates.js`, `lib/parsers/*`, the relevant computation paths in `app.js`, and the related test files, with explicit "don't touch UI styling" and "don't touch portable build" guardrails. | Low — DX | Low | open |
+| P5 | **Official ANAF reference documents not in the repo.** Today the XSD, schematron rules, technical structure docs, and the filling instructions live outside the repo (in `~/Downloads/d212/` and `\\192.168.0.120\home\Stocks\anaf\`). Including them under `docs/anaf/{vYYYY-MM-DD}/` with a README explaining provenance lets contributors verify mappings against authoritative sources, and lets us diff against new ANAF releases when they ship. | Med — reproducibility, audit trail | Low | open |
+
 ### Recommendations for next milestone
 
-1. **Refund flow** — small, high-value: change `Math.max(0, ...)` to return both `dif_plus` and `dif_minus`. UI shows "X RON of plată" or "X RON de restituit". *Estimate: 2-3 commits.*
-2. **Per-country/per-category in cap14 generation** — restructure the "Adăugă Date" tab around an array of cap14-like rows (country dropdown + category dropdown + amounts). *Estimate: medium task, 5-7 commits + tests.*
-3. **D212 XML export button** — emit a partial XML conforming to `D212.xsd` (validated client-side or against the schematron rules). User downloads `D212-2025.xml` and imports into ANAF tool. *Estimate: large task, 10+ commits.*
-4. **Schematron validators in JS** — implement subset of BR-D212-* rules so user gets warnings about incomplete/inconsistent data BEFORE export. *Estimate: medium.*
+1. ~~**Refund flow**~~ — done (commit `65cdcaa`).
+2. ~~**Prior-loss application**~~ — done (commit `255dcca`).
+3. **Per-country/per-category in cap14 generation** — restructure the "Adăugă Date" tab around an array of cap14-like rows (country dropdown + category dropdown + amounts). *Estimate: medium task, 5-7 commits + tests.*
+4. **D212 XML export button** — emit a partial XML conforming to `D212.xsd` (validated client-side or against the schematron rules). User downloads `D212-2025.xml` and imports into ANAF tool. *Estimate: large task, 10+ commits.*
+5. **Schematron validators in JS** — implement subset of BR-D212-* rules so user gets warnings about incomplete/inconsistent data BEFORE export. *Estimate: medium.*
+6. **P5 — bring ANAF reference docs into the repo** — tiny, unblocks audit-trail. Recommended as low-hanging fruit before the next big change.
+7. **P2 — Accountant rules page** — high authority value; can be built incrementally.
+8. **P3 — Audit-pack zip** — once methodology page exists, becomes natural to bundle it with raw statements.
 
 ---
 
