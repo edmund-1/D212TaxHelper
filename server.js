@@ -306,9 +306,11 @@ app.put('/api/data/:year', (req, res) => {
     const manualFields = [
       'usBroker', 'roBroker', 'fidelityDividends', 'usDivTaxPaid',
       'xtbDividends', 'roDivTaxPaid', 'fidelityGains', 'fidelityCost',
-      'interestIncome', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
+      'roEurDividends', 'roEurDivTaxPaid', 'roUsdDividends', 'roUsdDivTaxPaid',
+      'roEurInterest', 'roEurInterestTaxPaid', 'roUsdInterest', 'roUsdInterestTaxPaid',
+      'interestIncome', 'interestTaxPaid', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
       'royaltyTaxPaid', 'gamblingIncome', 'gamblingTaxPaid', 'otherIncome',
-      'otherTaxPaid', 'stockWithholdingPaid', 'exchangeRate', 'minSalary',
+      'otherTaxPaid', 'stockWithholdingPaid', 'exchangeRate', 'eurRate', 'minSalary',
       'd212Deadline', 'roGainsCountries', 'priorLosses'
     ];
     const hasManualData = manualFields.some(f => {
@@ -324,7 +326,8 @@ app.put('/api/data/:year', (req, res) => {
         if (f === 'roGainsCountries' && Array.isArray(v)) {
           lines.push(`${f}:`);
           for (const c of v) {
-            lines.push(`  ${c.country || '?'}\t≥1yr: ${c.longGain || 0}\t<1yr: ${c.shortGain || 0}\tTax: ${c.taxWithheld || 0}`);
+            const cur = c.currency || 'RON';
+            lines.push(`  ${c.country || '?'}\t[${cur}]\t≥1yr: ${c.longGain || 0}\t<1yr: ${c.shortGain || 0}\tTax: ${c.taxWithheld || 0}`);
           }
         } else {
           lines.push(`${f}\t${v}`);
@@ -384,9 +387,11 @@ app.delete('/api/raw/:filename', (req, res) => {
           const manualKeys = [
             'usBroker', 'roBroker', 'fidelityDividends', 'usDivTaxPaid',
             'xtbDividends', 'roDivTaxPaid', 'fidelityGains', 'fidelityCost',
+            'roEurDividends', 'roEurDivTaxPaid', 'roUsdDividends', 'roUsdDivTaxPaid',
+            'roEurInterest', 'roEurInterestTaxPaid', 'roUsdInterest', 'roUsdInterestTaxPaid',
             'interestIncome', 'interestTaxPaid', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
             'royaltyTaxPaid', 'gamblingIncome', 'gamblingTaxPaid', 'otherIncome',
-            'otherTaxPaid', 'stockWithholdingPaid', 'salaryTaxedIncome', 'exchangeRate', 'minSalary',
+            'otherTaxPaid', 'stockWithholdingPaid', 'salaryTaxedIncome', 'exchangeRate', 'eurRate', 'minSalary',
             'd212Deadline', 'roGainsCountries', 'taxRates', 'priorLosses'
           ];
           for (const k of manualKeys) {
@@ -1403,14 +1408,15 @@ app.get('/api/tax-rates', (req, res) => {
       ]
     },
     // BNR exchange rates (annual averages - Serii anuale, valori medii)
+    // Source: https://www.bnr.ro/1975-cursul-de-schimb-serii-statistice
     exchangeRates: {
-      2019: { usdRon: 4.2379, source: 'BNR' },
-      2020: { usdRon: 4.2440, source: 'BNR' },
-      2021: { usdRon: 4.1604, source: 'BNR' },
-      2022: { usdRon: 4.6885, source: 'BNR' },
-      2023: { usdRon: 4.5743, source: 'BNR' },
-      2024: { usdRon: 4.5984, source: 'BNR' },
-      2025: { usdRon: 4.4705, source: 'BNR' },
+      2019: { usdRon: 4.2379, eurRon: 4.7452, source: 'BNR' },
+      2020: { usdRon: 4.2440, eurRon: 4.8371, source: 'BNR' },
+      2021: { usdRon: 4.1604, eurRon: 4.9204, source: 'BNR' },
+      2022: { usdRon: 4.6885, eurRon: 4.9315, source: 'BNR' },
+      2023: { usdRon: 4.5743, eurRon: 4.9465, source: 'BNR' },
+      2024: { usdRon: 4.5984, eurRon: 4.9746, source: 'BNR' },
+      2025: { usdRon: 4.4705, eurRon: 5.0415, source: 'BNR' },
     },
     notes: {
       ro: 'Starting 2025, stocks transferred to Romania broker. Romania broker withholds capital gains tax (1%/3%) but NOT CASS.',
@@ -1423,15 +1429,16 @@ app.get('/api/tax-rates', (req, res) => {
 });
 
 // GET /api/exchange-rates - Exchange rates
+// Source: https://www.bnr.ro/1975-cursul-de-schimb-serii-statistice
 app.get('/api/exchange-rates', (req, res) => {
   res.json({
-    2019: { usdRon: 4.2379, source: 'BNR' },
-    2020: { usdRon: 4.2440, source: 'BNR' },
-    2021: { usdRon: 4.1604, source: 'BNR' },
-    2022: { usdRon: 4.6885, source: 'BNR' },
-    2023: { usdRon: 4.5743, source: 'BNR' },
-    2024: { usdRon: 4.5984, source: 'BNR' },
-    2025: { usdRon: 4.4705, source: 'BNR' }
+    2019: { usdRon: 4.2379, eurRon: 4.7452, source: 'BNR' },
+    2020: { usdRon: 4.2440, eurRon: 4.8371, source: 'BNR' },
+    2021: { usdRon: 4.1604, eurRon: 4.9204, source: 'BNR' },
+    2022: { usdRon: 4.6885, eurRon: 4.9315, source: 'BNR' },
+    2023: { usdRon: 4.5743, eurRon: 4.9465, source: 'BNR' },
+    2024: { usdRon: 4.5984, eurRon: 4.9746, source: 'BNR' },
+    2025: { usdRon: 4.4705, eurRon: 5.0415, source: 'BNR' }
   });
 });
 

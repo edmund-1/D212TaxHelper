@@ -597,6 +597,9 @@ const App = (() => {
     const savedRate = yd.exchangeRate ? parseFloat(yd.exchangeRate) : null;
     const defaultRate = exchangeRates[year]?.usdRon || 4.57;
     const rate = savedRate || decl.exchangeRate || defaultRate;
+    const savedEurRate = yd.eurRate ? parseFloat(yd.eurRate) : null;
+    const defaultEurRate = exchangeRates[year]?.eurRon || 4.97;
+    const eurRate = savedEurRate || defaultEurRate;
 
     // Dividend tax rate: 16% from 2026, 10% for 2025, 8% for 2023-2024, 5% for 2019-2022
     const divTaxRate = year >= 2026 ? 0.16 : year >= 2025 ? 0.10 : year >= 2023 ? 0.08 : 0.05;
@@ -700,18 +703,40 @@ const App = (() => {
     }
     if (yd.xtbDividends !== undefined && yd.xtbDividends !== '') dividendsRON_ro = parseFloat(yd.xtbDividends) || 0;
     if (yd.roDivTaxPaid !== undefined && yd.roDivTaxPaid !== '') roDivTaxWithheld = parseFloat(yd.roDivTaxPaid) || 0;
+
+    // Romania broker dividends/interest denominated in EUR or USD -> convert and add
+    const roEurDiv = parseFloat(yd.roEurDividends) || 0;
+    const roEurDivTax = parseFloat(yd.roEurDivTaxPaid) || 0;
+    const roUsdDiv = parseFloat(yd.roUsdDividends) || 0;
+    const roUsdDivTax = parseFloat(yd.roUsdDivTaxPaid) || 0;
+    if (roEurDiv) dividendsRON_ro += roEurDiv * eurRate;
+    if (roUsdDiv) dividendsRON_ro += roUsdDiv * rate;
+    if (roEurDivTax) roDivTaxWithheld += roEurDivTax * eurRate;
+    if (roUsdDivTax) roDivTaxWithheld += roUsdDivTax * rate;
+
+    const roEurInt = parseFloat(yd.roEurInterest) || 0;
+    const roEurIntTax = parseFloat(yd.roEurInterestTaxPaid) || 0;
+    const roUsdInt = parseFloat(yd.roUsdInterest) || 0;
+    const roUsdIntTax = parseFloat(yd.roUsdInterestTaxPaid) || 0;
+    if (roEurInt) roInterestRON += roEurInt * eurRate;
+    if (roUsdInt) roInterestRON += roUsdInt * rate;
+    // Interest tax withheld in foreign currency gets added to interestTaxPaid further below
+    const roForeignInterestTaxRON = (roEurIntTax * eurRate) + (roUsdIntTax * rate);
+
     if (yd.fidelityGains !== undefined && yd.fidelityGains !== '') {
       const gainsUSD = parseFloat(yd.fidelityGains) || 0;
       capitalGainsSaleUSD = gainsUSD;
       capitalGainsTaxableRON = (gainsUSD - capitalGainsCostUSD) * rate;
     }
-    // Manual override: RO gains from country rows
+    // Manual override: RO gains from country rows (with per-row currency: RON/EUR/USD)
     if (yd.roGainsCountries && yd.roGainsCountries.length > 0) {
       let manualLong = 0, manualShort = 0, manualTax = 0;
       for (const c of yd.roGainsCountries) {
-        manualLong += c.longGain || 0;
-        manualShort += c.shortGain || 0;
-        manualTax += c.taxWithheld || 0;
+        const cur = (c.currency || 'RON').toUpperCase();
+        const fx = cur === 'EUR' ? eurRate : (cur === 'USD' ? rate : 1);
+        manualLong += (c.longGain || 0) * fx;
+        manualShort += (c.shortGain || 0) * fx;
+        manualTax += (c.taxWithheld || 0) * fx;
       }
       roLongTermGainRON = manualLong;
       roShortTermGainRON = manualShort;
@@ -782,7 +807,9 @@ const App = (() => {
     }
     const interestTaxRate = (tr.roInterestRate != null ? tr.roInterestRate / 100 : (year >= 2026 ? 0.16 : 0.10));
     const interestTaxGross = interestIncomeRON * interestTaxRate;
-    const interestTaxPaid = (yd.interestTaxPaid !== undefined && yd.interestTaxPaid !== '' ? parseFloat(yd.interestTaxPaid) : null) ?? adv.interestTax ?? 0;
+    const interestTaxPaidManual = (yd.interestTaxPaid !== undefined && yd.interestTaxPaid !== '' ? parseFloat(yd.interestTaxPaid) : null) ?? adv.interestTax ?? 0;
+    // Add tax withheld in EUR/USD on Romania broker interest (converted to RON)
+    const interestTaxPaid = interestTaxPaidManual + roForeignInterestTaxRON;
     const interestTax = Math.max(0, interestTaxGross - interestTaxPaid);
 
     // ---- Additional income types ----
@@ -864,6 +891,7 @@ const App = (() => {
       salaryDeduction,
       interestIncomeRON,
       exchangeRate: rate,
+      eurRate,
       divTaxRate,
       divTaxRateLabel,
       capGainsTaxRate,
@@ -951,8 +979,10 @@ const App = (() => {
 
     // Charts - only show if there's actual financial data
     const allYears = Object.keys(appData.years || {}).map(Number).sort((a, b) => a - b);
-    const manualKeys = new Set(['year','exchangeRate','minSalary','d212Deadline','usBroker','roBroker','taxRates',
+    const manualKeys = new Set(['year','exchangeRate','eurRate','minSalary','d212Deadline','usBroker','roBroker','taxRates',
       'fidelityDividends','usDivTaxPaid','xtbDividends','roDivTaxPaid','fidelityGains','fidelityCost',
+      'roEurDividends','roEurDivTaxPaid','roUsdDividends','roUsdDivTaxPaid',
+      'roEurInterest','roEurInterestTaxPaid','roUsdInterest','roUsdInterestTaxPaid',
       'interestIncome','interestTaxPaid','rentalIncome','rentalTaxPaid','royaltyIncome','royaltyTaxPaid',
       'gamblingIncome','gamblingTaxPaid','otherIncome','otherTaxPaid','stockWithholdingPaid','salaryTaxedIncome',
       'roGainsCountries','roGainsLong','roGainsShort','roGainsTaxWithheld']);
@@ -1495,16 +1525,19 @@ const App = (() => {
         }
       }
     }
-    // Manual country rows from Add Data
+    // Manual country rows from Add Data (convert currency to RON for display)
     const manualCountries = yd.roGainsCountries || [];
     if (manualCountries.length > 0 && !tvPort.countries?.length && !xtbPort.longTerm?.gainRON) {
       for (const c of manualCountries) {
         const broker = yd.roBroker || 'RO Broker';
+        const cur = (c.currency || 'RON').toUpperCase();
+        const fx = cur === 'EUR' ? (data.eurRate || 1) : (cur === 'USD' ? (data.exchangeRate || 1) : 1);
+        const curSuffix = cur !== 'RON' ? ' ' + cur : '';
         if (c.longGain > 0) {
           rows.push({
-            cat: I18n.t('income.roGainsLong') + ' (' + broker + ')',
+            cat: I18n.t('income.roGainsLong') + ' (' + broker + curSuffix + ')',
             country: c.country,
-            gross: c.longGain,
+            gross: (c.longGain || 0) * fx,
             rate: (data.roLongRate * 100) + '%',
             withheld: 0,
             net: 0
@@ -1512,9 +1545,9 @@ const App = (() => {
         }
         if (c.shortGain > 0) {
           rows.push({
-            cat: I18n.t('income.roGainsShort') + ' (' + broker + ')',
+            cat: I18n.t('income.roGainsShort') + ' (' + broker + curSuffix + ')',
             country: c.country,
-            gross: c.shortGain,
+            gross: (c.shortGain || 0) * fx,
             rate: (data.roShortRate * 100) + '%',
             withheld: 0,
             net: 0
@@ -2198,10 +2231,18 @@ const App = (() => {
     document.getElementById('input-us-div-tax').value = yd.usDivTaxPaid || '';
     document.getElementById('input-ro-dividends').value = yd.xtbDividends || '';
     document.getElementById('input-ro-div-tax').value = yd.roDivTaxPaid || '';
+    document.getElementById('input-ro-eur-dividends').value = yd.roEurDividends || '';
+    document.getElementById('input-ro-eur-div-tax').value = yd.roEurDivTaxPaid || '';
+    document.getElementById('input-ro-usd-dividends').value = yd.roUsdDividends || '';
+    document.getElementById('input-ro-usd-div-tax').value = yd.roUsdDivTaxPaid || '';
     document.getElementById('input-us-gains').value = yd.fidelityGains || '';
     document.getElementById('input-us-cost').value = yd.fidelityCost || '';
     document.getElementById('input-interest').value = yd.interestIncome || '';
     document.getElementById('input-interest-tax-paid').value = yd.interestTaxPaid || '';
+    document.getElementById('input-ro-eur-interest').value = yd.roEurInterest || '';
+    document.getElementById('input-ro-eur-interest-tax').value = yd.roEurInterestTaxPaid || '';
+    document.getElementById('input-ro-usd-interest').value = yd.roUsdInterest || '';
+    document.getElementById('input-ro-usd-interest-tax').value = yd.roUsdInterestTaxPaid || '';
     document.getElementById('input-rental-income').value = yd.rentalIncome || '';
     document.getElementById('input-rental-tax-paid').value = yd.rentalTaxPaid || '';
     document.getElementById('input-royalty-income').value = yd.royaltyIncome || '';
@@ -2211,6 +2252,8 @@ const App = (() => {
     document.getElementById('input-other-income').value = yd.otherIncome || '';
     document.getElementById('input-other-tax-paid').value = yd.otherTaxPaid || '';
     document.getElementById('input-exchange-rate').value = yd.exchangeRate || rate;
+    const defaultEurRate = exchangeRates[selectedYear]?.eurRon || 4.97;
+    document.getElementById('input-eur-rate').value = yd.eurRate || defaultEurRate;
     document.getElementById('input-min-salary').value = yd.minSalary || defaultMinSalary;
     document.getElementById('input-d212-deadline').value = yd.d212Deadline || d212DefaultDeadline(selectedYear);
     document.getElementById('input-stock-withholding').value = yd.stockWithholdingPaid || '';
@@ -2256,13 +2299,20 @@ const App = (() => {
   function addRoGainsRow(container, data) {
     const row = document.createElement('div');
     row.className = 'ro-gains-row';
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:0.75rem;align-items:end;margin-bottom:0.75rem;';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 0.7fr 1fr 1fr 1fr auto;gap:0.75rem;align-items:end;margin-bottom:0.75rem;';
     const countryOpts = `<option value="" disabled ${!data?.country ? 'selected' : ''}>${I18n.t('input.selectCountry')}</option>` + RO_COUNTRIES.map(c => `<option value="${c}"${data?.country === c ? ' selected' : ''}>${c}</option>`).join('');
+    const curVal = (data?.currency || 'RON').toUpperCase();
+    const curOpts = ['RON', 'EUR', 'USD'].map(c => `<option value="${c}"${curVal === c ? ' selected' : ''}>${c}</option>`).join('');
     row.innerHTML = `
       <div class="form-row" style="margin-bottom:0;">
         <label>${I18n.t('input.country')}</label>
         <select class="ro-country">${countryOpts}</select>
         <small style="color:var(--text-muted);font-size:0.7rem;">${I18n.t('input.countryHint')}</small>
+      </div>
+      <div class="form-row" style="margin-bottom:0;">
+        <label>${I18n.t('input.currency') || 'Currency'}</label>
+        <select class="ro-currency">${curOpts}</select>
+        <small style="color:var(--text-muted);font-size:0.7rem;">${I18n.t('input.currencyHint') || 'Currency of amounts in this row'}</small>
       </div>
       <div class="form-row" style="margin-bottom:0;">
         <label>${I18n.t('input.roGainsLong')}</label>
@@ -2294,12 +2344,14 @@ const App = (() => {
     const result = [];
     rows.forEach(row => {
       const country = row.querySelector('.ro-country').value;
+      const currency = row.querySelector('.ro-currency')?.value || 'RON';
       const longGain = row.querySelector('.ro-long').value;
       const shortGain = row.querySelector('.ro-short').value;
       const taxWithheld = row.querySelector('.ro-tax').value;
       if (longGain || shortGain || taxWithheld) {
         result.push({
           country,
+          currency,
           longGain: parseFloat(longGain) || 0,
           shortGain: parseFloat(shortGain) || 0,
           taxWithheld: parseFloat(taxWithheld) || 0
@@ -2323,11 +2375,19 @@ const App = (() => {
       usDivTaxPaid: document.getElementById('input-us-div-tax').value,
       xtbDividends: document.getElementById('input-ro-dividends').value,
       roDivTaxPaid: document.getElementById('input-ro-div-tax').value,
+      roEurDividends: document.getElementById('input-ro-eur-dividends').value,
+      roEurDivTaxPaid: document.getElementById('input-ro-eur-div-tax').value,
+      roUsdDividends: document.getElementById('input-ro-usd-dividends').value,
+      roUsdDivTaxPaid: document.getElementById('input-ro-usd-div-tax').value,
       fidelityGains: document.getElementById('input-us-gains').value,
       fidelityCost: document.getElementById('input-us-cost').value,
       roGainsCountries: collectRoGainsRows(),
       interestIncome: document.getElementById('input-interest').value,
       interestTaxPaid: document.getElementById('input-interest-tax-paid').value,
+      roEurInterest: document.getElementById('input-ro-eur-interest').value,
+      roEurInterestTaxPaid: document.getElementById('input-ro-eur-interest-tax').value,
+      roUsdInterest: document.getElementById('input-ro-usd-interest').value,
+      roUsdInterestTaxPaid: document.getElementById('input-ro-usd-interest-tax').value,
       rentalIncome: document.getElementById('input-rental-income').value,
       rentalTaxPaid: document.getElementById('input-rental-tax-paid').value,
       royaltyIncome: document.getElementById('input-royalty-income').value,
@@ -2361,6 +2421,7 @@ const App = (() => {
     e.preventDefault();
     const payload = {
       exchangeRate: document.getElementById('input-exchange-rate').value,
+      eurRate: document.getElementById('input-eur-rate').value,
       minSalary: document.getElementById('input-min-salary').value,
       d212Deadline: document.getElementById('input-d212-deadline').value
     };
