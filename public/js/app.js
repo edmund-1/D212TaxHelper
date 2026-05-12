@@ -928,6 +928,11 @@ const App = (() => {
       roDivTaxWithheld,
       roPortTaxWithheld,
       roInterestRON,
+      // Romania broker EUR/USD breakdown (manual entries on Add Data)
+      roEurDiv, roEurDivTax,
+      roUsdDiv, roUsdDivTax,
+      roEurInt, roEurIntTax,
+      roUsdInt, roUsdIntTax,
       // From investment report
       accountValue: inv.accountValue || 0,
       unrealizedGainLoss: inv.netGains || 0,
@@ -1099,14 +1104,39 @@ const App = (() => {
         cat: I18n.t('income.roDividends') + data.roBrokerLabel + (data.roDivTaxWithheld ? ' ' + I18n.t('misc.creditFiscal') : ''),
         usd: '-',
         rate: '-',
-        ron: data.dividendsRON_ro,
+        ron: data.dividendsRON_ro - (data.roEurDiv * data.eurRate) - (data.roUsdDiv * data.exchangeRate),
         usTaxRate: '-',
         usTaxPaid: 0,
         taxRate: data.divTaxRateLabel,
-        paid: data.roDivTaxWithheld || 0,
-        tax: Math.max(0, data.dividendsRON_ro * data.divTaxRate - (data.roDivTaxWithheld || 0)),
+        paid: (data.roDivTaxWithheld || 0) - (data.roEurDivTax * data.eurRate) - (data.roUsdDivTax * data.exchangeRate),
+        tax: Math.max(0, (data.dividendsRON_ro - (data.roEurDiv * data.eurRate) - (data.roUsdDiv * data.exchangeRate)) * data.divTaxRate - ((data.roDivTaxWithheld || 0) - (data.roEurDivTax * data.eurRate) - (data.roUsdDivTax * data.exchangeRate))),
         tooltip: data.roDivTaxWithheld ? I18n.t('misc.creditFiscalTooltip') : undefined
       },
+      ...((data.roEurDiv || 0) > 0 ? [{
+        cat: I18n.t('income.roDividends') + data.roBrokerLabel + ' (EUR)' + (data.roEurDivTax ? ' ' + I18n.t('misc.creditFiscal') : ''),
+        usd: data.roEurDiv,
+        rate: data.eurRate,
+        ron: data.roEurDiv * data.eurRate,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: data.divTaxRateLabel,
+        paid: (data.roEurDivTax || 0) * data.eurRate,
+        tax: Math.max(0, data.roEurDiv * data.eurRate * data.divTaxRate - (data.roEurDivTax || 0) * data.eurRate),
+        tooltip: I18n.t('misc.creditFiscalTooltip'),
+        isEur: true
+      }] : []),
+      ...((data.roUsdDiv || 0) > 0 ? [{
+        cat: I18n.t('income.roDividends') + data.roBrokerLabel + ' (USD)' + (data.roUsdDivTax ? ' ' + I18n.t('misc.creditFiscal') : ''),
+        usd: data.roUsdDiv,
+        rate: data.exchangeRate,
+        ron: data.roUsdDiv * data.exchangeRate,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: data.divTaxRateLabel,
+        paid: (data.roUsdDivTax || 0) * data.exchangeRate,
+        tax: Math.max(0, data.roUsdDiv * data.exchangeRate * data.divTaxRate - (data.roUsdDivTax || 0) * data.exchangeRate),
+        tooltip: I18n.t('misc.creditFiscalTooltip')
+      }] : []),
       {
         cat: I18n.t('income.usGains') + data.usBrokerLabel + (data.tradeCount ? ` (${data.tradeCount} ${I18n.t('misc.sales') || 'sales'})` : ''),
         usd: data.capitalGainsSaleUSD || data.tradeProceedsUSD || 0,
@@ -1185,14 +1215,38 @@ const App = (() => {
         cat: I18n.t('income.interestIncome') + (data.interestTax === 0 && (data.interestTaxPaid || 0) > 0 ? ' ' + I18n.t('misc.roWithheld') : ''),
         usd: '-',
         rate: '-',
-        ron: data.interestIncomeRON,
+        ron: data.interestIncomeRON - (data.roEurInt * data.eurRate) - (data.roUsdInt * data.exchangeRate),
         usTaxRate: '-',
         usTaxPaid: 0,
         taxRate: (data.interestTaxRate * 100) + '%',
-        paid: data.interestTaxPaid || 0,
+        paid: (data.interestTaxPaid || 0) - (data.roEurIntTax * data.eurRate) - (data.roUsdIntTax * data.exchangeRate),
         tax: data.interestTax,
         tooltip: (data.interestTax === 0 && (data.interestTaxPaid || 0) > 0) ? I18n.t('misc.roWithheldTooltip') : undefined
-      }
+      },
+      ...((data.roEurInt || 0) > 0 ? [{
+        cat: I18n.t('income.interestIncome') + data.roBrokerLabel + ' (EUR)' + ((data.roEurIntTax || 0) > 0 ? ' ' + I18n.t('misc.roWithheld') : ''),
+        usd: data.roEurInt,
+        rate: data.eurRate,
+        ron: data.roEurInt * data.eurRate,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: (data.interestTaxRate * 100) + '%',
+        paid: (data.roEurIntTax || 0) * data.eurRate,
+        tax: Math.max(0, data.roEurInt * data.eurRate * data.interestTaxRate - (data.roEurIntTax || 0) * data.eurRate),
+        tooltip: (data.roEurIntTax || 0) > 0 ? I18n.t('misc.roWithheldTooltip') : undefined
+      }] : []),
+      ...((data.roUsdInt || 0) > 0 ? [{
+        cat: I18n.t('income.interestIncome') + data.roBrokerLabel + ' (USD)' + ((data.roUsdIntTax || 0) > 0 ? ' ' + I18n.t('misc.roWithheld') : ''),
+        usd: data.roUsdInt,
+        rate: data.exchangeRate,
+        ron: data.roUsdInt * data.exchangeRate,
+        usTaxRate: '-',
+        usTaxPaid: 0,
+        taxRate: (data.interestTaxRate * 100) + '%',
+        paid: (data.roUsdIntTax || 0) * data.exchangeRate,
+        tax: Math.max(0, data.roUsdInt * data.exchangeRate * data.interestTaxRate - (data.roUsdIntTax || 0) * data.exchangeRate),
+        tooltip: (data.roUsdIntTax || 0) > 0 ? I18n.t('misc.roWithheldTooltip') : undefined
+      }] : [])
     ];
 
     // Add gambling income if present
@@ -1471,8 +1525,11 @@ const App = (() => {
     const xtbPort = yd.xtbPortfolio || {};
     const xtbDiv = yd.xtbDividendsReport || {};
     const tvPort = yd.tradevillePortfolio || {};
+    const manualCountriesAll = yd.roGainsCountries || [];
+    const hasManualEur = (data.roEurDiv || 0) > 0 || (data.roEurInt || 0) > 0;
+    const hasManualUsd = (data.roUsdDiv || 0) > 0 || (data.roUsdInt || 0) > 0;
 
-    if (!xtbPort.longTerm && !xtbPort.shortTerm && !xtbDiv.dividends && !tvPort.longTerm && !tvPort.shortTerm) {
+    if (!xtbPort.longTerm && !xtbPort.shortTerm && !xtbDiv.dividends && !tvPort.longTerm && !tvPort.shortTerm && manualCountriesAll.length === 0 && !hasManualEur && !hasManualUsd) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">' + I18n.t('misc.noRoData') + '</td></tr>';
       tfoot.innerHTML = '';
       return;
@@ -1525,9 +1582,10 @@ const App = (() => {
         }
       }
     }
-    // Manual country rows from Add Data (convert currency to RON for display)
+    // Manual country rows from Add Data (convert currency to RON for display).
+    // Show even when XTB/Tradeville data is also present (additive, not exclusive).
     const manualCountries = yd.roGainsCountries || [];
-    if (manualCountries.length > 0 && !tvPort.countries?.length && !xtbPort.longTerm?.gainRON) {
+    if (manualCountries.length > 0) {
       for (const c of manualCountries) {
         const broker = yd.roBroker || 'RO Broker';
         const cur = (c.currency || 'RON').toUpperCase();
@@ -1555,6 +1613,31 @@ const App = (() => {
         }
       }
     }
+    // Manual RO broker dividends (EUR/USD from Add Data)
+    if ((data.roEurDiv || 0) > 0) {
+      const grossRON = data.roEurDiv * data.eurRate;
+      const withheldRON = (data.roEurDivTax || 0) * data.eurRate;
+      rows.push({
+        cat: I18n.t('income.roDividends') + ' (' + (yd.roBroker || 'RO Broker') + ' EUR)',
+        country: 'EU',
+        gross: grossRON,
+        rate: data.divTaxRateLabel,
+        withheld: withheldRON,
+        net: Math.max(0, grossRON * data.divTaxRate - withheldRON)
+      });
+    }
+    if ((data.roUsdDiv || 0) > 0) {
+      const grossRON = data.roUsdDiv * data.exchangeRate;
+      const withheldRON = (data.roUsdDivTax || 0) * data.exchangeRate;
+      rows.push({
+        cat: I18n.t('income.roDividends') + ' (' + (yd.roBroker || 'RO Broker') + ' USD)',
+        country: 'US',
+        gross: grossRON,
+        rate: data.divTaxRateLabel,
+        withheld: withheldRON,
+        net: Math.max(0, grossRON * data.divTaxRate - withheldRON)
+      });
+    }
     if (xtbDiv.dividends?.grossRON) {
       rows.push({
         cat: I18n.t('income.roDividends'),
@@ -1573,6 +1656,31 @@ const App = (() => {
         rate: (data.interestTaxRate * 100) + '%',
         withheld: xtbDiv.interest.taxWithheldRON || 0,
         net: xtbDiv.interest.grossRON * data.interestTaxRate - (xtbDiv.interest.taxWithheldRON || 0)
+      });
+    }
+    // Manual RO broker interest (EUR/USD from Add Data)
+    if ((data.roEurInt || 0) > 0) {
+      const grossRON = data.roEurInt * data.eurRate;
+      const withheldRON = (data.roEurIntTax || 0) * data.eurRate;
+      rows.push({
+        cat: I18n.t('income.interestIncome') + ' (' + (yd.roBroker || 'RO Broker') + ' EUR)',
+        country: 'EU',
+        gross: grossRON,
+        rate: (data.interestTaxRate * 100) + '%',
+        withheld: withheldRON,
+        net: Math.max(0, grossRON * data.interestTaxRate - withheldRON)
+      });
+    }
+    if ((data.roUsdInt || 0) > 0) {
+      const grossRON = data.roUsdInt * data.exchangeRate;
+      const withheldRON = (data.roUsdIntTax || 0) * data.exchangeRate;
+      rows.push({
+        cat: I18n.t('income.interestIncome') + ' (' + (yd.roBroker || 'RO Broker') + ' USD)',
+        country: 'US',
+        gross: grossRON,
+        rate: (data.interestTaxRate * 100) + '%',
+        withheld: withheldRON,
+        net: Math.max(0, grossRON * data.interestTaxRate - withheldRON)
       });
     }
 
