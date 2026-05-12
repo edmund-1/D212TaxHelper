@@ -437,6 +437,9 @@ const App = (() => {
     // Populate year selector
     populateYears();
 
+    // Wire Add Data sub-tab switcher + advanced toggle (one-time)
+    setupAddDataModeSwitcher();
+
     // Render (await to ensure _cachedStockAwards is populated before computeYearData)
     await render();
   }
@@ -2620,6 +2623,244 @@ const App = (() => {
     return IMPORT_DESCRIPTORS.filter(d => d.isActive(yd));
   }
 
+  /** Persisted preference for the Add Data mode + advanced toggle. */
+  function getAddDataMode() {
+    return localStorage.getItem('addDataMode') || 'auto';
+  }
+  function setAddDataMode(mode) {
+    localStorage.setItem('addDataMode', mode);
+  }
+  function isAdvancedMode() {
+    return localStorage.getItem('addDataAdvanced') === '1';
+  }
+  function setAdvancedMode(on) {
+    localStorage.setItem('addDataAdvanced', on ? '1' : '0');
+  }
+
+  /**
+   * Apply the current sub-tab mode + advanced toggle to the Add Data UI.
+   * Called from populateForm() and from the switcher click handlers.
+   *
+   *   mode === 'imports' → show #data-imports-panel, hide the flat form below
+   *   mode === 'new'     → hide #data-imports-panel, show the form. In NORMAL
+   *                        mode, fieldsets whose relatedFieldsetIds match an
+   *                        active import are hidden; ADVANCED reveals them.
+   *
+   * The brokers, rates, taxes, and unrelated income fieldsets are always shown
+   * in both modes — they don't have import equivalents.
+   */
+  function applyAddDataMode() {
+    const imports = detectActiveImports(selectedYear);
+    const hasImports = imports.length > 0;
+    let mode = getAddDataMode();
+    if (mode === 'auto') mode = hasImports ? 'imports' : 'new';
+    const advanced = isAdvancedMode();
+
+    const importsBtn = document.getElementById('data-mode-imports');
+    const newBtn = document.getElementById('data-mode-new');
+    const advancedToggle = document.getElementById('data-advanced-toggle');
+    const importsPanel = document.getElementById('data-imports-panel');
+    const dataForm = document.getElementById('data-form');
+    const modeHint = document.getElementById('data-mode-hint');
+    if (!importsBtn || !newBtn || !advancedToggle || !importsPanel || !dataForm) return;
+
+    // Disable the "imports" tab when nothing is imported yet
+    importsBtn.disabled = !hasImports;
+    importsBtn.style.opacity = hasImports ? '' : '0.5';
+    importsBtn.style.cursor = hasImports ? 'pointer' : 'not-allowed';
+    importsBtn.title = hasImports ? '' : (I18n.t('input.modeImportsDisabled') || 'Nu există documente importate pentru acest an');
+
+    // Toggle the .active class on the buttons
+    importsBtn.classList.toggle('active', mode === 'imports');
+    importsBtn.setAttribute('aria-selected', mode === 'imports' ? 'true' : 'false');
+    newBtn.classList.toggle('active', mode === 'new');
+    newBtn.setAttribute('aria-selected', mode === 'new' ? 'true' : 'false');
+
+    // Sync the advanced checkbox
+    advancedToggle.checked = advanced;
+
+    if (mode === 'imports') {
+      importsPanel.style.display = '';
+      dataForm.style.display = 'none';
+      modeHint.textContent = I18n.t('input.modeImportsHint') || 'Verifică datele extrase din documente și corectează valorile dacă parser-ul a greșit.';
+      renderImportsPanel(imports);
+    } else {
+      importsPanel.style.display = 'none';
+      dataForm.style.display = '';
+      // Hide fieldsets whose import is active (unless advanced mode)
+      const hiddenIds = new Set();
+      if (!advanced) {
+        for (const imp of imports) {
+          for (const fid of (imp.relatedFieldsetIds || [])) hiddenIds.add(fid);
+        }
+      }
+      const allFieldsetIds = ['fieldset-dividends', 'fieldset-capital-gains', 'fieldset-ro-gains', 'fieldset-interest'];
+      for (const fid of allFieldsetIds) {
+        const el = document.getElementById(fid);
+        if (!el) continue;
+        el.style.display = hiddenIds.has(fid) ? 'none' : '';
+      }
+      if (advanced) {
+        modeHint.textContent = I18n.t('input.modeAdvancedHint') || 'Toate câmpurile sunt vizibile, inclusiv cele care au valori importate.';
+      } else if (hiddenIds.size > 0) {
+        modeHint.textContent = (I18n.t('input.modeNewHint') || 'Câmpurile pentru tipurile cu import sunt ascunse. Activează „Mod avansat" pentru a le vedea.');
+      } else {
+        modeHint.textContent = I18n.t('input.modeNewHintNoImports') || 'Adaugă date pentru categoriile de venit pentru care nu ai documente importate.';
+      }
+    }
+  }
+
+  /**
+   * Render the imports verification panel: one card per active import with a
+   * table of editable rows. This is the read-only first pass; inline edit and
+   * per-country editing for portfolio imports land in follow-up commits.
+   */
+  function renderImportsPanel(imports) {
+    const panel = document.getElementById('data-imports-panel');
+    if (!panel) return;
+    const yd = appData.years?.[selectedYear] || {};
+    if (!imports || imports.length === 0) {
+      panel.innerHTML = `<div class="card"><p style="color:var(--text-muted);">${esc(I18n.t('input.noImports') || 'Nu există documente importate pentru anul curent.')}</p></div>`;
+      return;
+    }
+    const fmtVal = (v, currency) => {
+      if (v == null) return '—';
+      const n = Math.round((v + Number.EPSILON) * 100) / 100;
+      const formatted = (currency === 'RON' ? Math.round(n).toLocaleString('ro-RO') : n.toFixed(2));
+      return `${formatted}${currency ? ' ' + currency : ''}`;
+    };
+    let html = '';
+    for (const imp of imports) {
+      html += `<div class="card import-card" style="margin-bottom:1rem;">
+        <header style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+          <span style="font-size:1.3rem;">${imp.icon || '📄'}</span>
+          <h3 style="margin:0;font-size:1.05rem;">${esc(imp.title)}</h3>
+          <span class="status-badge" style="margin-left:auto;background:rgba(63,185,80,0.15);color:var(--success);padding:0.2rem 0.5rem;border-radius:var(--radius);font-size:0.75rem;">✓ ${esc(I18n.t('input.importParsedOk') || 'Parsat')}</span>
+        </header>`;
+
+      if (imp.perCountry) {
+        const countries = (imp.countriesSource ? imp.countriesSource(yd) : []) || [];
+        if (countries.length === 0) {
+          html += `<p style="color:var(--text-muted);font-size:0.85rem;">${esc(I18n.t('input.noCountryRows') || 'Niciun rând per țară.')}</p>`;
+        } else {
+          html += `<div style="overflow-x:auto;"><table style="width:100%;font-size:0.85rem;border-collapse:collapse;">
+            <thead><tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left;padding:0.4rem;">${esc(I18n.t('input.country'))}</th>
+              <th style="text-align:left;padding:0.4rem;">${esc(I18n.t('input.currency') || 'Monedă')}</th>
+              <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.roGainsLong'))}</th>
+              <th style="text-align:right;padding:0.4rem;">≥1y ${esc(I18n.t('income.taxRON'))}</th>
+              <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.roGainsShort'))}</th>
+              <th style="text-align:right;padding:0.4rem;">&lt;1y ${esc(I18n.t('income.taxRON'))}</th>
+            </tr></thead>
+            <tbody>`;
+          for (const c of countries) {
+            const longGain = (c.longGain || 0) - (c.longLoss || 0);
+            const shortGain = (c.shortGain || 0) - (c.shortLoss || 0);
+            html += `<tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:0.4rem;">${esc(c.country || '?')}</td>
+              <td style="padding:0.4rem;">${esc(c.currency || 'RON')}</td>
+              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(longGain, c.currency || 'RON'))}</td>
+              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(c.longTax || 0, c.currency || 'RON'))}</td>
+              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(shortGain, c.currency || 'RON'))}</td>
+              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(c.shortTax || 0, c.currency || 'RON'))}</td>
+            </tr>`;
+          }
+          html += `</tbody></table></div>
+          <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.perCountryEditHint') || '💡 Editarea per țară va fi disponibilă într-o versiune ulterioară. Pentru a corecta o valoare acum, activează „Mod avansat" și folosește câmpurile per țară din formularul de mai jos.')}</p>`;
+        }
+      } else {
+        const rows = imp.rows ? imp.rows(yd) : [];
+        if (rows.length === 0) {
+          html += `<p style="color:var(--text-muted);font-size:0.85rem;">${esc(I18n.t('input.noEditableFields') || 'Niciun câmp editabil.')}</p>`;
+        } else {
+          html += `<div style="overflow-x:auto;"><table style="width:100%;font-size:0.9rem;border-collapse:collapse;">
+            <thead><tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left;padding:0.4rem;">${esc(I18n.t('input.fieldLabel') || 'Câmp')}</th>
+              <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.parsedValue') || 'Parsat')}</th>
+              <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.currentOverride') || 'Override manual')}</th>
+            </tr></thead>
+            <tbody>`;
+          for (const r of rows) {
+            const manualVal = r.manualKey ? yd[r.manualKey] : null;
+            const hasManual = manualVal !== undefined && manualVal !== '' && manualVal !== null;
+            const cellClass = hasManual ? 'style="color:var(--warning);font-weight:600;"' : 'style="color:var(--text-muted);"';
+            html += `<tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:0.4rem;">${esc(r.label)}</td>
+              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(r.parsedValue, r.currency))}</td>
+              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;" ${cellClass}>${hasManual ? esc(fmtVal(parseFloat(manualVal), r.currency)) : '—'}</td>
+            </tr>`;
+          }
+          html += `</tbody></table></div>`;
+          html += `<p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.editHint') || '💡 Pentru a corecta o valoare, activează „Mod avansat" și folosește câmpurile din formular. Editarea inline va fi disponibilă într-o versiune ulterioară.')}</p>`;
+        }
+      }
+
+      html += `<footer style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button type="button" class="btn-primary import-action-raw" data-file="${esc(imp.rawFilePattern.replace('{year}', selectedYear))}" style="font-size:0.8rem;padding:0.35rem 0.7rem;">📃 ${esc(I18n.t('input.viewRaw') || 'Vezi raw text')}</button>
+        <button type="button" class="btn-primary import-action-reimport" data-type="${esc(imp.id)}" style="font-size:0.8rem;padding:0.35rem 0.7rem;">⟳ ${esc(I18n.t('input.reimport') || 'Re-importă')}</button>
+        <button type="button" class="btn-primary import-action-delete" data-file="${esc(imp.rawFilePattern.replace('{year}', selectedYear))}" style="font-size:0.8rem;padding:0.35rem 0.7rem;background:var(--danger);">🗑 ${esc(I18n.t('input.deleteImport') || 'Șterge import')}</button>
+      </footer>`;
+      html += `</div>`;
+    }
+    panel.innerHTML = html;
+
+    // Wire the action buttons
+    panel.querySelectorAll('.import-action-raw').forEach(btn => {
+      btn.onclick = () => {
+        const file = btn.dataset.file;
+        // Switch to Raw Data tab and select the file
+        const rawNav = document.querySelector('[data-tab="raw"]');
+        if (rawNav) rawNav.click();
+        window._rawSelectFile?.(file);
+      };
+    });
+    panel.querySelectorAll('.import-action-reimport').forEach(btn => {
+      btn.onclick = () => {
+        const importNav = document.querySelector('[data-tab="import"]');
+        if (importNav) importNav.click();
+        // Pre-select the type
+        const typeSel = document.getElementById('upload-type');
+        if (typeSel) typeSel.value = btn.dataset.type;
+      };
+    });
+    panel.querySelectorAll('.import-action-delete').forEach(btn => {
+      btn.onclick = async () => {
+        const file = btn.dataset.file;
+        if (!confirm((I18n.t('input.confirmDeleteImport') || 'Confirmi ștergerea importului "{file}"?').replace('{file}', file))) return;
+        try {
+          await fetch(`/api/raw/${encodeURIComponent(file)}`, { method: 'DELETE' });
+          await loadAllData();
+          applyAddDataMode();
+          render();
+          showToast(I18n.t('raw.deleted') || 'Import șters', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+    });
+  }
+
+  /** Wire the sub-tab buttons + advanced toggle once on init. */
+  function setupAddDataModeSwitcher() {
+    const importsBtn = document.getElementById('data-mode-imports');
+    const newBtn = document.getElementById('data-mode-new');
+    const advancedToggle = document.getElementById('data-advanced-toggle');
+    if (!importsBtn || !newBtn || !advancedToggle) return;
+    importsBtn.addEventListener('click', () => {
+      if (importsBtn.disabled) return;
+      setAddDataMode('imports');
+      applyAddDataMode();
+    });
+    newBtn.addEventListener('click', () => {
+      setAddDataMode('new');
+      applyAddDataMode();
+    });
+    advancedToggle.addEventListener('change', (e) => {
+      setAdvancedMode(e.target.checked);
+      applyAddDataMode();
+    });
+  }
+
   // ============ DATA FORM ============
   /**
    * Set a manual input's value from yd[manualKey] when present, otherwise
@@ -2770,6 +3011,10 @@ const App = (() => {
 
     // Populate tax rates
     populateTaxRates();
+
+    // Apply the Add Data sub-tab mode (imports vs new) + advanced toggle.
+    // Done last so that all inputs are populated before deciding which to hide.
+    applyAddDataMode();
 
     // Update save buttons with year
     const btnData = document.getElementById('btn-save-data');
