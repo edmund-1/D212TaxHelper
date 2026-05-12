@@ -386,6 +386,22 @@
         <p class="subtitle" data-i18n="input.subtitle">Enter amounts for the selected year. For 2025+, input dividends and stock sale proceeds from both US (Fidelity / Morgan Stanley) and Romania broker.</p>
       <div class="input-year-banner" id="input-year-banner"></div>
 
+      <!-- Sub-tab switcher inside Add Data: imports verification vs new manual entry. -->
+      <div class="card" id="data-mode-switcher" style="margin-bottom:1rem;">
+        <div role="tablist" aria-label="Data entry mode" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+          <button type="button" id="data-mode-imports" role="tab" aria-selected="false" class="nav-btn" data-i18n="input.modeImports">📄 Verifică & corectează importuri</button>
+          <button type="button" id="data-mode-new" role="tab" aria-selected="true" class="nav-btn active" data-i18n="input.modeNew">✏️ Adaugă date noi</button>
+          <label style="margin-left:auto;display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;">
+            <input type="checkbox" id="data-advanced-toggle" style="cursor:pointer;">
+            <span data-i18n="input.modeAdvanced">Mod avansat (toate câmpurile)</span>
+          </label>
+        </div>
+        <p id="data-mode-hint" style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-muted);"></p>
+      </div>
+
+      <!-- Imports verification panel: rendered dynamically when imports exist for the selected year. -->
+      <div id="data-imports-panel" style="display:none;"></div>
+
       <div class="card">
         <form id="data-form">
           <fieldset class="form-grid-2">
@@ -410,7 +426,7 @@
             </div>
           </fieldset>
 
-          <fieldset class="form-grid-2">
+          <fieldset class="form-grid-2" id="fieldset-dividends">
             <legend data-i18n="input.dividends">Dividends</legend>
             <div class="form-row">
               <label data-i18n="input.usDividends">US Dividends (USD)</label>
@@ -452,7 +468,7 @@
             </div>
           </fieldset>
 
-          <fieldset class="form-grid-2">
+          <fieldset class="form-grid-2" id="fieldset-capital-gains">
             <legend data-i18n="input.capitalGains">Capital Gains (Stock Sales)</legend>
             <div class="form-row">
               <label data-i18n="input.usGains">US Stock Sales (USD)</label>
@@ -475,14 +491,14 @@
             </div>
           </fieldset>
 
-          <fieldset>
+          <fieldset id="fieldset-ro-gains">
             <legend data-i18n="input.roCapitalGains">Romania Broker Capital Gains (per country)</legend>
             <p class="subtitle" style="font-size:0.8rem;" data-i18n="input.roCapitalGainsHint">Add capital gains from Romanian broker (XTB / Tradeville / BT Trade) per country of origin. Select the currency for each row (defaults to RON). All are treated as final tax withheld by broker.</p>
             <div id="ro-gains-rows"></div>
             <button type="button" id="btn-add-ro-row" class="btn-primary" style="font-size:0.8rem;padding:0.4rem 0.8rem;margin-top:0.5rem;" data-i18n="input.addCountryRow">+ Add Country</button>
           </fieldset>
 
-          <fieldset class="form-grid-2">
+          <fieldset class="form-grid-2" id="fieldset-interest">
             <legend data-i18n="input.interestIncome">Interest Income</legend>
             <div class="form-row">
               <label data-i18n="input.interestRON">Interest Income (RON)</label>

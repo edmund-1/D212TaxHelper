@@ -2472,6 +2472,154 @@ const App = (() => {
     }
   }
 
+  // ============ ADD DATA TAB — IMPORTS DETECTION & SUB-TAB MODES ============
+  /**
+   * Catalog of importable data sources. Each descriptor declares:
+   *   - id: matches the upload type from server.js (xtb_dividends, xtb_portfolio, ...)
+   *   - title: i18n key for the human-readable label
+   *   - isActive(yd): true when this import has produced data for the year
+   *   - rawFilePattern: filename produced under data/ when this import succeeds
+   *   - rows(yd): editable rows for the imports panel, each with
+   *       { label, parsedValue, manualKey, formatted, currency? }
+   *   - relatedFieldsetIds: HTML <fieldset> IDs whose inputs become redundant
+   *     when this import is active. Tab 2 hides them by default; "Mod avansat"
+   *     reveals them.
+   *
+   * Adding a new import type means adding one entry here — the imports panel
+   * and the Tab 2 filtering pick it up automatically.
+   */
+  const IMPORT_DESCRIPTORS = [
+    {
+      id: 'xtb_dividends',
+      title: 'XTB · Raport Dividende & Dobânzi',
+      icon: '📄',
+      isActive: (yd) => !!yd.xtbDividendsReport,
+      rawFilePattern: 'xtb_dividends_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-ro-dividends', 'fieldset-interest'],
+      rows: (yd) => {
+        const d = yd.xtbDividendsReport || {};
+        const rows = [];
+        if (d.dividends?.grossRON != null) {
+          rows.push({ label: 'Dividende brute (RON)', parsedValue: d.dividends.grossRON, manualKey: 'xtbDividends', currency: 'RON' });
+        }
+        if (d.dividends?.taxWithheldRON != null) {
+          rows.push({ label: 'Impozit dividende reținut (RON)', parsedValue: d.dividends.taxWithheldRON, manualKey: 'roDivTaxPaid', currency: 'RON' });
+        }
+        if (d.interest?.grossRON != null) {
+          rows.push({ label: 'Dobânzi brute (RON)', parsedValue: d.interest.grossRON, manualKey: 'interestIncome', currency: 'RON' });
+        }
+        if (d.interest?.taxWithheldRON != null) {
+          rows.push({ label: 'Impozit dobânzi reținut (RON)', parsedValue: d.interest.taxWithheldRON, manualKey: 'interestTaxPaid', currency: 'RON' });
+        }
+        return rows;
+      }
+    },
+    {
+      id: 'xtb_portfolio',
+      title: 'XTB · Fișă de Portofoliu',
+      icon: '📄',
+      isActive: (yd) => !!yd.xtbPortfolio,
+      rawFilePattern: 'xtb_portfolio_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-ro-gains'],
+      // Per-country editing is rendered specially in renderImportsPanel().
+      perCountry: true,
+      countriesSource: (yd) => yd.xtbPortfolio?.countries || [],
+    },
+    {
+      id: 'tradeville_portfolio',
+      title: 'Tradeville · Fișă de Portofoliu',
+      icon: '📄',
+      isActive: (yd) => !!yd.tradevillePortfolio,
+      rawFilePattern: 'tradeville_portfolio_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-ro-gains'],
+      perCountry: true,
+      countriesSource: (yd) => yd.tradevillePortfolio?.countries || [],
+    },
+    {
+      id: 'fidelity_statement',
+      title: 'Fidelity · Stock Plan Statement',
+      icon: '📄',
+      isActive: (yd) => (yd.fidelityDividendsYTD || 0) > 0 || (yd.fidelityTaxWithheldYTD || 0) > 0 || (yd.fidelityVests || []).length > 0,
+      rawFilePattern: 'fidelity_statement_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-dividends', 'fieldset-capital-gains'],
+      rows: (yd) => {
+        const rows = [];
+        if (yd.fidelityDividendsYTD) {
+          rows.push({ label: 'Dividende SUA YTD (USD)', parsedValue: yd.fidelityDividendsYTD, manualKey: 'fidelityDividends', currency: 'USD' });
+        }
+        if (yd.fidelityTaxWithheldYTD) {
+          rows.push({ label: 'Impozit dividende SUA reținut YTD (USD)', parsedValue: yd.fidelityTaxWithheldYTD, manualKey: 'usDivTaxPaid', currency: 'USD' });
+        }
+        if (yd.fidelityRealizedGainYTD) {
+          rows.push({ label: 'Câștiguri realizate YTD (USD)', parsedValue: yd.fidelityRealizedGainYTD, manualKey: 'fidelityGains', currency: 'USD' });
+        }
+        return rows;
+      }
+    },
+    {
+      id: 'ms_statement',
+      title: 'Morgan Stanley · Stock Plan Statement',
+      icon: '📄',
+      isActive: (yd) => !!yd.msStatement,
+      rawFilePattern: 'ms_statement_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-dividends'],
+      rows: (yd) => {
+        const ms = yd.msStatement || {};
+        const rows = [];
+        if (ms.dividends) {
+          rows.push({ label: 'Dividende MS (USD)', parsedValue: ms.dividends, manualKey: 'fidelityDividends', currency: 'USD' });
+        }
+        if (ms.taxWithheld) {
+          rows.push({ label: 'Impozit MS reținut (USD)', parsedValue: ms.taxWithheld, manualKey: 'usDivTaxPaid', currency: 'USD' });
+        }
+        return rows;
+      }
+    },
+    {
+      id: 'form_1042s',
+      title: 'IRS Form 1042-S',
+      icon: '📄',
+      isActive: (yd) => Array.isArray(yd.form1042s) && yd.form1042s.length > 0,
+      rawFilePattern: 'form_1042s_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-dividends'],
+      rows: (yd) => {
+        const forms = yd.form1042s || [];
+        const totalGross = forms.reduce((s, f) => s + (f.grossIncomeUSD || 0), 0);
+        const totalTax = forms.reduce((s, f) => s + (f.federalTaxWithheldUSD || 0), 0);
+        const rows = [];
+        if (totalGross) {
+          rows.push({ label: `Venit brut total (${forms.length} formulare) (USD)`, parsedValue: totalGross, manualKey: 'fidelityDividends', currency: 'USD' });
+        }
+        if (totalTax) {
+          rows.push({ label: 'Impozit federal reținut total (USD)', parsedValue: totalTax, manualKey: 'usDivTaxPaid', currency: 'USD' });
+        }
+        return rows;
+      }
+    },
+    {
+      id: 'declaratie',
+      title: 'ANAF · Declarație Unică D-212 importată',
+      icon: '📄',
+      isActive: (yd) => !!yd.declaratie,
+      rawFilePattern: 'declaratie_{year}_raw.txt',
+      relatedFieldsetIds: ['fieldset-dividends', 'fieldset-capital-gains', 'fieldset-ro-dividends', 'fieldset-ro-gains'],
+      rows: (yd) => {
+        const d = yd.declaratie || {};
+        const rows = [];
+        if (d.dividends?.grossRON) rows.push({ label: 'Dividende declarate (RON)', parsedValue: d.dividends.grossRON, manualKey: null, currency: 'RON' });
+        if (d.capitalGains?.taxableRON) rows.push({ label: 'Câștig capital taxabil (RON)', parsedValue: d.capitalGains.taxableRON, manualKey: null, currency: 'RON' });
+        if (d.totalTax) rows.push({ label: 'Total impozit declarat (RON)', parsedValue: d.totalTax, manualKey: null, currency: 'RON' });
+        return rows;
+      }
+    }
+  ];
+
+  /** Returns the list of imports active for `year` based on the current yd. */
+  function detectActiveImports(year) {
+    const yd = appData.years?.[year] || {};
+    return IMPORT_DESCRIPTORS.filter(d => d.isActive(yd));
+  }
+
   // ============ DATA FORM ============
   /**
    * Set a manual input's value from yd[manualKey] when present, otherwise
