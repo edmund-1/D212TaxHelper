@@ -9,6 +9,15 @@
 </head>
 <body>
   <a href="#app-content" class="skip-link">Skip to main content</a>
+  <!-- Boot splash: visible while the SPA initializes. Removed by init() once
+       loadAllData() resolves. 100% CSS so it shows even before any JS runs. -->
+  <div id="boot-splash" aria-hidden="true">
+    <div class="boot-splash-inner">
+      <div class="boot-splash-spinner"></div>
+      <div class="boot-splash-title">D212 Tax Helper</div>
+      <div class="boot-splash-subtitle">Se inițializează…</div>
+    </div>
+  </div>
   <header role="banner">
     <div class="header-content">
       <button id="nav-toggle" class="nav-toggle" type="button" aria-label="Toggle navigation menu">&#9776;</button>

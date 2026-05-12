@@ -4029,9 +4029,23 @@ const App = (() => {
   }
 
   // Init on DOM ready
-  // Init on DOM ready
   document.addEventListener('DOMContentLoaded', () => {
-    init();
+    // Tear down the boot splash once init() resolves (or fails). The fade-out
+    // is CSS-driven; we add .hidden first, then remove the node after the
+    // transition so screen readers don't see two competing trees.
+    const dismissBootSplash = () => {
+      const el = document.getElementById('boot-splash');
+      if (!el) return;
+      el.classList.add('hidden');
+      setTimeout(() => el.remove(), 300);
+    };
+    // Safety net: even if something throws inside init() before render() lands,
+    // never leave the splash up for more than 15 seconds.
+    const splashFallbackTimer = setTimeout(dismissBootSplash, 15000);
+    Promise.resolve(init()).finally(() => {
+      clearTimeout(splashFallbackTimer);
+      dismissBootSplash();
+    });
     const restartBtn = document.getElementById('restart-btn');
 
     // Restart server button
