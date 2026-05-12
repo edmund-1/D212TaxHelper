@@ -142,6 +142,14 @@ D212TaxHelper/
 
 All data stays on your machine. The application runs a local server on `localhost:3000` with no external network calls. Your financial documents and parsed data are never uploaded anywhere.
 
+## Contributing & Roadmap
+
+- 📋 [ROADMAP.md](ROADMAP.md) — what's next (D212 compliance gaps + platform improvements), priorities, and how to claim a task
+- 📖 [docs/d212-mapping.md](docs/d212-mapping.md) — exhaustive D212 → app field mapping, with citations to the ANAF XSD and the official instructions (OMF 2736/2025)
+- 📚 [docs/anaf/d212-2025/](docs/anaf/d212-2025/) — official ANAF documents (XSD, schematron, instructions) kept in-repo as a versioned source of truth
+
+Accountants who spot rules we are missing are invited to open an issue titled `[Roadmap proposal] <description>` citing the Cod fiscal article / D212 instruction paragraph that grounds the rule.
+
 ## License
 
 This work is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). You may share and adapt it for non-commercial purposes with attribution.

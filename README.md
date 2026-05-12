@@ -142,6 +142,14 @@ D212TaxHelper/
 
 Toate datele rămân pe calculatorul tău. Aplicația rulează un server local pe `localhost:3000` fără apeluri de rețea externe. Documentele financiare și datele parsate nu sunt trimise nicăieri.
 
+## Contribuții & Roadmap
+
+- 📋 [ROADMAP.md](ROADMAP.md) — lista cu ce urmează (gap-uri D212 + îmbunătățiri platformă), priorități și cum poți contribui
+- 📖 [docs/d212-mapping.md](docs/d212-mapping.md) — mapare exhaustivă D212 → app, cu citații la XSD-ul ANAF și la instrucțiunile oficiale (OMF 2736/2025)
+- 📚 [docs/anaf/d212-2025/](docs/anaf/d212-2025/) — documentele oficiale ANAF (XSD, schematron, instrucțiuni) păstrate în repo ca sursă de adevăr versionată
+
+Contabilii care găsesc reguli pe care le ratăm sunt rugați să deschidă un issue cu titlul `[Roadmap proposal] <descriere>` și să cite paragraful din Cod fiscal / instrucțiunile D212 care fundamentează regula.
+
 ## Licență
 
 Această lucrare este licențiată sub [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Poți distribui și adapta pentru scopuri necomerciale cu atribuire.
