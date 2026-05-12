@@ -801,6 +801,21 @@
     </div>
   </div>
 
+  <!-- Override-confirmation modal: shown before an upload would replace manual entries -->
+  <div id="override-modal" class="modal-overlay hidden" style="z-index:1030;">
+    <div class="modal-content" style="position:relative; max-width:760px; max-height:85vh; display:flex; flex-direction:column;">
+      <div class="modal-header">
+        <h3 id="override-modal-title" data-i18n="import.overrideModalTitle">Confirm document import</h3>
+        <button type="button" id="override-modal-close" class="modal-close">&times;</button>
+      </div>
+      <div id="override-modal-body" style="padding:1rem 1.5rem; overflow-y:auto; flex:1 1 auto;"></div>
+      <div class="modal-footer" style="padding:0.75rem 1.5rem; border-top:1px solid var(--border); display:flex; gap:0.5rem; justify-content:flex-end;">
+        <button type="button" id="override-cancel-btn" class="btn-primary" style="background:var(--bg-secondary); color:var(--text-primary);" data-i18n="import.overrideCancel">Cancel</button>
+        <button type="button" id="override-confirm-btn" class="btn-primary" data-i18n="import.overrideConfirm">Replace and import</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/i18n.js"></script>
   <script src="/js/charts.js"></script>
   <script src="/js/app.js"></script>

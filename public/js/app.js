@@ -2895,22 +2895,232 @@ const App = (() => {
     });
   }
 
+  /**
+   * Given the dryRun upload response, derive the values the import would assign
+   * to each manual field. Returns a map { fieldKey: { value, formatted } } —
+   * undefined entries mean the field will simply be cleared.
+   */
+  function extractNewValuesFromDryRun(uploadType, parsed) {
+    if (!parsed) return {};
+    const out = {};
+    const fmtRON = (v) => Math.round(v || 0).toLocaleString('ro-RO') + ' RON';
+    const fmtUSDv = (v) => '$' + (v || 0).toFixed(2);
+
+    if (uploadType === 'xtb_dividends') {
+      if (parsed.dividends) {
+        out.xtbDividends = { formatted: fmtRON(parsed.dividends.grossRON) };
+        out.roDivTaxPaid = { formatted: fmtRON(parsed.dividends.taxWithheldRON) };
+      }
+      if (parsed.interest) {
+        out.interestIncome = { formatted: fmtRON(parsed.interest.grossRON) };
+        out.interestTaxPaid = { formatted: fmtRON(parsed.interest.taxWithheldRON) };
+      }
+      // EUR/USD manuals would just be cleared (the report aggregates everything in RON)
+    } else if (uploadType === 'xtb_portfolio' || uploadType === 'tradeville_portfolio') {
+      if (Array.isArray(parsed.countries) && parsed.countries.length > 0) {
+        out.roGainsCountries = {
+          formatted: parsed.countries.length + ' ' + I18n.t('import.overrideRows'),
+          detail: parsed.countries.map(c => {
+            const cur = c.currency || 'RON';
+            const lg = c.longGainRON ?? c.longGain ?? 0;
+            const ll = c.longLossRON ?? c.longLoss ?? 0;
+            const sg = c.shortGainRON ?? c.shortGain ?? 0;
+            const sl = c.shortLossRON ?? c.shortLoss ?? 0;
+            const lt = c.longTaxRON ?? c.longTax ?? 0;
+            const st = c.shortTaxRON ?? c.shortTax ?? 0;
+            return `${c.country} [${cur}]: ≥1y +${Math.round(lg)} -${Math.round(ll)} (tax ${Math.round(lt)}), <1y +${Math.round(sg)} -${Math.round(sl)} (tax ${Math.round(st)})`;
+          }).join('\n')
+        };
+      }
+    } else if (uploadType === 'fidelity_statement' || uploadType === 'ms_statement') {
+      if (parsed.dividendsYTD !== undefined && parsed.dividendsYTD > 0) {
+        out.fidelityDividends = { formatted: fmtUSDv(parsed.dividendsYTD) };
+      } else if (parsed.dividends && typeof parsed.dividends === 'number' && parsed.dividends > 0) {
+        out.fidelityDividends = { formatted: fmtUSDv(parsed.dividends) };
+      }
+      if (parsed.taxWithheldYTD !== undefined && parsed.taxWithheldYTD > 0) {
+        out.usDivTaxPaid = { formatted: fmtUSDv(parsed.taxWithheldYTD) };
+      } else if (parsed.taxWithheld !== undefined && parsed.taxWithheld > 0) {
+        out.usDivTaxPaid = { formatted: fmtUSDv(parsed.taxWithheld) };
+      }
+      if (parsed.sales?.length) {
+        const totalProceeds = parsed.sales.reduce((s, x) => s + (x.netProceeds || x.saleProceeds || 0), 0);
+        out.fidelityGains = { formatted: fmtUSDv(totalProceeds) + ' (' + parsed.sales.length + ' sales)' };
+      }
+    } else if (uploadType === 'form_1042s') {
+      if (parsed.grossIncomeUSD) {
+        out.fidelityDividends = { formatted: fmtUSDv(parsed.grossIncomeUSD) };
+      }
+      if (parsed.federalTaxWithheldUSD) {
+        out.usDivTaxPaid = { formatted: fmtUSDv(parsed.federalTaxWithheldUSD) };
+      }
+    } else if (uploadType === 'stock_award') {
+      if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+        const totalBik = parsed.rows.reduce((s, r) => s + (parseFloat(r.stock_award_bik) || 0) + (parseFloat(r.espp_gain_bik) || 0), 0);
+        const totalWh = parsed.rows.reduce((s, r) => s + (parseFloat(r.stock_withholding) || 0), 0);
+        out.salaryTaxedIncome = { formatted: fmtRON(totalBik) + ' (' + parsed.rows.length + ' vests)' };
+        out.stockWithholdingPaid = { formatted: fmtRON(totalWh) };
+      }
+    } else if (uploadType === 'trade_confirmation') {
+      // single trade — append-style, but flagged as conflicting if user already had manual override
+      if (parsed.transactionType !== 'purchase') {
+        out.fidelityGains = { formatted: fmtUSDv(parsed.netProceeds || 0) + ' (1 sale)' };
+      }
+    }
+    return out;
+  }
+
+  /** Format a current manual value for display in the diff dialog. */
+  function formatCurrentManual(key, value) {
+    if (value === undefined || value === '' || value === null) return '—';
+    if (key === 'roGainsCountries') {
+      if (!Array.isArray(value) || value.length === 0) return '—';
+      return value.length + ' ' + I18n.t('import.overrideRows') + '\n' +
+        value.map(c => {
+          const cur = c.currency || 'RON';
+          return `${c.country || '?'} [${cur}]: ≥1y +${c.longGain || 0}, <1y +${c.shortGain || 0}, tax ${c.taxWithheld || 0}`;
+        }).join('\n');
+    }
+    if (key === 'fidelityDividends' || key === 'usDivTaxPaid' ||
+        key === 'fidelityGains' || key === 'fidelityCost') {
+      return '$' + (parseFloat(value) || 0).toFixed(2);
+    }
+    if (key === 'roEurDividends' || key === 'roEurDivTaxPaid' ||
+        key === 'roEurInterest' || key === 'roEurInterestTaxPaid') {
+      return (parseFloat(value) || 0).toFixed(2) + ' EUR';
+    }
+    if (key === 'roUsdDividends' || key === 'roUsdDivTaxPaid' ||
+        key === 'roUsdInterest' || key === 'roUsdInterestTaxPaid') {
+      return (parseFloat(value) || 0).toFixed(2) + ' USD';
+    }
+    // RON or generic numeric
+    const num = parseFloat(value);
+    if (!isNaN(num)) return Math.round(num).toLocaleString('ro-RO') + ' RON';
+    return String(value);
+  }
+
+  /**
+   * Show the override-confirmation modal with a diff table.
+   * Returns a promise that resolves to true (confirm) or false (cancel).
+   */
+  function showOverrideConfirm(year, uploadType, conflictingFields, newValuesMap) {
+    const modal = document.getElementById('override-modal');
+    const body = document.getElementById('override-modal-body');
+    const confirmBtn = document.getElementById('override-confirm-btn');
+    const cancelBtn = document.getElementById('override-cancel-btn');
+    const closeBtn = document.getElementById('override-modal-close');
+
+    const yd = appData.years?.[year] || {};
+    const rows = conflictingFields.map(k => {
+      const label = I18n.t('import.manualFieldLabels.' + k) || k;
+      const currentRaw = yd[k];
+      const current = esc(formatCurrentManual(k, currentRaw)).replace(/\n/g, '<br>');
+      const newEntry = newValuesMap[k];
+      let newCell;
+      if (newEntry === undefined) {
+        // Field will be cleared, not replaced with anything specific
+        newCell = `<em style="color:var(--text-muted)">${esc(I18n.t('import.overrideWillClear'))}</em>`;
+      } else {
+        const main = esc(newEntry.formatted || '').replace(/\n/g, '<br>');
+        const detail = newEntry.detail
+          ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;white-space:pre-wrap;">${esc(newEntry.detail)}</div>`
+          : '';
+        newCell = main + detail;
+      }
+      return `<tr>
+        <td style="padding:0.5rem; border-bottom:1px solid var(--border); vertical-align:top;"><strong>${esc(label)}</strong></td>
+        <td style="padding:0.5rem; border-bottom:1px solid var(--border); vertical-align:top; color:var(--danger);">${current}</td>
+        <td style="padding:0.5rem; border-bottom:1px solid var(--border); vertical-align:top; color:var(--success);">${newCell}</td>
+      </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <p style="margin-top:0;">${esc(I18n.t('import.overrideIntro', { year }))}</p>
+      <table style="width:100%; border-collapse:collapse; margin-top:0.5rem; font-size:0.9rem;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:0.5rem; border-bottom:2px solid var(--border);">${esc(I18n.t('import.overrideColField'))}</th>
+            <th style="text-align:left; padding:0.5rem; border-bottom:2px solid var(--border); color:var(--danger);">${esc(I18n.t('import.overrideColCurrent'))}</th>
+            <th style="text-align:left; padding:0.5rem; border-bottom:2px solid var(--border); color:var(--success);">${esc(I18n.t('import.overrideColNew'))}</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p style="margin-top:1rem; font-size:0.85rem; color:var(--text-muted);">${esc(I18n.t('import.overrideFooter'))}</p>
+    `;
+
+    modal.classList.remove('hidden');
+
+    return new Promise((resolve) => {
+      const cleanup = (result) => {
+        modal.classList.add('hidden');
+        confirmBtn.removeEventListener('click', onConfirm);
+        cancelBtn.removeEventListener('click', onCancel);
+        closeBtn.removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onConfirm = () => cleanup(true);
+      const onCancel = () => cleanup(false);
+      const onBackdrop = (e) => { if (e.target === modal) cleanup(false); };
+      const onKey = (e) => { if (e.key === 'Escape') cleanup(false); };
+      confirmBtn.addEventListener('click', onConfirm);
+      cancelBtn.addEventListener('click', onCancel);
+      closeBtn.addEventListener('click', onCancel);
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+
   async function handleUpload(e) {
     e.preventDefault();
     const yearVal = document.getElementById('upload-year').value;
     const typeVal = document.getElementById('upload-type').value;
     const files = document.getElementById('upload-file').files;
 
-    // Warn before overriding manual entries
-    const conflictingFields = detectManualConflict(parseInt(yearVal, 10), typeVal);
-    if (conflictingFields.length > 0) {
-      const labels = conflictingFields.map(k => I18n.t('import.manualFieldLabels.' + k) || k);
-      const msg = I18n.t('import.overrideManualWarn', {
-        year: yearVal,
-        fields: labels.map(l => '• ' + l).join('\n')
-      });
-      if (!confirm(msg)) {
-        return;
+    // Pre-flight override check: only meaningful for single-file uploads
+    // (multi-file uploads run sequentially and conflict per file is ambiguous).
+    let conflictingFields = [];
+    if (files.length === 1) {
+      conflictingFields = detectManualConflict(parseInt(yearVal, 10), typeVal);
+      if (conflictingFields.length > 0) {
+        // Dry-run upload first to obtain the parsed values from the document
+        const dryForm = new FormData();
+        dryForm.append('year', yearVal);
+        dryForm.append('type', typeVal);
+        dryForm.append('file', files[0]);
+        const submitBtn = document.getElementById('upload-submit-btn');
+        const origLabel = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = I18n.t('import.overrideAnalyzing');
+        let dryResult;
+        try {
+          const dryResp = await fetch('/api/upload?dryRun=true', { method: 'POST', body: dryForm });
+          dryResult = await dryResp.json();
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = origLabel;
+          showToast(I18n.t('import.error') + ': ' + err.message, 'error');
+          return;
+        }
+        submitBtn.textContent = origLabel;
+        submitBtn.disabled = false;
+
+        if (!dryResult || !dryResult.success) {
+          // Dry run failed (low OCR quality, parse error). Fall back to plain warning.
+          const fallbackMsg = I18n.t('import.overrideManualWarn', {
+            year: yearVal,
+            fields: conflictingFields
+              .map(k => '• ' + (I18n.t('import.manualFieldLabels.' + k) || k))
+              .join('\n')
+          });
+          if (!confirm(fallbackMsg)) return;
+        } else {
+          const newValuesMap = extractNewValuesFromDryRun(typeVal, dryResult.parsed);
+          const ok = await showOverrideConfirm(parseInt(yearVal, 10), typeVal, conflictingFields, newValuesMap);
+          if (!ok) return;
+        }
       }
     }
 

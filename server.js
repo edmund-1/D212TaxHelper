@@ -530,6 +530,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
     const { year, type } = req.body;
+    // dryRun: parse the document and return what WOULD be saved, but persist nothing.
+    // Used by the UI to show an override-confirmation diff before committing.
+    const dryRun = req.query.dryRun === 'true' || req.query.dryRun === '1' || req.body.dryRun === 'true';
     const parsedYear = parseInt(year, 10);
     if (isNaN(parsedYear) || parsedYear < 2000 || parsedYear > 2100) {
       fs.unlinkSync(req.file.path);
@@ -593,15 +596,19 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         const xmlData = extractAnafD212Xml(buffer);
         if (xmlData) {
           log('INFO', 'Extracted ANAF D-212 data from embedded XML');
-          // Save raw XML for reference
-          const rawFile = `${type}_${parsedYear}_raw.txt`;
-          fs.writeFileSync(path.join(DATA_DIR, rawFile), '[ANAF D-212 XML]\n' + JSON.stringify(xmlData, null, 2), 'utf8');
-          // Clean up
-          fs.unlinkSync(req.file.path);
-          if (paddleFilePath !== req.file.path && fs.existsSync(paddleFilePath)) fs.unlinkSync(paddleFilePath);
-          // Store parsed data
-          db.mergeYearData(parsedYear, { [type]: xmlData });
-          return res.json({ success: true, year: parsedYear, type, parsed: xmlData, ocrEngine: 'xml' });
+          // Clean up uploaded artifacts regardless of dryRun
+          try { fs.unlinkSync(req.file.path); } catch {}
+          if (paddleFilePath !== req.file.path && fs.existsSync(paddleFilePath)) {
+            try { fs.unlinkSync(paddleFilePath); } catch {}
+          }
+          if (!dryRun) {
+            // Save raw XML for reference
+            const rawFile = `${type}_${parsedYear}_raw.txt`;
+            fs.writeFileSync(path.join(DATA_DIR, rawFile), '[ANAF D-212 XML]\n' + JSON.stringify(xmlData, null, 2), 'utf8');
+            // Store parsed data
+            db.mergeYearData(parsedYear, { [type]: xmlData });
+          }
+          return res.json({ success: true, dryRun, year: parsedYear, type, parsed: xmlData, ocrEngine: 'xml' });
         }
         // If XML extraction failed, fall through to OCR
         log('WARN', 'ANAF D-212 XML extraction failed, trying OCR...');
@@ -685,23 +692,28 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     // Save raw text (append for trade confirmations and fidelity statements, overwrite for others)
     const rawFile = `${type}_${parsedYear}_raw.txt`;
     const rawPath = path.join(DATA_DIR, rawFile);
-    if (type === 'trade_confirmation' && fs.existsSync(rawPath)) {
-      fs.appendFileSync(rawPath, '\n\n--- NEW TRADE CONFIRMATION ---\n\n' + text, 'utf8');
-    } else if (type === 'fidelity_statement' && fs.existsSync(rawPath)) {
-      fs.appendFileSync(rawPath, '\n\n--- NEW FIDELITY STATEMENT ---\n\n' + text, 'utf8');
-    } else {
-      fs.writeFileSync(rawPath, text, 'utf8');
+    if (!dryRun) {
+      if (type === 'trade_confirmation' && fs.existsSync(rawPath)) {
+        fs.appendFileSync(rawPath, '\n\n--- NEW TRADE CONFIRMATION ---\n\n' + text, 'utf8');
+      } else if (type === 'fidelity_statement' && fs.existsSync(rawPath)) {
+        fs.appendFileSync(rawPath, '\n\n--- NEW FIDELITY STATEMENT ---\n\n' + text, 'utf8');
+      } else {
+        fs.writeFileSync(rawPath, text, 'utf8');
+      }
     }
 
     // Clean up uploaded file (and PaddleOCR extension copy if created)
-    fs.unlinkSync(req.file.path);
+    try { fs.unlinkSync(req.file.path); } catch {}
     if (paddleFilePath !== req.file.path && fs.existsSync(paddleFilePath)) {
-      fs.unlinkSync(paddleFilePath);
+      try { fs.unlinkSync(paddleFilePath); } catch {}
     }
 
     // Stock award documents get special handling (append, not overwrite)
     if (type === 'stock_award') {
       const stockData = parseStockAward(text, parsedYear);
+      if (dryRun) {
+        return res.json({ success: true, dryRun, year: parsedYear, type, parsed: stockData });
+      }
       // Dedup: skip rows with same datastat date already present
       let added = 0, skipped = 0;
       for (const row of stockData.rows) {
@@ -721,6 +733,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     if (type === 'trade_confirmation') {
       const trade = parseTradeConfirmation(text, parsedYear);
       trade.source = 'trade_confirmation';
+      if (dryRun) {
+        return res.json({ success: true, dryRun, year: parsedYear, type, parsed: trade });
+      }
       // Avoid duplicates by checking ref number or cross-source dedup
       const isDuplicate = !db.addTradeIfNotDuplicate(trade);
       // Aggregate trades for this year (separate sales from purchases)
@@ -749,20 +764,23 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     // XTB Dividends & Interest report
     if (type === 'xtb_dividends') {
       const parsed = parseXtbDividends(text, parsedYear);
-      db.mergeYearData(parsedYear, { xtbDividendsReport: parsed });
-      return res.json({ success: true, year: parsedYear, type, parsed });
+      if (!dryRun) db.mergeYearData(parsedYear, { xtbDividendsReport: parsed });
+      return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
     }
 
     // XTB Portfolio (Capital Gains)
     if (type === 'xtb_portfolio') {
       const parsed = parseXtbPortfolio(text, parsedYear);
-      db.mergeYearData(parsedYear, { xtbPortfolio: parsed });
-      return res.json({ success: true, year: parsedYear, type, parsed });
+      if (!dryRun) db.mergeYearData(parsedYear, { xtbPortfolio: parsed });
+      return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
     }
 
     // Form 1042-S (US tax withholding on foreign person's income)
     if (type === 'form_1042s') {
       const parsed = parseForm1042S(text, parsedYear);
+      if (dryRun) {
+        return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
+      }
       const yearData = db.getYearData(parsedYear) || { year: parsedYear };
       if (!yearData.form1042s) yearData.form1042s = [];
       // Dedup by unique form identifier
@@ -777,7 +795,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     // Morgan Stanley Stock Plan Statement (yearly)
     if (type === 'ms_statement') {
       const parsed = parseMSStatement(text, parsedYear);
-
+      if (dryRun) {
+        return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
+      }
       // Add sales as trades (dedup by date + shares + netProceeds)
       let newTradesAdded = 0;
       let duplicatesSkipped = 0;
@@ -871,6 +891,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       }
 
       // Add sales to trades table (dedup by date + shares + proceeds)
+      if (dryRun) {
+        return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
+      }
       let newTradesAdded = 0, duplicatesSkipped = 0;
       for (const sale of parsed.sales) {
         if (db.addTradeIfNotDuplicate(sale)) {
@@ -986,15 +1009,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         });
       }
       parsed.ocrEngine = ocrEngine;
-      db.mergeYearData(parsedYear, { tradevillePortfolio: parsed });
-      return res.json({ success: true, year: parsedYear, type, parsed, ocrEngine });
+      if (!dryRun) db.mergeYearData(parsedYear, { tradevillePortfolio: parsed });
+      return res.json({ success: true, dryRun, year: parsedYear, type, parsed, ocrEngine });
     }
 
     // Parse based on type and update year data
     const parsed = parsePdfText(text, type, parsedYear);
-    db.mergeYearData(parsedYear, { [type]: parsed });
+    if (!dryRun) db.mergeYearData(parsedYear, { [type]: parsed });
 
-    res.json({ success: true, year: parsedYear, type, parsed, ocrEngine });
+    res.json({ success: true, dryRun, year: parsedYear, type, parsed, ocrEngine });
   } catch (err) {
     log('ERROR', 'Upload processing failed', { error: err.message, type: req.body?.type, year: req.body?.year });
     res.status(500).json({ error: err.message });
