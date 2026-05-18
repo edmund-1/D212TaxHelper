@@ -616,6 +616,278 @@ const App = (() => {
       html += `</tbody></table></div>`;
     }
     container.innerHTML = html;
+
+    // Wire the DUF XML drop-zone (idempotent — replaces handlers each render)
+    setupDufImportZone();
+  }
+
+  // ============ DUF XML IMPORT + VALIDATION ============
+  /**
+   * In-memory cache of the most recently parsed DUF XML, keyed by year so a
+   * user can flip the year selector and we still remember what they uploaded.
+   * Never persisted; cleared on page reload.
+   */
+  const _dufImports = new Map();
+
+  function setupDufImportZone() {
+    const dz = document.getElementById('submit-duf-dropzone');
+    const input = document.getElementById('submit-duf-file-input');
+    if (!dz || !input) return;
+
+    // Avoid double-binding when renderSubmissionGuide is called again
+    if (dz.dataset.wired === '1') {
+      _renderDufCompare();
+      return;
+    }
+    dz.dataset.wired = '1';
+
+    const onPick = () => input.click();
+    dz.addEventListener('click', onPick);
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.style.background = 'rgba(88,166,255,0.08)'; });
+    dz.addEventListener('dragleave', () => { dz.style.background = ''; });
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dz.style.background = '';
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) handleDufFile(f);
+    });
+    input.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) handleDufFile(f);
+      input.value = '';
+    });
+
+    // If we already have an import cached for the current year, re-render
+    _renderDufCompare();
+  }
+
+  async function handleDufFile(file) {
+    if (!file.name.toLowerCase().endsWith('.xml')) {
+      showToast(I18n.t('submit.errorNotXml') || 'Fișierul trebuie să fie .xml', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast(I18n.t('submit.errorTooBig') || 'Fișierul depășește 5 MB', 'error');
+      return;
+    }
+    const xml = await file.text();
+    try {
+      const resp = await fetch('/api/duf-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/xml' },
+        body: xml,
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || 'Parse failed');
+      }
+      const parsed = data.parsed;
+      // Pick the year from the XML if present, else fall back to selectedYear.
+      // an_r is the *submission* year; the fiscal year is an_r - 1.
+      const fiscalYear = parsed.root && parsed.root.an_r ? Number(parsed.root.an_r) - 1 : selectedYear;
+      _dufImports.set(fiscalYear, { parsed, fileName: file.name, importedAt: new Date().toISOString() });
+      // Auto-pivot the year selector if the XML's fiscal year differs
+      if (fiscalYear !== selectedYear) {
+        const sel = document.getElementById('year-select');
+        if (sel && Array.from(sel.options).some((o) => Number(o.value) === fiscalYear)) {
+          sel.value = String(fiscalYear);
+          selectedYear = fiscalYear;
+          await render();
+        }
+      }
+      _renderDufCompare();
+      showToast(I18n.t('submit.parseOk') || `XML încărcat: ${file.name}`, 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  /** Render the comparison table below the dropzone for the current year. */
+  function _renderDufCompare() {
+    const out = document.getElementById('submit-duf-compare-result');
+    if (!out) return;
+    const entry = _dufImports.get(selectedYear);
+    if (!entry) {
+      out.innerHTML = '';
+      return;
+    }
+    const local = computeYearData(selectedYear);
+    let compare;
+    try {
+      // The comparator lives server-side as lib/d212-duf-compare.js. The
+      // browser bundle doesn't load lib/ modules, so we ship a tiny inline
+      // mirror below. The lib version is the canonical one and tested.
+      compare = _dufCompareInline(entry.parsed, local);
+    } catch (err) {
+      out.innerHTML = `<p style="color:var(--danger);">${esc(err.message)}</p>`;
+      return;
+    }
+
+    const badge = (status) => {
+      const cfg = {
+        match:      { c: 'var(--success)', t: '✓ Match' },
+        near:       { c: 'var(--warning,#b35900)', t: '⚠ ≈' },
+        mismatch:   { c: 'var(--danger,#c53030)', t: '✗ Diferit' },
+        'only-anaf': { c: 'var(--text-muted)', t: '🆕 Doar ANAF' },
+        'only-local': { c: 'var(--accent)', t: '❓ Doar local' },
+      }[status] || { c: 'var(--text-muted)', t: status };
+      return `<span style="background:${cfg.c};color:#fff;font-size:0.7rem;padding:0.15rem 0.5rem;border-radius:var(--radius);white-space:nowrap;">${esc(cfg.t)}</span>`;
+    };
+    const fmt = (n) => (n == null ? '—' : Math.round(n).toLocaleString('ro-RO') + ' RON');
+
+    const headlineCfg = {
+      match: { c: 'var(--success)', t: I18n.t('submit.headlineMatch') || '✓ Toate datele se potrivesc cu ANAF' },
+      partial: { c: 'var(--warning,#b35900)', t: I18n.t('submit.headlinePartial') || '⚠ Diferențe sau date lipsă' },
+      mismatch: { c: 'var(--danger,#c53030)', t: I18n.t('submit.headlineMismatch') || '✗ Diferențe semnificative — verifică!' },
+    }[compare.headline] || { c: 'var(--text-muted)', t: compare.headline };
+
+    let html = `<div style="background:${headlineCfg.c};color:#fff;padding:0.6rem 1rem;border-radius:var(--radius);font-weight:600;margin-bottom:0.75rem;">${esc(headlineCfg.t)} <small style="opacity:0.85;font-weight:normal;">— ${compare.totals.matchCount} match · ${compare.totals.nearCount} aproape · ${compare.totals.mismatchCount} diferit · ${compare.totals.onlyAnafCount} doar ANAF · ${compare.totals.onlyLocalCount} doar local</small></div>`;
+
+    html += `<p style="font-size:0.8rem;color:var(--text-muted);">${esc(I18n.t('submit.compareImported') || 'Importat')}: <strong>${esc(entry.fileName)}</strong> · ${esc(entry.parsed.raw.version || '')} · <a href="#" id="submit-duf-clear" style="color:var(--accent);">${esc(I18n.t('submit.compareClear') || 'Șterge')}</a></p>`;
+
+    const groups = { oblig: [], cap11: [], cap14: [] };
+    for (const row of compare.rows) {
+      (groups[row.section] || (groups[row.section] = [])).push(row);
+    }
+    const sectionTitle = {
+      oblig: I18n.t('submit.sectionOblig') || '💊 oblig_realizat — CASS + totaluri',
+      cap11: I18n.t('submit.sectionCap11') || '🇷🇴 cap11 — Venituri România',
+      cap14: I18n.t('submit.sectionCap14') || '🌍 cap14 — Venituri din străinătate',
+    };
+    for (const sec of ['oblig', 'cap11', 'cap14']) {
+      const rows = groups[sec];
+      if (!rows || rows.length === 0) continue;
+      html += `<div style="margin:0.75rem 0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <header style="background:var(--bg-secondary);padding:0.5rem 1rem;font-weight:600;font-size:0.9rem;">${esc(sectionTitle[sec])}</header>
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+          <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);">
+            <th style="padding:0.4rem 1rem;text-align:left;">${esc(I18n.t('submit.colField') || 'Câmp')}</th>
+            <th style="padding:0.4rem 1rem;text-align:right;">${esc(I18n.t('submit.colAnaf') || 'ANAF')}</th>
+            <th style="padding:0.4rem 1rem;text-align:right;">${esc(I18n.t('submit.colLocal') || 'Calculat local')}</th>
+            <th style="padding:0.4rem 1rem;text-align:right;">${esc(I18n.t('submit.colDelta') || 'Δ')}</th>
+            <th style="padding:0.4rem 1rem;text-align:center;">${esc(I18n.t('submit.colStatus') || 'Stare')}</th>
+          </tr></thead>
+          <tbody>`;
+      for (const r of rows) {
+        const deltaStr = r.delta == null ? '—' : (r.delta > 0 ? '+' : '') + r.delta.toLocaleString('ro-RO');
+        const deltaColor = r.delta == null ? 'var(--text-muted)' : (r.status === 'match' ? 'var(--text-muted)' : (r.delta > 0 ? 'var(--danger,#c53030)' : 'var(--accent)'));
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.4rem 1rem;">${esc(r.label)}${r.hint ? `<br><small style="color:var(--text-muted);">${esc(r.hint)}</small>` : ''}</td>
+          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmt(r.anaf))}</td>
+          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmt(r.local))}</td>
+          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;color:${deltaColor};">${esc(deltaStr)}</td>
+          <td style="padding:0.4rem 1rem;text-align:center;">${badge(r.status)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+    out.innerHTML = html;
+
+    const clearBtn = document.getElementById('submit-duf-clear');
+    if (clearBtn) clearBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      _dufImports.delete(selectedYear);
+      _renderDufCompare();
+    });
+  }
+
+  /**
+   * Inline mirror of lib/d212-duf-compare.js compareDufVsLocal — see that
+   * file for full docs. Kept in sync by the test suite; the lib is canonical.
+   */
+  function _dufCompareInline(anaf, local) {
+    const MATCH_EPS = 1, NEAR_ABS = 100, NEAR_REL = 0.01;
+    const num = (v) => {
+      if (v == null) return null;
+      if (typeof v === 'number') return v;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const classify = (a, l) => {
+      if (a == null && l == null) return 'match';
+      if (a == null) return 'only-local';
+      if (l == null) return 'only-anaf';
+      const d = Math.abs(a - l);
+      if (d <= MATCH_EPS) return 'match';
+      const denom = Math.max(Math.abs(a), Math.abs(l), 1);
+      if (d <= NEAR_ABS || d / denom <= NEAR_REL) return 'near';
+      return 'mismatch';
+    };
+    const hintFor = (status, isPfa, anaf, local) => {
+      if (status === 'match') return null;
+      if (status === 'only-anaf') return isPfa
+        ? 'ANAF are aceste date din declarațiile PFA / D205 anterioare. Aplicația noastră nu calculează PFA — folosește valorile ANAF în DUF.'
+        : 'ANAF a primit suma asta prin D205 de la un plătitor (broker / bancă). Verifică dacă ai documentul corespunzător; dacă nu, importă-l în „Adaugă date".';
+      if (status === 'only-local') return 'Tu ai calculat această sumă local (de obicei din PDF-uri broker pentru venituri din străinătate). ANAF nu o are — trebuie adăugată manual în DUF.';
+      const d = Math.round((local || 0) - (anaf || 0));
+      if (status === 'near') return `Diferență mică (~${Math.abs(d)} RON). Probabil rotunjire.`;
+      return `Diferență ${d > 0 ? '+' : ''}${d} RON între local și ANAF. Verifică PDF-ul broker.`;
+    };
+    const rows = [];
+    const push = (section, label, anaf, local, opts) => {
+      const a = num(anaf), l = num(local);
+      if (a == null && l == null) return;
+      const status = classify(a, l);
+      rows.push({
+        section, label, anaf: a, local: l,
+        delta: a != null && l != null ? Math.round((a || 0) - (l || 0)) : null,
+        status, hint: hintFor(status, opts && opts.isPfa, a, l),
+      });
+    };
+    const ao = (anaf && anaf.obligRealizat) || {}, lo = (local && local.obligRealizat) || {};
+    push('oblig', 'Total venit din investiții (cass_ven_inv)', ao.cass_ven_inv, lo.cass_ven_inv);
+    push('oblig', 'Bază CASS (cass_baza)', ao.cass_baza, lo.cass_baza);
+    push('oblig', 'CASS datorat (cass_datorat)', ao.cass_datorat, lo.cass_datorat);
+    push('oblig', 'Impozit pe venit de plată (impozit_venit_plus)', ao.impozit_venit_plus, lo.impozit_venit_plus);
+    push('oblig', 'Impozit pe venit de restituit (impozit_venit_minus)', ao.impozit_venit_minus, lo.impozit_venit_minus);
+    const a11 = (anaf && Array.isArray(anaf.cap11)) ? anaf.cap11 : [];
+    const l11 = (local && Array.isArray(local.cap11Rows)) ? local.cap11Rows : [];
+    const seenCodes = new Set();
+    for (const r of a11) {
+      const code = String(r.categ_venit || '');
+      seenCodes.add(code);
+      const lRow = l11.find((x) => String(x.categ_venit || '') === code);
+      const isPfa = code.startsWith('10') && code !== '1012';
+      const label = isPfa ? `Cap11 PFA / activități independente (cod ${code})` : `Câștiguri RO din titluri (cod ${code})`;
+      push('cap11', label, r.venit_net_anual, lRow ? lRow.venit_net_anual : null, { isPfa });
+      if (r.impozit_retinut != null || (lRow && lRow.impozit_retinut != null)) {
+        push('cap11', `Impozit reținut RO (cod ${code})`, r.impozit_retinut, lRow ? lRow.impozit_retinut : null, { isPfa });
+      }
+    }
+    for (const r of l11) {
+      const code = String(r.categ_venit || '');
+      if (seenCodes.has(code)) continue;
+      push('cap11', `Câștiguri RO din titluri (cod ${code})`, null, r.venit_net_anual);
+    }
+    const a14 = (anaf && Array.isArray(anaf.cap14)) ? anaf.cap14 : [];
+    const l14 = (local && Array.isArray(local.cap14Rows)) ? local.cap14Rows : [];
+    const keyOf = (r) => `${r.str_stat_realiz_v || '?'}:${r.str_categ_venit || '?'}`;
+    const seenKeys = new Set();
+    for (const r of a14) {
+      const k = keyOf(r);
+      seenKeys.add(k);
+      const lRow = l14.find((x) => keyOf(x) === k);
+      const label = `Venit străinătate ${r.str_stat_realiz_v || '?'} — cod ${r.str_categ_venit}`;
+      push('cap14', label, r.str_venit_net_anual, lRow ? lRow.str_venit_net_anual : null);
+      push('cap14', `${label} — credit fiscal`, r.str_credit_fiscal, lRow ? lRow.str_credit_fiscal : null);
+    }
+    for (const r of l14) {
+      const k = keyOf(r);
+      if (seenKeys.has(k)) continue;
+      push('cap14', `Venit străinătate ${r.str_stat_realiz_v || '?'} — cod ${r.str_categ_venit}`, null, r.str_venit_net_anual);
+    }
+    const totals = { matchCount: 0, nearCount: 0, mismatchCount: 0, onlyAnafCount: 0, onlyLocalCount: 0 };
+    for (const r of rows) {
+      if (r.status === 'match') totals.matchCount++;
+      else if (r.status === 'near') totals.nearCount++;
+      else if (r.status === 'mismatch') totals.mismatchCount++;
+      else if (r.status === 'only-anaf') totals.onlyAnafCount++;
+      else if (r.status === 'only-local') totals.onlyLocalCount++;
+    }
+    let headline = 'match';
+    if (totals.mismatchCount > 0) headline = 'mismatch';
+    else if (totals.onlyAnafCount > 0 || totals.onlyLocalCount > 0 || totals.nearCount > 0) headline = 'partial';
+    return { rows, totals, headline };
   }
 
   async function render() {

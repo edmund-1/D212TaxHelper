@@ -11,6 +11,7 @@ let Tesseract = null; // lazy-loaded on first OCR use
 const { BNR_EXCHANGE_RATES, parseNumber } = require('./lib/rates');
 const { parseXtbDividends, parseXtbPortfolio } = require('./lib/parsers/xtb');
 const { buildD212Xml } = require('./lib/d212-xml-builder');
+const { parseD212Xml } = require('./lib/d212-xml-parser');
 
 // ============ PaddleOCR CONFIGURATION ============
 const PADDLEOCR_SCRIPT = path.join(__dirname, 'ocr_service.py');
@@ -348,6 +349,29 @@ app.put('/api/data/:year', (req, res) => {
     res.json({ success: true, data: merged });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/duf-parse — accepts a raw D212 XML (e.g. downloaded from the
+// ANAF DUF portal) as `text/xml` or `application/xml` body, runs it through
+// lib/d212-xml-parser, and returns the structured payload. STATELESS: the
+// XML body is parsed in memory and the response goes back; nothing is
+// written to disk. PII handling stays with the client.
+//
+// The client (public/js/app.js) calls this endpoint when the user drops an
+// XML onto the DUF import dropzone in the Submission Guide tab. The
+// structured response feeds the side-by-side comparison against what
+// computeYearData has locally.
+app.post('/api/duf-parse', express.text({ type: ['application/xml', 'text/xml', 'text/plain'], limit: '5mb' }), (req, res) => {
+  try {
+    const xml = typeof req.body === 'string' ? req.body : '';
+    if (!xml.trim()) {
+      return res.status(400).json({ error: 'Empty XML body' });
+    }
+    const parsed = parseD212Xml(xml);
+    res.json({ success: true, parsed });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

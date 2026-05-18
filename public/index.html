@@ -797,6 +797,19 @@
           <div id="submit-duf-values"></div>
         </div>
 
+        <div class="dcl-section" id="submit-duf-compare-section" style="border-left:3px solid var(--accent);padding-left:1rem;">
+          <h3 data-i18n="submit.compareTitle">🔍 Validare cu XML-ul de la DUF</h3>
+          <p class="subtitle" data-i18n="submit.compareSubtitle">Descarcă XML-ul din portalul DUF (cu datele tale precompletate) și încarcă-l aici. Comparăm rând cu rând ce știe ANAF cu ce calculăm noi din PDF-urile broker. Datele rămân local — nimic nu se salvează pe disc.</p>
+
+          <div id="submit-duf-dropzone" style="margin-top:0.75rem;border:2px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;cursor:pointer;transition:background 0.15s;">
+            <p style="margin:0;color:var(--text-muted);font-size:0.95rem;" data-i18n="submit.dropzoneHint">📁 Trage XML-ul aici sau click pentru a-l selecta</p>
+            <p style="margin:0.3rem 0 0;color:var(--text-muted);font-size:0.75rem;" data-i18n="submit.dropzoneSubhint">Acceptă fișiere .xml de maxim 5 MB. Doar parser în memorie — fișierul nu părăsește calculatorul.</p>
+            <input type="file" id="submit-duf-file-input" accept=".xml,application/xml,text/xml" style="display:none;">
+          </div>
+
+          <div id="submit-duf-compare-result" style="margin-top:1rem;"></div>
+        </div>
+
         <div class="dcl-section" style="background:rgba(255,193,7,0.08);border-left:3px solid var(--warning,#b35900);padding:0.75rem 1rem;border-radius:var(--radius);">
           <h3 style="margin-top:0;" data-i18n="submit.responsibility">⚖️ Responsabilitatea ta</h3>
           <p data-i18n="submit.responsibilityText">Conform Ghidului ANAF: <em>„Responsabilitatea pentru corectitudinea informațiilor din cuprinsul declarației aparține în totalitate contribuabilului. Precompletarea este un instrument de asistență, NU o confirmare a situației fiscale reale."</em></p>
