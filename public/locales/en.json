@@ -1,4 +1,7 @@
 {
+  "errors": {
+    "invalidNumber": "Invalid numeric value"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "income": "Income Details",
@@ -229,8 +232,20 @@
     "viewRaw": "View raw text",
     "reimport": "Re-import",
     "deleteImport": "Delete import",
-    "editHint": "💡 To correct a value, enable Advanced mode and use the form fields below. Inline editing will be available in a future version.",
-    "perCountryEditHint": "💡 Per-country editing will be available in a future version. To correct a value now, enable Advanced mode and use the per-country fields in the form below.",
+    "actions": "Actions",
+    "editInline": "✎ Edit",
+    "saveEdit": "💾 Save",
+    "cancelEdit": "Cancel",
+    "reasonOptional": "Correction reason (optional)",
+    "reasonPlaceholder": "E.g.: parser dropped a digit, value updated after broker reconciliation...",
+    "editApplied": "Correction applied",
+    "editCountryTitle": "Edit per-country row",
+    "longLoss": "Loss ≥1 yr",
+    "shortLoss": "Loss <1 yr",
+    "taxLong": "Tax ≥1 yr",
+    "taxShort": "Tax <1 yr",
+    "editHint": "💡 Click „✎ Edit” on a row to correct a value here. For fields not in this list, enable Advanced mode and use the form below.",
+    "perCountryEditHint": "💡 Click „✎ Edit” on a row to correct per-country values.",
     "confirmDeleteImport": "Confirm deletion of import \"{file}\"?",
     "country": "Country",
     "currency": "Currency",

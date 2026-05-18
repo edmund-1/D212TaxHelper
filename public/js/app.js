@@ -176,6 +176,7 @@ const App = (() => {
     const yearSelect = document.getElementById('year-select');
     yearSelect.addEventListener('change', (e) => {
       selectedYear = parseInt(e.target.value, 10);
+      clearInlineEditState();
       render();
     });
 
@@ -2617,6 +2618,18 @@ const App = (() => {
     }
   ];
 
+  /**
+   * Inline edit state for the imports panel. Cleared on year change.
+   * Keys for flat rows: `${imp.id}:${manualKey}` (e.g. 'xtb_dividends:xtbDividends')
+   * Keys for per-country rows: `${imp.id}:country:${idx}`
+   */
+  const inlineEditingRows = new Set();
+  const inlineEditingCountries = new Set();
+  function clearInlineEditState() {
+    inlineEditingRows.clear();
+    inlineEditingCountries.clear();
+  }
+
   /** Returns the list of imports active for `year` based on the current yd. */
   function detectActiveImports(year) {
     const yd = appData.years?.[year] || {};
@@ -2751,22 +2764,52 @@ const App = (() => {
               <th style="text-align:right;padding:0.4rem;">≥1y ${esc(I18n.t('income.taxRON'))}</th>
               <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.roGainsShort'))}</th>
               <th style="text-align:right;padding:0.4rem;">&lt;1y ${esc(I18n.t('income.taxRON'))}</th>
+              <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.actions') || 'Acțiuni')}</th>
             </tr></thead>
             <tbody>`;
-          for (const c of countries) {
+          for (let idx = 0; idx < countries.length; idx++) {
+            const c = countries[idx];
+            const editKey = `${imp.id}:country:${idx}`;
+            const isEditing = inlineEditingCountries.has(editKey);
             const longGain = (c.longGain || 0) - (c.longLoss || 0);
             const shortGain = (c.shortGain || 0) - (c.shortLoss || 0);
-            html += `<tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:0.4rem;">${esc(c.country || '?')}</td>
-              <td style="padding:0.4rem;">${esc(c.currency || 'RON')}</td>
-              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(longGain, c.currency || 'RON'))}</td>
-              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(c.longTax || 0, c.currency || 'RON'))}</td>
-              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(shortGain, c.currency || 'RON'))}</td>
-              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(c.shortTax || 0, c.currency || 'RON'))}</td>
-            </tr>`;
+            const cur = c.currency || 'RON';
+            const reasonVal = c.correctionReason || '';
+            if (isEditing) {
+              html += `<tr class="inline-edit-row" data-edit-key="${esc(editKey)}" style="background:rgba(88,166,255,0.05);border-bottom:1px solid var(--border);">
+                <td colspan="7" style="padding:0.6rem;">
+                  <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.4rem;">${esc(I18n.t('input.editCountryTitle') || 'Editare rând per țară')} — <strong>${esc(c.country || '?')}</strong> [${esc(cur)}]</div>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.5rem;margin-bottom:0.5rem;">
+                    <label style="display:flex;flex-direction:column;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.roGainsLong'))} <input type="number" step="any" class="inline-edit-country-field" data-edit-key="${esc(editKey)}" data-field="longGain" value="${esc(String(c.longGain ?? 0))}" style="margin-top:0.15rem;padding:0.35rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;"></label>
+                    <label style="display:flex;flex-direction:column;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.longLoss') || 'Pierdere ≥1 an')} <input type="number" step="any" class="inline-edit-country-field" data-edit-key="${esc(editKey)}" data-field="longLoss" value="${esc(String(c.longLoss ?? 0))}" style="margin-top:0.15rem;padding:0.35rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;"></label>
+                    <label style="display:flex;flex-direction:column;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.taxLong') || 'Impozit ≥1 an')} <input type="number" step="any" class="inline-edit-country-field" data-edit-key="${esc(editKey)}" data-field="longTax" value="${esc(String(c.longTax ?? 0))}" style="margin-top:0.15rem;padding:0.35rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;"></label>
+                    <label style="display:flex;flex-direction:column;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.roGainsShort'))} <input type="number" step="any" class="inline-edit-country-field" data-edit-key="${esc(editKey)}" data-field="shortGain" value="${esc(String(c.shortGain ?? 0))}" style="margin-top:0.15rem;padding:0.35rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;"></label>
+                    <label style="display:flex;flex-direction:column;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.shortLoss') || 'Pierdere <1 an')} <input type="number" step="any" class="inline-edit-country-field" data-edit-key="${esc(editKey)}" data-field="shortLoss" value="${esc(String(c.shortLoss ?? 0))}" style="margin-top:0.15rem;padding:0.35rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;"></label>
+                    <label style="display:flex;flex-direction:column;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.taxShort') || 'Impozit <1 an')} <input type="number" step="any" class="inline-edit-country-field" data-edit-key="${esc(editKey)}" data-field="shortTax" value="${esc(String(c.shortTax ?? 0))}" style="margin-top:0.15rem;padding:0.35rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;"></label>
+                  </div>
+                  <div style="margin-bottom:0.5rem;">
+                    <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">${esc(I18n.t('input.reasonOptional') || 'Motiv corecție (opțional)')}</label>
+                    <input type="text" class="inline-edit-country-reason" data-edit-key="${esc(editKey)}" value="${esc(reasonVal)}" placeholder="${esc(I18n.t('input.reasonPlaceholder') || '')}" style="width:100%;padding:0.4rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;">
+                  </div>
+                  <div style="display:flex;gap:0.4rem;justify-content:flex-end;">
+                    <button type="button" class="btn-secondary inline-edit-cancel" data-edit-key="${esc(editKey)}" style="font-size:0.8rem;padding:0.4rem 0.8rem;">${esc(I18n.t('input.cancelEdit') || 'Anulează')}</button>
+                    <button type="button" class="btn-primary inline-edit-country-save" data-edit-key="${esc(editKey)}" data-imp-id="${esc(imp.id)}" data-idx="${idx}" style="font-size:0.8rem;padding:0.4rem 0.8rem;">${esc(I18n.t('input.saveEdit') || 'Salvează')}</button>
+                  </div>
+                </td>
+              </tr>`;
+            } else {
+              html += `<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:0.4rem;">${esc(c.country || '?')}${reasonVal ? `<br><small style="color:var(--text-muted);font-style:italic;">📝 ${esc(reasonVal)}</small>` : ''}</td>
+                <td style="padding:0.4rem;">${esc(cur)}</td>
+                <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(longGain, cur))}</td>
+                <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(c.longTax || 0, cur))}</td>
+                <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(shortGain, cur))}</td>
+                <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(c.shortTax || 0, cur))}</td>
+                <td style="padding:0.4rem;text-align:right;"><button type="button" class="btn-secondary inline-edit-country-start" data-imp-id="${esc(imp.id)}" data-idx="${idx}" style="font-size:0.75rem;padding:0.25rem 0.55rem;">${esc(I18n.t('input.editInline') || '✎ Editare')}</button></td>
+              </tr>`;
+            }
           }
-          html += `</tbody></table></div>
-          <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.perCountryEditHint') || '💡 Editarea per țară va fi disponibilă într-o versiune ulterioară. Pentru a corecta o valoare acum, activează „Mod avansat" și folosește câmpurile per țară din formularul de mai jos.')}</p>`;
+          html += `</tbody></table></div>`;
         }
       } else {
         const rows = imp.rows ? imp.rows(yd) : [];
@@ -2778,20 +2821,47 @@ const App = (() => {
               <th style="text-align:left;padding:0.4rem;">${esc(I18n.t('input.fieldLabel') || 'Câmp')}</th>
               <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.parsedValue') || 'Parsat')}</th>
               <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.currentOverride') || 'Override manual')}</th>
+              <th style="text-align:right;padding:0.4rem;">${esc(I18n.t('input.actions') || 'Acțiuni')}</th>
             </tr></thead>
             <tbody>`;
           for (const r of rows) {
             const manualVal = r.manualKey ? yd[r.manualKey] : null;
+            const reasonVal = r.manualKey ? (yd[r.manualKey + 'Reason'] || '') : '';
             const hasManual = manualVal !== undefined && manualVal !== '' && manualVal !== null;
-            const cellClass = hasManual ? 'style="color:var(--warning);font-weight:600;"' : 'style="color:var(--text-muted);"';
-            html += `<tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:0.4rem;">${esc(r.label)}</td>
-              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(r.parsedValue, r.currency))}</td>
-              <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;" ${cellClass}>${hasManual ? esc(fmtVal(parseFloat(manualVal), r.currency)) : '—'}</td>
-            </tr>`;
+            const editKey = r.manualKey ? `${imp.id}:${r.manualKey}` : null;
+            const isEditing = editKey && inlineEditingRows.has(editKey);
+            if (isEditing) {
+              const editValue = hasManual ? String(manualVal) : (r.parsedValue != null ? String(r.parsedValue) : '');
+              html += `<tr class="inline-edit-row" data-edit-key="${esc(editKey)}" style="background:rgba(88,166,255,0.05);border-bottom:1px solid var(--border);">
+                <td colspan="4" style="padding:0.6rem;">
+                  <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end;">
+                    <div style="flex:1;min-width:180px;">
+                      <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">${esc(r.label)} ${r.currency ? `<span style="color:var(--text-muted);">(${esc(r.currency)})</span>` : ''}</label>
+                      <input type="number" step="any" class="inline-edit-value" data-edit-key="${esc(editKey)}" value="${esc(editValue)}" style="width:100%;padding:0.4rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.9rem;">
+                      <small style="display:block;color:var(--text-muted);font-size:0.7rem;margin-top:0.15rem;">${esc(I18n.t('input.parsedValue') || 'Parsat')}: ${esc(fmtVal(r.parsedValue, r.currency))}</small>
+                    </div>
+                    <div style="flex:2;min-width:200px;">
+                      <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">${esc(I18n.t('input.reasonOptional') || 'Motiv corecție (opțional)')}</label>
+                      <input type="text" class="inline-edit-reason" data-edit-key="${esc(editKey)}" value="${esc(reasonVal)}" placeholder="${esc(I18n.t('input.reasonPlaceholder') || '')}" style="width:100%;padding:0.4rem;background:var(--bg-input);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);font-size:0.85rem;">
+                    </div>
+                    <div style="display:flex;gap:0.4rem;">
+                      <button type="button" class="btn-secondary inline-edit-cancel" data-edit-key="${esc(editKey)}" style="font-size:0.8rem;padding:0.4rem 0.8rem;">${esc(I18n.t('input.cancelEdit') || 'Anulează')}</button>
+                      <button type="button" class="btn-primary inline-edit-save" data-edit-key="${esc(editKey)}" data-imp-id="${esc(imp.id)}" data-manual-key="${esc(r.manualKey)}" style="font-size:0.8rem;padding:0.4rem 0.8rem;">${esc(I18n.t('input.saveEdit') || 'Salvează')}</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>`;
+            } else {
+              const cellStyle = hasManual ? 'color:var(--warning);font-weight:600;' : 'color:var(--text-muted);';
+              html += `<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:0.4rem;">${esc(r.label)}${reasonVal ? `<br><small style="color:var(--text-muted);font-style:italic;">📝 ${esc(reasonVal)}</small>` : ''}</td>
+                <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmtVal(r.parsedValue, r.currency))}</td>
+                <td style="padding:0.4rem;text-align:right;font-variant-numeric:tabular-nums;${cellStyle}">${hasManual ? esc(fmtVal(parseFloat(manualVal), r.currency)) : '—'}</td>
+                <td style="padding:0.4rem;text-align:right;">${r.manualKey ? `<button type="button" class="btn-secondary inline-edit-start" data-imp-id="${esc(imp.id)}" data-manual-key="${esc(r.manualKey)}" style="font-size:0.75rem;padding:0.25rem 0.55rem;">${esc(I18n.t('input.editInline') || '✎ Editare')}</button>` : ''}</td>
+              </tr>`;
+            }
           }
           html += `</tbody></table></div>`;
-          html += `<p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted);">${esc(I18n.t('input.editHint') || '💡 Pentru a corecta o valoare, activează „Mod avansat" și folosește câmpurile din formular. Editarea inline va fi disponibilă într-o versiune ulterioară.')}</p>`;
         }
       }
 
@@ -2833,6 +2903,115 @@ const App = (() => {
           applyAddDataMode();
           render();
           showToast(I18n.t('raw.deleted') || 'Import șters', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+    });
+
+    // Inline edit — start (flat row)
+    panel.querySelectorAll('.inline-edit-start').forEach(btn => {
+      btn.onclick = () => {
+        const key = `${btn.dataset.impId}:${btn.dataset.manualKey}`;
+        inlineEditingRows.add(key);
+        renderImportsPanel(detectActiveImports(selectedYear));
+      };
+    });
+    // Inline edit — start (country row)
+    panel.querySelectorAll('.inline-edit-country-start').forEach(btn => {
+      btn.onclick = () => {
+        const key = `${btn.dataset.impId}:country:${btn.dataset.idx}`;
+        inlineEditingCountries.add(key);
+        renderImportsPanel(detectActiveImports(selectedYear));
+      };
+    });
+    // Inline edit — cancel (handles both flat and country)
+    panel.querySelectorAll('.inline-edit-cancel').forEach(btn => {
+      btn.onclick = () => {
+        const k = btn.dataset.editKey;
+        inlineEditingRows.delete(k);
+        inlineEditingCountries.delete(k);
+        renderImportsPanel(detectActiveImports(selectedYear));
+      };
+    });
+    // Inline edit — save (flat row)
+    panel.querySelectorAll('.inline-edit-save').forEach(btn => {
+      btn.onclick = async () => {
+        const editKey = btn.dataset.editKey;
+        const manualKey = btn.dataset.manualKey;
+        const valEl = panel.querySelector(`.inline-edit-value[data-edit-key="${editKey}"]`);
+        const reasonEl = panel.querySelector(`.inline-edit-reason[data-edit-key="${editKey}"]`);
+        const rawVal = (valEl?.value || '').trim();
+        const parsedVal = rawVal === '' ? null : parseFloat(rawVal);
+        if (rawVal !== '' && (parsedVal == null || isNaN(parsedVal))) {
+          showToast(I18n.t('errors.invalidNumber') || 'Valoare numerică invalidă', 'error');
+          return;
+        }
+        const reasonVal = (reasonEl?.value || '').trim();
+        const payload = {
+          [manualKey]: parsedVal,
+          [manualKey + 'Reason']: reasonVal || null,
+        };
+        try {
+          const resp = await fetch(`/api/data/${selectedYear}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const result = await resp.json();
+          if (!result.success) throw new Error(result.error || 'Save failed');
+          inlineEditingRows.delete(editKey);
+          await loadAllData();
+          render();
+          showToast(I18n.t('input.editApplied') || 'Corecție aplicată', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+    });
+    // Inline edit — save (country row)
+    panel.querySelectorAll('.inline-edit-country-save').forEach(btn => {
+      btn.onclick = async () => {
+        const editKey = btn.dataset.editKey;
+        const impId = btn.dataset.impId;
+        const idx = parseInt(btn.dataset.idx, 10);
+        const desc = IMPORT_DESCRIPTORS.find(d => d.id === impId);
+        if (!desc || !desc.perCountry) return;
+        const ydNow = appData.years?.[selectedYear] || {};
+        const rootKey = impId === 'xtb_portfolio' ? 'xtbPortfolio' : impId === 'tradeville_portfolio' ? 'tradevillePortfolio' : null;
+        if (!rootKey) return;
+        const root = ydNow[rootKey];
+        if (!root || !Array.isArray(root.countries) || !root.countries[idx]) return;
+        const fieldEls = panel.querySelectorAll(`.inline-edit-country-field[data-edit-key="${editKey}"]`);
+        const reasonEl = panel.querySelector(`.inline-edit-country-reason[data-edit-key="${editKey}"]`);
+        const newCountry = { ...root.countries[idx] };
+        for (const el of fieldEls) {
+          const f = el.dataset.field;
+          const raw = (el.value || '').trim();
+          const num = raw === '' ? 0 : parseFloat(raw);
+          if (raw !== '' && isNaN(num)) {
+            showToast(I18n.t('errors.invalidNumber') || 'Valoare numerică invalidă', 'error');
+            return;
+          }
+          newCountry[f] = num;
+        }
+        const reasonVal = (reasonEl?.value || '').trim();
+        newCountry.correctionReason = reasonVal || null;
+        const newCountries = root.countries.slice();
+        newCountries[idx] = newCountry;
+        const payload = { [rootKey]: { ...root, countries: newCountries } };
+        try {
+          const resp = await fetch(`/api/data/${selectedYear}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const result = await resp.json();
+          if (!result.success) throw new Error(result.error || 'Save failed');
+          inlineEditingCountries.delete(editKey);
+          await loadAllData();
+          render();
+          showToast(I18n.t('input.editApplied') || 'Corecție aplicată', 'success');
         } catch (err) {
           showToast(err.message, 'error');
         }

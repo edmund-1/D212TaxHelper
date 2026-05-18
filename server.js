@@ -313,7 +313,12 @@ app.put('/api/data/:year', (req, res) => {
       'interestIncome', 'interestTaxPaid', 'rentalIncome', 'rentalTaxPaid', 'royaltyIncome',
       'royaltyTaxPaid', 'gamblingIncome', 'gamblingTaxPaid', 'otherIncome',
       'otherTaxPaid', 'stockWithholdingPaid', 'exchangeRate', 'eurRate', 'minSalary',
-      'd212Deadline', 'roGainsCountries', 'priorLosses'
+      'd212Deadline', 'roGainsCountries', 'priorLosses',
+      // Inline-edit correction reasons (paired with the manual-override fields above).
+      // Persisted so the manual_data_*_raw.txt audit trail records WHY a value was overridden.
+      'fidelityDividendsReason', 'usDivTaxPaidReason', 'xtbDividendsReason',
+      'roDivTaxPaidReason', 'fidelityGainsReason', 'interestIncomeReason',
+      'interestTaxPaidReason'
     ];
     const hasManualData = manualFields.some(f => {
       const v = req.body[f];
