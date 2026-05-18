@@ -264,3 +264,57 @@ test('output structure matches the ANAF DUF golden fixture (cap14 + root)', () =
   }
 });
 
+test('emits <oblig_realizat> element + sets bifa132=1 when obligRealizat provided', () => {
+  const xml = buildD212Xml({
+    year: 2025,
+    obligRealizat: {
+      cass_ven_inv: 100000,
+      cass_total_ven: 100000,
+      cass_baza: 97200,
+      cass_anuala: 9720,
+      cass_datorat: 9720,
+      cass_dif_plus: 9720,
+      bifa_cass_real: '3',
+      impozit_venit_plus: 5000,
+      impozit_venit_minus: 0,
+      cass_plus: 9720,
+      dif_de_plata: 14720,
+      dif_de_restituit: 0,
+      venit_ret_inv: 100000,
+    },
+  });
+  assert.match(xml, /<oblig_realizat\b[^/]*\scass_ven_inv="100000"/);
+  assert.match(xml, /\scass_baza="97200"/);
+  assert.match(xml, /\sbifa_cass_real="3"/);
+  assert.match(xml, /\sdif_de_plata="14720"/);
+  // bifa132 derived from cass_anuala > 0
+  assert.match(xml, /\sbifa132="1"/);
+});
+
+test('no <oblig_realizat> + bifa132=0 when block not provided', () => {
+  const xml = buildD212Xml({ year: 2025 });
+  assert.doesNotMatch(xml, /<oblig_realizat/);
+  assert.match(xml, /\sbifa132="0"/);
+});
+
+test('<oblig_realizat> emitted BEFORE cap11/cap14 (matches DUF order)', () => {
+  const xml = buildD212Xml({
+    year: 2025,
+    cap11Rows: [{ categ_venit: '1012', venit_net_anual: 100, pierdere_compensata: 0, venit_recalculat: 100 }],
+    cap14Rows: [{
+      str_stat_realiz_v: 'US', str_categ_venit: '2012', dubla_impunere: '1',
+      str_venit_net_anual: 0, str_pierdere_compensata: 0, str_venit_recalculat: 0,
+      str_credit_fiscal: 0, str_dif_impozit_datorat: 0,
+    }],
+    obligRealizat: {
+      cass_ven_inv: 100000, cass_anuala: 9720,
+    },
+  });
+  const obligPos = xml.indexOf('<oblig_realizat');
+  const cap11Pos = xml.indexOf('<cap11');
+  const cap14Pos = xml.indexOf('<cap14');
+  assert.ok(obligPos > 0, 'oblig_realizat present');
+  assert.ok(obligPos < cap11Pos, 'oblig_realizat before cap11');
+  assert.ok(cap11Pos < cap14Pos, 'cap11 before cap14');
+});
+

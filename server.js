@@ -362,8 +362,8 @@ app.post('/api/d212-xml/:year', (req, res) => {
     if (isNaN(year) || year < 2000 || year > 2100) {
       return res.status(400).json({ error: 'Invalid year' });
     }
-    const { cap11Rows = [], cap14Rows = [], personalData = null } = req.body || {};
-    const xml = buildD212Xml({ year, cap11Rows, cap14Rows, personalData });
+    const { cap11Rows = [], cap14Rows = [], obligRealizat = null, personalData = null } = req.body || {};
+    const xml = buildD212Xml({ year, cap11Rows, cap14Rows, obligRealizat, personalData });
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="D212_${year}_skeleton.xml"`);
     res.send(xml);

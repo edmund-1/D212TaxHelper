@@ -1045,6 +1045,50 @@ const App = (() => {
       }
     }
 
+    // D212 <oblig_realizat> (etapa 2 of the DUF integration plan).
+    // Mirror of lib/d212-oblig-realizat.js: buildObligRealizat. Inline so the
+    // browser bundle is self-contained; the lib version is canonical and
+    // tested. Keep both sides aligned — see docs/d212-mapping.md.
+    let obligRealizat = null;
+    {
+      const cassVenInv = Math.max(0, totalInvestmentIncome_cass || 0);
+      const _ci = cassInfo || {};
+      const _cassApplies = !!_ci.applies;
+      const cassBase = _cassApplies ? (_ci.base || 0) : 0;
+      const cassAmount = _cassApplies ? (_ci.amount || 0) : 0;
+      const _incomeTax = Math.max(0, incomeTaxOnly || 0);
+      const _refund = Math.max(0, refundOwedRON || 0);
+      if (cassVenInv > 0 || cassAmount > 0 || _incomeTax > 0 || _refund > 0) {
+        const _difPlata = _incomeTax + cassAmount;
+        const _difRest = _refund;
+        obligRealizat = {
+          cass_ven_dpi: 0,
+          cass_ven_asc: 0,
+          cass_ven_cfb: 0,
+          cass_ven_inv: Math.round(cassVenInv),
+          cass_ven_asp: 0,
+          cass_ven_alt: 0,
+          cass_total_ven: Math.round(cassVenInv),
+          cass_baza: Math.round(cassBase),
+          cass_anuala: Math.round(cassAmount),
+          cass_datorat_art180: 0,
+          cass_datorat: Math.round(cassAmount),
+          cass_retinut: 0,
+          cass_dif_plus: Math.round(cassAmount),
+          cass_dif_minus: 0,
+          bifa_cass_real: '3',
+          impozit_venit_plus: Math.round(_incomeTax),
+          impozit_venit_minus: Math.round(_refund),
+          cas_plus: 0,
+          cass_plus: Math.round(cassAmount),
+          cass_minus: 0,
+          dif_de_plata: Math.round(_difPlata),
+          dif_de_restituit: Math.round(_difRest),
+          venit_ret_inv: Math.round(cassVenInv),
+        };
+      }
+    }
+
     return {
       dividendsUSD,
       dividendsRON,
@@ -1152,7 +1196,9 @@ const App = (() => {
       // D212 Cap. I §1.1 — Romanian-source income block (gap D-6)
       cap11Rows,
       // D212 Cap. I §2.1 — Foreign-source income block (gap D-7 prep)
-      cap14Rows
+      cap14Rows,
+      // D212 oblig_realizat — CASS investments + global summary (etapa 2)
+      obligRealizat
     };
   }
 
@@ -3559,14 +3605,15 @@ const App = (() => {
       const data = computeYearData(year);
       const cap11Rows = data.cap11Rows || [];
       const cap14Rows = data.cap14Rows || [];
-      if (cap11Rows.length === 0 && cap14Rows.length === 0) {
+      const obligRealizat = data.obligRealizat || null;
+      if (cap11Rows.length === 0 && cap14Rows.length === 0 && !obligRealizat) {
         showToast(I18n.t('taxes.exportXmlEmpty') || 'Nu există venituri de declarat pentru acest an.', 'error');
         return;
       }
       const resp = await fetch(`/api/d212-xml/${year}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cap11Rows, cap14Rows }),
+        body: JSON.stringify({ cap11Rows, cap14Rows, obligRealizat }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: resp.statusText }));
