@@ -20,6 +20,7 @@ data/parsed_data.json
 data/trades.json
 data/stock_awards.json
 data/ledger.json
+data/personal_data.json
 data/d212tax.db
 data/d212tax.db-shm
 data/d212tax.db-wal
