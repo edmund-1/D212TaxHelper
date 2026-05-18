@@ -947,6 +947,35 @@ const App = (() => {
     // Net cash flow on D212: positive = pay, negative = refund.
     const d212NetCashFlowRON = incomeTaxOnly - refundOwedRON;
 
+    // D212 Cap. I §1.1 — cap11 rows (Romanian-source capital gains, real system).
+    // Mirror of lib/d212-cap11.js: buildCap11Rows. Kept inline because the browser
+    // bundle does not load lib/ modules; the lib version is the canonical one and
+    // covered by test/d212-cap11.test.js. Update both sides if the shape changes.
+    // See docs/d212-mapping.md § 3 for field semantics.
+    const cap11Rows = [];
+    {
+      const _totalGain = roLongTermGainRON + roShortTermGainRON;
+      const _emit = (_totalGain > 0 || currentYearLossRON > 0 || (roPortTaxWithheld || 0) > 0 || priorLossesAvailable > 0);
+      if (_emit) {
+        const Rd1 = _totalGain;
+        const Rd3 = Rd1;
+        const Rd6 = priorLossesApplied;
+        cap11Rows.push({
+          categ_venit: '1012',
+          den_venit: 'Câștiguri din transferul titlurilor de valoare',
+          venit_brut: Math.round(Rd1),
+          chelt_deduc: 0,
+          venit_net_anual: Math.round(Rd3),
+          pierdere: Math.round(currentYearLossRON || 0),
+          pierdere_precedenta: Math.round(priorLossesAvailable),
+          pierdere_compensata: Math.round(Rd6),
+          venit_recalculat: Math.round(Math.max(0, Rd3 - Rd6)),
+          impozit11: Math.round(roCapitalGainsTax),
+          impozit_retinut: Math.round(roPortTaxWithheld || 0),
+        });
+      }
+    }
+
     return {
       dividendsUSD,
       dividendsRON,
@@ -1050,7 +1079,9 @@ const App = (() => {
       priorLossesAvailable,
       priorLossesApplied,
       priorLossesRemaining,
-      maxLossOffset
+      maxLossOffset,
+      // D212 Cap. I §1.1 — Romanian-source income block (gap D-6)
+      cap11Rows
     };
   }
 
@@ -2329,6 +2360,33 @@ const App = (() => {
         const isNote = f === I18n.t('dcl.roFinalTaxNote');
         return `<tr${isSep ? ' style="background:var(--bg-secondary)"' : ''}${isNote ? ' style="color:var(--success);font-weight:600;font-size:0.85rem"' : ''}><td>${isSep ? '<strong>' + f.replace(/---/g, '').trim() + '</strong>' : f}</td><td>${v}</td></tr>`;
       }).join('');
+    }
+
+    // D212 Cap. I §1.1 — cap11 rows (gap D-6). Only shown when there's RO-source
+    // activity to declare. The user can verify the structured row that will be
+    // emitted in the future D-7 XML export here.
+    const cap11Section = document.getElementById('dcl-cap11-section');
+    const cap11Tbody = document.getElementById('dcl-cap11-tbody');
+    if (cap11Section && cap11Tbody) {
+      const rows = data.cap11Rows || [];
+      if (rows.length === 0) {
+        cap11Section.style.display = 'none';
+      } else {
+        cap11Section.style.display = '';
+        const r = rows[0];
+        cap11Tbody.innerHTML = [
+          [I18n.t('taxes.cap11CategVenit') || 'Cod categorie (categ_venit)', '<code>' + r.categ_venit + '</code> — ' + r.den_venit],
+          [I18n.t('taxes.cap11Rd1') || 'Rd.1 Venit brut (venit_brut)', fmtR(r.venit_brut) + ' RON'],
+          [I18n.t('taxes.cap11Rd2') || 'Rd.2 Cheltuieli deductibile (chelt_deduc)', fmtR(r.chelt_deduc) + ' RON'],
+          [I18n.t('taxes.cap11Rd3') || 'Rd.3 Venit net anual (venit_net_anual)', fmtR(r.venit_net_anual) + ' RON'],
+          [I18n.t('taxes.cap11Rd4') || 'Rd.4 Pierdere anuală (pierdere)', fmtR(r.pierdere) + ' RON'],
+          [I18n.t('taxes.cap11Rd5') || 'Rd.5 Pierdere precedentă (pierdere_precedenta)', fmtR(r.pierdere_precedenta) + ' RON'],
+          [I18n.t('taxes.cap11Rd6') || 'Rd.6 Pierdere compensată (pierdere_compensata)', fmtR(r.pierdere_compensata) + ' RON'],
+          [I18n.t('taxes.cap11Rd7') || 'Rd.7 Venit recalculat (venit_recalculat)', fmtR(r.venit_recalculat) + ' RON'],
+          [I18n.t('taxes.cap11Rd8') || 'Rd.8 Impozit anual (impozit11)', fmtR(r.impozit11) + ' RON'],
+          [I18n.t('taxes.cap11Rd9') || 'Rd.9 Impozit reținut la sursă (impozit_retinut)', fmtR(r.impozit_retinut) + ' RON'],
+        ].map(([f, v]) => `<tr><td style="font-size:0.85rem;">${f}</td><td style="font-variant-numeric:tabular-nums;">${v}</td></tr>`).join('');
+      }
     }
 
     // Withholding income section (for CASS calculation)

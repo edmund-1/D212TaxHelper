@@ -160,7 +160,7 @@ Per Cod fiscal art. 119 and Instr. 7.3.3: losses can only offset gains "of the s
 - Income Details shows both pools and their applied amounts; both have separate "remaining for carryforward" displays.
 - Test that priorLossesRO does NOT offset US gains, and vice versa.
 
-### D-6 — Romanian-source investment income declared on cap11 🔴 High · 🟡 Med · `open` <a id="d-6"></a>
+### D-6 — Romanian-source investment income declared on cap11 🔴 High · 🟡 Med · `done — capital gains side` <a id="d-6"></a>
 
 XTB/Tradeville/BT Trade withhold tax at source ("impozit final"), but the income still counts toward the CASS base and must be declared on cap11 (with `impozit_retinut` set). Today the app skips cap11 entirely for these users, which means the **CASS base is potentially under-declared** for users who only have RO-broker income.
 
@@ -185,6 +185,13 @@ XTB/Tradeville/BT Trade withhold tax at source ("impozit final"), but the income
 **Acceptance**
 - A user with XTB-only income sees a `cap11Rows[]` array in the computed data with the correct `venit_brut`, `pierdere_compensata`, `impozit11`, `impozit_retinut`.
 - D-7 export uses it to emit a valid cap11 element.
+
+**Status (shipped)**
+- ✅ `lib/d212-cap11.js: buildCap11Rows({...})` — pure helper, returns 0-or-1 row (Schematron BR-D212-0085 uniqueness of `categ_venit=1012`).
+- ✅ `public/js/app.js: computeYearData` — inline mirror, populates `data.cap11Rows`.
+- ✅ `public/index.html` + render — new section "D212 Cap. I §1.1 — cap11" on the Calcul Impozite tab shows Rd.1..Rd.9 when the row is non-empty.
+- ✅ Tests: 8 cases in `test/d212-cap11.test.js` covering empty / gain-only / prior-loss / cross-bucket-loss / over-withholding / loss-only / prior-loss-only / categ_venit format.
+- Dividends + interest with "impozit final" deliberately remain off cap11 — they are not in Nomenclator_venituri_RO for individuals; they feed only the CASS base (Cap. II), already covered.
 
 ### D-7 — D212 XML export 🔴 High · 🔴 High · `open` <a id="d-7"></a>
 

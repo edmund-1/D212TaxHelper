@@ -255,7 +255,7 @@ From `d212-business*.sch` — rules that affect investment-related fields:
 | 3 | **No explicit per-country, per-category grouping** in UI. cap14 needs one row per (country, category). | Med | Med | open |
 | 4 | **No `str_categ_venit` code emission.** Parsers know `2012` and `2018`, but generic API users can't pick codes. | Med | Low | open |
 | 5 | **Loss carryforward not split foreign vs RO.** D212 requires separate `cap11.pierdere_precedenta` and `cap14.str_pierdere_precedenta` rows. App tracks one global pool. | Med | Med | open |
-| 6 | **Romanian-source investment income via XTB/etc. not declared on cap11.** Currently treated as "final tax at source" implicit — app skips D212 reporting entirely. But CASS base needs it. | High — could cause under-declaration | Med | open |
+| 6 | ~~**Romanian-source investment income via XTB/etc. not declared on cap11.**~~ Capital gains side now emits a structured `cap11Rows[]` (categ_venit=`1012`) with Rd.1..Rd.9 fields visible on the Calcul Impozite page. Dividends + interest (impozit final) intentionally remain out of cap11 — they have no entry in Nomenclator_venituri_RO for individuals and feed the CASS base directly. | High — could cause under-declaration | Med | ✅ DONE — capital gains side (commit, this one). Remaining work: D-7 XML emitter consumes `cap11Rows[]`. |
 | 7 | **No D212 XML export.** App computes correct values, user manually copies into ANAF tool. Generating valid XML would close the loop. | High — UX | High | open |
 | 8 | **No personal data collection** for `nume_c`/`cif`/`cont_bancar`. By design, but means we can never produce a fully complete XML. Could add an optional "fill personal data" step that stays local. | Low | Low | open |
 
