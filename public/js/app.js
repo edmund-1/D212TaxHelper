@@ -538,6 +538,38 @@ const App = (() => {
 
     const sections = [];
 
+    const dufEntry = _dufImports.get(selectedYear);
+    const compare = dufEntry && dufEntry.compare;
+    const picks = _getPicksForYear(selectedYear);
+    // Build a quick lookup: rowKey -> { effectivePick, anaf, local } so per-field
+    // resolution below is O(1). When no DUF XML has been imported, this stays empty
+    // and every value falls back to local (current behavior).
+    const pickIndex = new Map();
+    if (compare) {
+      for (const row of compare.rows) {
+        pickIndex.set(row.rowKey, {
+          pick: _effectivePick(row, picks),
+          anaf: row.anaf,
+          local: row.local,
+        });
+      }
+    }
+    /**
+     * Resolve a single (label, localValue, rowKey) tuple to the final value the
+     * user should type into DUF, picking ANAF when the user (or default policy)
+     * decided so. Returns `{val, source}` — source is 'anaf' / 'local' / null.
+     */
+    const resolve = (localValue, rowKey) => {
+      if (!rowKey) return { val: localValue, source: null };
+      const idx = pickIndex.get(rowKey);
+      if (!idx) return { val: localValue, source: null };
+      if (idx.pick === 'anaf' && idx.anaf != null) return { val: idx.anaf, source: 'anaf' };
+      if (idx.pick === 'local') return { val: idx.local, source: 'local' };
+      if (idx.pick == null && idx.anaf != null && idx.local == null) return { val: idx.anaf, source: 'anaf' };
+      return { val: localValue, source: idx.pick };
+    };
+    const fmtR = (v) => ({ val: fmtRON(v.val), source: v.source });
+
     // cap14 — Foreign-source income (Venituri din străinătate, secțiunea cap14)
     if ((data.cap14Rows || []).length > 0) {
       const rows = [];
@@ -546,18 +578,22 @@ const App = (() => {
         const catLabel = isDividends
           ? (I18n.t('submit.catDividends') || 'Dividende (cod 2018)')
           : (I18n.t('submit.catCapGains') || 'Câștiguri din transferul titlurilor de valoare (cod 2012)');
-        rows.push({ section: `🌍 cap14 — ${r.str_stat_realiz_v} · ${catLabel}`, items: [
-          { duf: 'Țara realizării venitului', val: r.str_stat_realiz_v },
-          { duf: 'Categoria de venit', val: `${r.str_categ_venit} — ${isDividends ? 'Dividende' : 'Câștiguri titluri'}` },
+        const country = r.str_stat_realiz_v;
+        const code = r.str_categ_venit;
+        const kVN = `cap14.${country}.${code}.str_venit_net_anual`;
+        const kCF = `cap14.${country}.${code}.str_credit_fiscal`;
+        rows.push({ section: `🌍 cap14 — ${country} · ${catLabel}`, items: [
+          { duf: 'Țara realizării venitului', val: country },
+          { duf: 'Categoria de venit', val: `${code} — ${isDividends ? 'Dividende' : 'Câștiguri titluri'}` },
           { duf: 'Metoda dublei impuneri', val: r.dubla_impunere === '1' ? 'Credit fiscal (1)' : 'Scutire (2)' },
-          { duf: 'Rd.1 Venit brut (RON)', val: fmtRON(r.str_venit_brut) },
-          { duf: 'Rd.2 Cheltuieli deductibile (RON)', val: fmtRON(r.str_chelt_deduc) },
-          { duf: 'Rd.3 Venit net anual (RON)', val: fmtRON(r.str_venit_net_anual) },
-          { duf: 'Rd.7 Venit recalculat (RON)', val: fmtRON(r.str_venit_recalculat) },
-          { duf: 'Rd.8 Impozit datorat în RO (RON)', val: fmtRON(r.str_impozit_datorat_Ro) },
-          { duf: 'Rd.9 Impozit plătit în străinătate (RON)', val: fmtRON(r.str_impozit_platit) },
-          { duf: 'Rd.10 Credit fiscal recunoscut (RON)', val: fmtRON(r.str_credit_fiscal) },
-          { duf: 'Rd.11 Diferență impozit datorat (RON)', val: fmtRON(r.str_dif_impozit_datorat) },
+          { duf: 'Rd.1 Venit brut (RON)', ...fmtR(resolve(r.str_venit_brut, null)) },
+          { duf: 'Rd.2 Cheltuieli deductibile (RON)', ...fmtR(resolve(r.str_chelt_deduc, null)) },
+          { duf: 'Rd.3 Venit net anual (RON)', ...fmtR(resolve(r.str_venit_net_anual, kVN)) },
+          { duf: 'Rd.7 Venit recalculat (RON)', ...fmtR(resolve(r.str_venit_recalculat, null)) },
+          { duf: 'Rd.8 Impozit datorat în RO (RON)', ...fmtR(resolve(r.str_impozit_datorat_Ro, null)) },
+          { duf: 'Rd.9 Impozit plătit în străinătate (RON)', ...fmtR(resolve(r.str_impozit_platit, null)) },
+          { duf: 'Rd.10 Credit fiscal recunoscut (RON)', ...fmtR(resolve(r.str_credit_fiscal, kCF)) },
+          { duf: 'Rd.11 Diferență impozit datorat (RON)', ...fmtR(resolve(r.str_dif_impozit_datorat, null)) },
         ]});
       }
       sections.push(...rows);
@@ -566,15 +602,18 @@ const App = (() => {
     // cap11 — Romanian-source investment income
     if ((data.cap11Rows || []).length > 0) {
       const r = data.cap11Rows[0];
+      const code = r.categ_venit;
+      const kVN = `cap11.${code}.venit_net_anual`;
+      const kIR = `cap11.${code}.impozit_retinut`;
       sections.push({ section: '🇷🇴 cap11 — Câștiguri RO (titluri de valoare, cod 1012)', items: [
         { duf: 'Categoria de venit', val: '1012 — Câștiguri din transferul titlurilor de valoare' },
-        { duf: 'Rd.1 Venit brut (RON)', val: fmtRON(r.venit_brut) },
-        { duf: 'Rd.3 Venit net anual (RON)', val: fmtRON(r.venit_net_anual) },
-        { duf: 'Rd.5 Pierdere precedentă (RON)', val: fmtRON(r.pierdere_precedenta) },
-        { duf: 'Rd.6 Pierdere compensată (RON)', val: fmtRON(r.pierdere_compensata) },
-        { duf: 'Rd.7 Venit recalculat (RON)', val: fmtRON(r.venit_recalculat) },
-        { duf: 'Rd.8 Impozit anual (RON)', val: fmtRON(r.impozit11) },
-        { duf: 'Rd.9 Impozit reținut la sursă (RON)', val: fmtRON(r.impozit_retinut) },
+        { duf: 'Rd.1 Venit brut (RON)', ...fmtR(resolve(r.venit_brut, null)) },
+        { duf: 'Rd.3 Venit net anual (RON)', ...fmtR(resolve(r.venit_net_anual, kVN)) },
+        { duf: 'Rd.5 Pierdere precedentă (RON)', ...fmtR(resolve(r.pierdere_precedenta, null)) },
+        { duf: 'Rd.6 Pierdere compensată (RON)', ...fmtR(resolve(r.pierdere_compensata, null)) },
+        { duf: 'Rd.7 Venit recalculat (RON)', ...fmtR(resolve(r.venit_recalculat, null)) },
+        { duf: 'Rd.8 Impozit anual (RON)', ...fmtR(resolve(r.impozit11, null)) },
+        { duf: 'Rd.9 Impozit reținut la sursă (RON)', ...fmtR(resolve(r.impozit_retinut, kIR)) },
       ]});
     }
 
@@ -582,12 +621,17 @@ const App = (() => {
     if (data.obligRealizat && data.obligRealizat.cass_ven_inv > 0) {
       const o = data.obligRealizat;
       sections.push({ section: '💊 CASS pe venituri din investiții (Capitolul II)', items: [
-        { duf: 'Total venituri din investiții (RON)', val: fmtRON(o.cass_ven_inv) },
-        { duf: 'Bază anuală de calcul CASS (RON)', val: fmtRON(o.cass_baza) + (o.cass_baza > 0 ? ' (' + (o.cass_baza / 4050).toFixed(0) + ' × salariu minim)' : '') },
-        { duf: 'CASS anuală 10% (RON)', val: fmtRON(o.cass_anuala) },
-        { duf: 'CASS datorat (RON)', val: fmtRON(o.cass_datorat) },
-        { duf: 'CASS reținut la sursă (RON)', val: fmtRON(o.cass_retinut) },
-        { duf: 'CASS de plată (RON)', val: fmtRON(o.cass_dif_plus) },
+        { duf: 'Total venituri din investiții (RON)', ...fmtR(resolve(o.cass_ven_inv, 'oblig.cass_ven_inv')) },
+        { duf: 'Bază anuală de calcul CASS (RON)', ...(function(){
+            const r = resolve(o.cass_baza, 'oblig.cass_baza');
+            const baseStr = fmtRON(r.val);
+            const suffix = r.val > 0 ? ' (' + (r.val / 4050).toFixed(0) + ' × salariu minim)' : '';
+            return { val: baseStr + suffix, source: r.source };
+          })() },
+        { duf: 'CASS anuală 10% (RON)', ...fmtR(resolve(o.cass_anuala, null)) },
+        { duf: 'CASS datorat (RON)', ...fmtR(resolve(o.cass_datorat, 'oblig.cass_datorat')) },
+        { duf: 'CASS reținut la sursă (RON)', ...fmtR(resolve(o.cass_retinut, null)) },
+        { duf: 'CASS de plată (RON)', ...fmtR(resolve(o.cass_dif_plus, null)) },
         { duf: 'Bifa "sistem real, plafon 24 SM"', val: 'Da (cod 3)' },
       ]});
     }
@@ -598,6 +642,13 @@ const App = (() => {
     }
 
     let html = '';
+    if (compare) {
+      // Optional header: tell the user we've baked DUF picks into the values.
+      const anafCount = sections.reduce((s, sec) => s + sec.items.filter((i) => i.source === 'anaf').length, 0);
+      html += `<p style="background:rgba(88,166,255,0.06);border-left:3px solid var(--accent);padding:0.5rem 0.75rem;font-size:0.85rem;margin:0 0 0.75rem;border-radius:var(--radius);">
+        ${esc(I18n.t('submit.valuesWithPicks') || 'Valorile reflectă XML-ul DUF importat')} ${anafCount > 0 ? ` — <strong>${anafCount}</strong> ${esc(I18n.t('submit.valuesFromAnaf') || 'preluate din ANAF')}` : ''}
+      </p>`;
+    }
     for (const s of sections) {
       html += `<div style="margin:1rem 0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
         <header style="background:var(--bg-secondary);padding:0.6rem 1rem;font-weight:600;font-size:0.95rem;">${esc(s.section)}</header>
@@ -605,12 +656,19 @@ const App = (() => {
           <thead><tr style="border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
             <th style="padding:0.5rem 1rem;text-align:left;">${esc(I18n.t('submit.dufField') || 'Câmpul din DUF')}</th>
             <th style="padding:0.5rem 1rem;text-align:right;">${esc(I18n.t('submit.dufValue') || 'Valoare')}</th>
+            <th style="padding:0.5rem 1rem;text-align:center;">${esc(I18n.t('submit.dufSource') || 'Sursă')}</th>
           </tr></thead>
           <tbody>`;
       for (const it of s.items) {
+        const sourceBadge = it.source === 'anaf'
+          ? `<span title="${esc(I18n.t('submit.sourceAnafTip') || 'Preluat din XML-ul DUF (decizia ta)')}" style="font-size:0.7rem;padding:0.1rem 0.4rem;background:var(--accent);color:#fff;border-radius:var(--radius);">🅰 ANAF</span>`
+          : it.source === 'local'
+            ? `<span title="${esc(I18n.t('submit.sourceLocalTip') || 'Calculat local din PDF-urile broker')}" style="font-size:0.7rem;padding:0.1rem 0.4rem;background:var(--success);color:#fff;border-radius:var(--radius);">🟢 Local</span>`
+            : '';
         html += `<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:0.45rem 1rem;font-size:0.9rem;">${esc(it.duf)}</td>
           <td style="padding:0.45rem 1rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${esc(it.val)}</td>
+          <td style="padding:0.45rem 1rem;text-align:center;">${sourceBadge}</td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
@@ -628,6 +686,32 @@ const App = (() => {
    * Never persisted; cleared on page reload.
    */
   const _dufImports = new Map();
+
+  /**
+   * Per-year, per-row decision overrides. Map<year, Map<rowKey, 'anaf'|'local'|null>>.
+   * `null` means "explicit reset to default". A missing key means "use default".
+   * Never persisted; cleared on page reload.
+   */
+  const _dufPicks = new Map();
+  function _getPicksForYear(year) {
+    if (!_dufPicks.has(year)) _dufPicks.set(year, new Map());
+    return _dufPicks.get(year);
+  }
+  /** The effective pick: explicit override if set, otherwise the row's default. */
+  function _effectivePick(row, picks) {
+    if (picks && picks.has(row.rowKey)) {
+      const v = picks.get(row.rowKey);
+      if (v === 'anaf' || v === 'local') return v;
+    }
+    return row.defaultPick;
+  }
+  /** The effective numeric value implied by the pick for a single compare row. */
+  function _effectiveValue(row, picks) {
+    const pick = _effectivePick(row, picks);
+    if (pick === 'anaf') return row.anaf;
+    if (pick === 'local') return row.local;
+    return null;
+  }
 
   function setupDufImportZone() {
     const dz = document.getElementById('submit-duf-dropzone');
@@ -722,6 +806,12 @@ const App = (() => {
       out.innerHTML = `<p style="color:var(--danger);">${esc(err.message)}</p>`;
       return;
     }
+    const picks = _getPicksForYear(selectedYear);
+    // Cache compare result on the entry so renderSubmissionGuide can read
+    // the picked values to render the "Valori de introdus" table.
+    entry.compare = compare;
+
+    const unresolvedMismatches = compare.rows.filter((r) => r.status === 'mismatch' && _effectivePick(r, picks) == null).length;
 
     const badge = (status) => {
       const cfg = {
@@ -745,6 +835,19 @@ const App = (() => {
 
     html += `<p style="font-size:0.8rem;color:var(--text-muted);">${esc(I18n.t('submit.compareImported') || 'Importat')}: <strong>${esc(entry.fileName)}</strong> · ${esc(entry.parsed.raw.version || '')} · <a href="#" id="submit-duf-clear" style="color:var(--accent);">${esc(I18n.t('submit.compareClear') || 'Șterge')}</a></p>`;
 
+    // Quick actions for bulk picks — visible only when there's something to do
+    if (unresolvedMismatches > 0 || compare.totals.onlyAnafCount > 0 || compare.totals.nearCount > 0) {
+      html += `<div style="margin:0.5rem 0;display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
+        <span style="font-size:0.8rem;color:var(--text-muted);">${esc(I18n.t('submit.quickActions') || 'Acțiuni rapide:')}</span>
+        ${unresolvedMismatches > 0 ? `<button type="button" id="duf-pick-mismatch-anaf" class="btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.6rem;">${esc(I18n.t('submit.pickAllMismatchAnaf') || 'Diferențe → ANAF')}</button>` : ''}
+        ${unresolvedMismatches > 0 ? `<button type="button" id="duf-pick-mismatch-local" class="btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.6rem;">${esc(I18n.t('submit.pickAllMismatchLocal') || 'Diferențe → Local')}</button>` : ''}
+        <button type="button" id="duf-pick-reset-all" class="btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.6rem;">${esc(I18n.t('submit.pickResetAll') || '↺ Reset toate la default')}</button>
+      </div>`;
+      if (unresolvedMismatches > 0) {
+        html += `<p style="font-size:0.75rem;color:var(--danger,#c53030);margin:0 0 0.5rem;">⚠ ${unresolvedMismatches} ${esc(I18n.t('submit.unresolvedHint') || 'diferențe necesită alegere explicită (rândurile evidențiate cu roșu mai jos)')}</p>`;
+      }
+    }
+
     const groups = { oblig: [], cap11: [], cap14: [] };
     for (const row of compare.rows) {
       (groups[row.section] || (groups[row.section] = [])).push(row);
@@ -766,17 +869,36 @@ const App = (() => {
             <th style="padding:0.4rem 1rem;text-align:right;">${esc(I18n.t('submit.colLocal') || 'Calculat local')}</th>
             <th style="padding:0.4rem 1rem;text-align:right;">${esc(I18n.t('submit.colDelta') || 'Δ')}</th>
             <th style="padding:0.4rem 1rem;text-align:center;">${esc(I18n.t('submit.colStatus') || 'Stare')}</th>
+            <th style="padding:0.4rem 1rem;text-align:center;">${esc(I18n.t('submit.colPick') || 'Folosesc')}</th>
           </tr></thead>
           <tbody>`;
       for (const r of rows) {
         const deltaStr = r.delta == null ? '—' : (r.delta > 0 ? '+' : '') + r.delta.toLocaleString('ro-RO');
         const deltaColor = r.delta == null ? 'var(--text-muted)' : (r.status === 'match' ? 'var(--text-muted)' : (r.delta > 0 ? 'var(--danger,#c53030)' : 'var(--accent)'));
-        html += `<tr style="border-bottom:1px solid var(--border);">
+        const pick = _effectivePick(r, picks);
+        const explicit = picks.has(r.rowKey) && (picks.get(r.rowKey) === 'anaf' || picks.get(r.rowKey) === 'local');
+        const isMismatchUnset = r.status === 'mismatch' && pick == null;
+        // Pick segmented control: only meaningful when both ANAF and local values exist.
+        // For only-anaf / only-local, the single available source is shown as a static badge.
+        let pickCtl;
+        if (r.anaf != null && r.local != null) {
+          const btnStyle = (active) => `padding:0.2rem 0.5rem;font-size:0.75rem;border:1px solid var(--border);background:${active ? 'var(--accent)' : 'transparent'};color:${active ? '#fff' : 'var(--text)'};cursor:pointer;`;
+          pickCtl = `<div style="display:inline-flex;border-radius:var(--radius);overflow:hidden;${isMismatchUnset ? 'box-shadow:0 0 0 2px var(--danger,#c53030);' : ''}">
+            <button type="button" class="duf-pick-btn" data-key="${esc(r.rowKey)}" data-pick="anaf" style="${btnStyle(pick === 'anaf')}border-right:0;">🅰 ANAF</button>
+            <button type="button" class="duf-pick-btn" data-key="${esc(r.rowKey)}" data-pick="local" style="${btnStyle(pick === 'local')}">🟢 Local</button>
+          </div>${explicit ? `<a href="#" class="duf-pick-reset" data-key="${esc(r.rowKey)}" style="margin-left:0.4rem;font-size:0.7rem;color:var(--text-muted);">↺</a>` : ''}`;
+        } else if (r.anaf != null) {
+          pickCtl = `<span style="font-size:0.72rem;color:var(--text-muted);">🅰 ANAF</span>`;
+        } else {
+          pickCtl = `<span style="font-size:0.72rem;color:var(--text-muted);">🟢 Local</span>`;
+        }
+        html += `<tr style="border-bottom:1px solid var(--border);${isMismatchUnset ? 'background:rgba(197,48,48,0.05);' : ''}">
           <td style="padding:0.4rem 1rem;">${esc(r.label)}${r.hint ? `<br><small style="color:var(--text-muted);">${esc(r.hint)}</small>` : ''}</td>
-          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmt(r.anaf))}</td>
-          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmt(r.local))}</td>
+          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;${pick === 'anaf' ? 'font-weight:600;' : ''}">${esc(fmt(r.anaf))}</td>
+          <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;${pick === 'local' ? 'font-weight:600;' : ''}">${esc(fmt(r.local))}</td>
           <td style="padding:0.4rem 1rem;text-align:right;font-variant-numeric:tabular-nums;color:${deltaColor};">${esc(deltaStr)}</td>
           <td style="padding:0.4rem 1rem;text-align:center;">${badge(r.status)}</td>
+          <td style="padding:0.4rem 1rem;text-align:center;white-space:nowrap;">${pickCtl}</td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
@@ -787,7 +909,52 @@ const App = (() => {
     if (clearBtn) clearBtn.addEventListener('click', (e) => {
       e.preventDefault();
       _dufImports.delete(selectedYear);
+      _dufPicks.delete(selectedYear);
       _renderDufCompare();
+      renderSubmissionGuide();
+    });
+
+    // Per-row pick buttons
+    out.querySelectorAll('.duf-pick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const k = btn.dataset.key;
+        const v = btn.dataset.pick;
+        picks.set(k, v);
+        _renderDufCompare();
+        renderSubmissionGuide();
+      });
+    });
+    out.querySelectorAll('.duf-pick-reset').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        picks.delete(a.dataset.key);
+        _renderDufCompare();
+        renderSubmissionGuide();
+      });
+    });
+
+    // Quick actions
+    const qaAnaf = document.getElementById('duf-pick-mismatch-anaf');
+    if (qaAnaf) qaAnaf.addEventListener('click', () => {
+      for (const r of compare.rows) {
+        if (r.status === 'mismatch' && _effectivePick(r, picks) == null) picks.set(r.rowKey, 'anaf');
+      }
+      _renderDufCompare();
+      renderSubmissionGuide();
+    });
+    const qaLocal = document.getElementById('duf-pick-mismatch-local');
+    if (qaLocal) qaLocal.addEventListener('click', () => {
+      for (const r of compare.rows) {
+        if (r.status === 'mismatch' && _effectivePick(r, picks) == null) picks.set(r.rowKey, 'local');
+      }
+      _renderDufCompare();
+      renderSubmissionGuide();
+    });
+    const qaReset = document.getElementById('duf-pick-reset-all');
+    if (qaReset) qaReset.addEventListener('click', () => {
+      picks.clear();
+      _renderDufCompare();
+      renderSubmissionGuide();
     });
   }
 
@@ -823,23 +990,38 @@ const App = (() => {
       if (status === 'near') return `Diferență mică (~${Math.abs(d)} RON). Probabil rotunjire.`;
       return `Diferență ${d > 0 ? '+' : ''}${d} RON între local și ANAF. Verifică PDF-ul broker.`;
     };
+    const rowKeyFor = (section, opts) => {
+      const o = opts || {};
+      if (section === 'oblig') return `oblig.${o.field}`;
+      if (section === 'cap11') return `cap11.${o.code || '?'}.${o.field}`;
+      if (section === 'cap14') return `cap14.${o.country || '?'}.${o.code || '?'}.${o.field}`;
+      return `${section}.${o.field || '?'}`;
+    };
+    const defaultPickFor = (status) => {
+      if (status === 'only-anaf') return 'anaf';
+      if (status === 'mismatch') return null;
+      return 'local';
+    };
     const rows = [];
     const push = (section, label, anaf, local, opts) => {
       const a = num(anaf), l = num(local);
       if (a == null && l == null) return;
       const status = classify(a, l);
       rows.push({
-        section, label, anaf: a, local: l,
+        section, label,
+        rowKey: rowKeyFor(section, opts || {}),
+        anaf: a, local: l,
         delta: a != null && l != null ? Math.round((a || 0) - (l || 0)) : null,
         status, hint: hintFor(status, opts && opts.isPfa, a, l),
+        defaultPick: defaultPickFor(status),
       });
     };
     const ao = (anaf && anaf.obligRealizat) || {}, lo = (local && local.obligRealizat) || {};
-    push('oblig', 'Total venit din investiții (cass_ven_inv)', ao.cass_ven_inv, lo.cass_ven_inv);
-    push('oblig', 'Bază CASS (cass_baza)', ao.cass_baza, lo.cass_baza);
-    push('oblig', 'CASS datorat (cass_datorat)', ao.cass_datorat, lo.cass_datorat);
-    push('oblig', 'Impozit pe venit de plată (impozit_venit_plus)', ao.impozit_venit_plus, lo.impozit_venit_plus);
-    push('oblig', 'Impozit pe venit de restituit (impozit_venit_minus)', ao.impozit_venit_minus, lo.impozit_venit_minus);
+    push('oblig', 'Total venit din investiții (cass_ven_inv)', ao.cass_ven_inv, lo.cass_ven_inv, { field: 'cass_ven_inv' });
+    push('oblig', 'Bază CASS (cass_baza)', ao.cass_baza, lo.cass_baza, { field: 'cass_baza' });
+    push('oblig', 'CASS datorat (cass_datorat)', ao.cass_datorat, lo.cass_datorat, { field: 'cass_datorat' });
+    push('oblig', 'Impozit pe venit de plată (impozit_venit_plus)', ao.impozit_venit_plus, lo.impozit_venit_plus, { field: 'impozit_venit_plus' });
+    push('oblig', 'Impozit pe venit de restituit (impozit_venit_minus)', ao.impozit_venit_minus, lo.impozit_venit_minus, { field: 'impozit_venit_minus' });
     const a11 = (anaf && Array.isArray(anaf.cap11)) ? anaf.cap11 : [];
     const l11 = (local && Array.isArray(local.cap11Rows)) ? local.cap11Rows : [];
     const seenCodes = new Set();
@@ -849,15 +1031,15 @@ const App = (() => {
       const lRow = l11.find((x) => String(x.categ_venit || '') === code);
       const isPfa = code.startsWith('10') && code !== '1012';
       const label = isPfa ? `Cap11 PFA / activități independente (cod ${code})` : `Câștiguri RO din titluri (cod ${code})`;
-      push('cap11', label, r.venit_net_anual, lRow ? lRow.venit_net_anual : null, { isPfa });
+      push('cap11', label, r.venit_net_anual, lRow ? lRow.venit_net_anual : null, { isPfa, code, field: 'venit_net_anual' });
       if (r.impozit_retinut != null || (lRow && lRow.impozit_retinut != null)) {
-        push('cap11', `Impozit reținut RO (cod ${code})`, r.impozit_retinut, lRow ? lRow.impozit_retinut : null, { isPfa });
+        push('cap11', `Impozit reținut RO (cod ${code})`, r.impozit_retinut, lRow ? lRow.impozit_retinut : null, { isPfa, code, field: 'impozit_retinut' });
       }
     }
     for (const r of l11) {
       const code = String(r.categ_venit || '');
       if (seenCodes.has(code)) continue;
-      push('cap11', `Câștiguri RO din titluri (cod ${code})`, null, r.venit_net_anual);
+      push('cap11', `Câștiguri RO din titluri (cod ${code})`, null, r.venit_net_anual, { code, field: 'venit_net_anual' });
     }
     const a14 = (anaf && Array.isArray(anaf.cap14)) ? anaf.cap14 : [];
     const l14 = (local && Array.isArray(local.cap14Rows)) ? local.cap14Rows : [];
@@ -867,14 +1049,16 @@ const App = (() => {
       const k = keyOf(r);
       seenKeys.add(k);
       const lRow = l14.find((x) => keyOf(x) === k);
-      const label = `Venit străinătate ${r.str_stat_realiz_v || '?'} — cod ${r.str_categ_venit}`;
-      push('cap14', label, r.str_venit_net_anual, lRow ? lRow.str_venit_net_anual : null);
-      push('cap14', `${label} — credit fiscal`, r.str_credit_fiscal, lRow ? lRow.str_credit_fiscal : null);
+      const country = String(r.str_stat_realiz_v || '?'), code = String(r.str_categ_venit || '?');
+      const label = `Venit străinătate ${country} — cod ${code}`;
+      push('cap14', label, r.str_venit_net_anual, lRow ? lRow.str_venit_net_anual : null, { country, code, field: 'str_venit_net_anual' });
+      push('cap14', `${label} — credit fiscal`, r.str_credit_fiscal, lRow ? lRow.str_credit_fiscal : null, { country, code, field: 'str_credit_fiscal' });
     }
     for (const r of l14) {
       const k = keyOf(r);
       if (seenKeys.has(k)) continue;
-      push('cap14', `Venit străinătate ${r.str_stat_realiz_v || '?'} — cod ${r.str_categ_venit}`, null, r.str_venit_net_anual);
+      const country = String(r.str_stat_realiz_v || '?'), code = String(r.str_categ_venit || '?');
+      push('cap14', `Venit străinătate ${country} — cod ${code}`, null, r.str_venit_net_anual, { country, code, field: 'str_venit_net_anual' });
     }
     const totals = { matchCount: 0, nearCount: 0, mismatchCount: 0, onlyAnafCount: 0, onlyLocalCount: 0 };
     for (const r of rows) {

@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseD212Xml, parseAttrs, extractElements } = require('../lib/d212-xml-parser');
-const { compareDufVsLocal, classify } = require('../lib/d212-duf-compare');
+const { compareDufVsLocal, classify, rowKeyFor, defaultPickFor } = require('../lib/d212-duf-compare');
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'd212-sample-anaf.xml');
 
@@ -196,4 +196,55 @@ test('compareDufVsLocal: local-only cap14 row (we calculated something ANAF lack
   assert.ok(row);
   assert.equal(row.status, 'only-local');
   assert.match(row.hint, /trebuie adăugată manual în DUF/);
+});
+
+// -------- rowKey + defaultPick (Decision UX) --------
+
+test('rowKeyFor produces stable keys per (section, field, code, country)', () => {
+  assert.equal(rowKeyFor('oblig', { field: 'cass_ven_inv' }), 'oblig.cass_ven_inv');
+  assert.equal(rowKeyFor('cap11', { code: '1012', field: 'venit_net_anual' }), 'cap11.1012.venit_net_anual');
+  assert.equal(rowKeyFor('cap14', { country: 'US', code: '2018', field: 'str_venit_net_anual' }),
+                              'cap14.US.2018.str_venit_net_anual');
+});
+
+test('defaultPickFor: maps statuses to sensible defaults', () => {
+  assert.equal(defaultPickFor('match'), 'local');
+  assert.equal(defaultPickFor('near'), 'local');
+  assert.equal(defaultPickFor('mismatch'), null);          // force user to choose
+  assert.equal(defaultPickFor('only-anaf'), 'anaf');
+  assert.equal(defaultPickFor('only-local'), 'local');
+});
+
+test('compareDufVsLocal: every row carries rowKey + defaultPick', () => {
+  const anaf = {
+    obligRealizat: { cass_ven_inv: 100, cass_baza: 100 },
+    cap11: [{ categ_venit: '1016', venit_net_anual: 50 }],   // PFA → only-anaf
+    cap14: [{ str_stat_realiz_v: 'US', str_categ_venit: '2018', str_venit_net_anual: 200 }],
+  };
+  const local = {
+    obligRealizat: { cass_ven_inv: 50, cass_baza: 0 },   // mismatch on cass_ven_inv (50 vs 100), only-local on cass_baza in reverse: actually only-anaf for cass_baza is forced because lo.cass_baza is 0 (which is num)... wait 0 is a number so it'll be classified
+    cap11Rows: [],
+    cap14Rows: [],     // ANAF has US dividends, we don't → only-anaf
+  };
+  const r = compareDufVsLocal(anaf, local);
+  for (const row of r.rows) {
+    assert.ok(row.rowKey, `Row "${row.label}" missing rowKey`);
+    // defaultPick may be null for 'mismatch'; that's a valid value.
+    assert.ok(['local', 'anaf', null].includes(row.defaultPick),
+              `Row "${row.label}" has invalid defaultPick "${row.defaultPick}"`);
+  }
+  const oblig = r.rows.find((x) => x.rowKey === 'oblig.cass_ven_inv');
+  assert.ok(oblig);
+  // |100 - 50| = 50 RON, which is <= NEAR_ABS (100), so this classifies as 'near'.
+  assert.equal(oblig.status, 'near');
+  assert.equal(oblig.defaultPick, 'local');
+
+  const cap11Pfa = r.rows.find((x) => x.rowKey === 'cap11.1016.venit_net_anual');
+  assert.ok(cap11Pfa);
+  assert.equal(cap11Pfa.status, 'only-anaf');
+  assert.equal(cap11Pfa.defaultPick, 'anaf');
+
+  const cap14Div = r.rows.find((x) => x.rowKey === 'cap14.US.2018.str_venit_net_anual');
+  assert.ok(cap14Div);
+  assert.equal(cap14Div.defaultPick, 'anaf');              // we don't have it locally
 });

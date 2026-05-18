@@ -57,7 +57,18 @@
     "colAnaf": "ANAF",
     "colLocal": "Calculat local",
     "colDelta": "Δ (local − ANAF)",
-    "colStatus": "Stare"
+    "colStatus": "Stare",
+    "colPick": "Folosesc",
+    "valuesWithPicks": "Valorile reflectă XML-ul DUF importat",
+    "valuesFromAnaf": "preluate din ANAF",
+    "dufSource": "Sursă",
+    "sourceAnafTip": "Preluat din XML-ul DUF (decizia ta)",
+    "sourceLocalTip": "Calculat local din PDF-urile broker",
+    "quickActions": "Acțiuni rapide:",
+    "pickAllMismatchAnaf": "Diferențe → ANAF",
+    "pickAllMismatchLocal": "Diferențe → Local",
+    "pickResetAll": "↺ Reset toate la default",
+    "unresolvedHint": "diferențe necesită alegere explicită (rândurile evidențiate cu roșu mai jos)"
   },
   "nav": {
     "dashboard": "Panou Principal",

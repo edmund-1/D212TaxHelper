@@ -57,7 +57,18 @@
     "colAnaf": "ANAF",
     "colLocal": "Computed locally",
     "colDelta": "Δ (local − ANAF)",
-    "colStatus": "Status"
+    "colStatus": "Status",
+    "colPick": "Use",
+    "valuesWithPicks": "Values reflect the imported DUF XML",
+    "valuesFromAnaf": "taken from ANAF",
+    "dufSource": "Source",
+    "sourceAnafTip": "Taken from the DUF XML (your decision)",
+    "sourceLocalTip": "Computed locally from broker PDFs",
+    "quickActions": "Quick actions:",
+    "pickAllMismatchAnaf": "Mismatches → ANAF",
+    "pickAllMismatchLocal": "Mismatches → Local",
+    "pickResetAll": "↺ Reset all to default",
+    "unresolvedHint": "mismatches need an explicit choice (rows highlighted in red below)"
   },
   "nav": {
     "dashboard": "Dashboard",
