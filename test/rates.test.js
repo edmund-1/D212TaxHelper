@@ -68,7 +68,7 @@ test('toRON: unknown currency leaves amount unchanged', () => {
 
 test('parseNumber: simple numeric strings', () => {
   assert.equal(parseNumber('1234.56'), 1234.56);
-  assert.equal(parseNumber('1000.00'), 1000.00);
+  assert.equal(parseNumber('9999.99'), 9999.99);
 });
 
 test('parseNumber: strips thousand separators', () => {

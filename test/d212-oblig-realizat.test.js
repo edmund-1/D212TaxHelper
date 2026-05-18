@@ -50,7 +50,11 @@ test('CASS at 6-12 SM tier — base capped at 6 SM (24300 in 2025)', () => {
 });
 
 test('CASS > 24 SM (max for investment) — base capped at 24 SM = 97200 in 2025', () => {
-  // This matches the donor fixture: 513k investment income → CASS base 24 SM = 97200 → CASS 9720.
+  // Scenario: a user with ~500k RON of investment income (synthetic round
+  // number, not corresponding to any real taxpayer) hits the >24 SM tier,
+  // so the CASS base maxes out at 24 × 4050 = 97200 RON and CASS = 9720.
+  // The 97200 / 9720 figures are mathematically derived from the public
+  // 2025 minimum salary; only the input total is illustrative.
   const data = {
     totalIncome_cass: 500000,
     cassInfo: { applies: true, base: 97200, amount: 9720 },

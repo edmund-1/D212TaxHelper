@@ -59,18 +59,26 @@ test('e2e: pdf-parse + parseXtbPortfolio on anonymized PDF', async () => {
   assert.equal(result.countries[2].longGainRON, 50 * 5.0415);
 });
 
-test('e2e: anonymized PDFs contain NO original personal data', async () => {
+test('e2e: anonymized PDFs contain NO original personal data', async (t) => {
   // Defensive check that complements scripts/generate-test-pdfs.js: even after
   // any future regeneration, this test fails if real data leaks into the bytes.
-  const banned = [
-    'Popescu', 'Ion', 'Bucuresti', 'Exemplu', 'XX000000',
-    '1800101220038', 'RO00BANK00000000000000',
-    'Popa', 'Maria',
-    '00000001', 'BROKER01',
-    'support@example.com',
-    // Original amounts from the user's 2025 reports
-    '1000.00', '100.00', '16000', '400000', '35000'
-  ];
+  //
+  // The list of banned tokens is loaded from a LOCAL-ONLY file
+  // `test/fixtures/banned-tokens.local.json` which is .gitignored. The shape
+  // matches `test/fixtures/banned-tokens.example.json` (committed, with
+  // placeholders). To enable the regression check on your machine, copy the
+  // example file to `banned-tokens.local.json` and fill in the actual values
+  // you want to keep out of the public fixtures. We never commit PII.
+  let banned;
+  try {
+    banned = require('./fixtures/banned-tokens.local.json');
+  } catch (_) {
+    banned = null;
+  }
+  if (!Array.isArray(banned) || banned.length === 0) {
+    t.skip('No test/fixtures/banned-tokens.local.json — anonymization regression test skipped. Copy the .example.json to .local.json to enable.');
+    return;
+  }
 
   for (const pdf of ['xtb-dividends-anonymized.pdf', 'xtb-portfolio-anonymized.pdf']) {
     const raw = fs.readFileSync(path.join(FIXTURES, pdf)).toString('binary');
