@@ -189,6 +189,10 @@ const App = (() => {
     document.getElementById('rates-form').addEventListener('submit', handleRatesSubmit);
     document.getElementById('tax-rates-form').addEventListener('submit', handleTaxRatesSubmit);
 
+    // D-7 — export D212 XML skeleton from current year's computed data
+    const xmlBtn = document.getElementById('btn-export-d212-xml');
+    if (xmlBtn) xmlBtn.addEventListener('click', () => exportD212Xml(selectedYear));
+
     // Fetch OCR engine status
     fetchOcrStatus();
 
@@ -976,6 +980,71 @@ const App = (() => {
       }
     }
 
+    // D212 Cap. I §2.1 — cap14 rows (foreign-source income, gap D-7 prep).
+    // Mirror of lib/d212-cap14.js: buildCap14Rows. Inline because the browser
+    // bundle cannot require() lib/ modules; the lib version is canonical and
+    // covered by test/d212-cap14.test.js. Keep both sides aligned.
+    const cap14Rows = [];
+    {
+      const capGainsSaleRON = (capitalGainsSaleUSD || 0) * rate;
+      const capGainsCostRON = (capitalGainsCostUSD || 0) * rate;
+      if (dividendsRON > 0 || usForeignTaxRON > 0) {
+        const Rd1 = dividendsRON;
+        const Rd3 = Rd1;
+        const Rd7 = Rd3;
+        const Rd8 = Rd7 * divTaxRate;
+        const Rd9 = usForeignTaxRON;
+        const Rd10 = Math.min(Rd8, Rd9);
+        const Rd11 = Math.max(0, Rd8 - Rd10);
+        cap14Rows.push({
+          str_stat_realiz_v: 'US',
+          den_stat: 'Statele Unite ale Americii',
+          str_categ_venit: '2018',
+          den_categ_venit: 'Dividende',
+          dubla_impunere: '1',
+          str_venit_brut: Math.round(Rd1),
+          str_chelt_deduc: 0,
+          str_venit_net_anual: Math.round(Rd3),
+          str_pierdere_anuala: 0,
+          str_pierdere_precedenta: 0,
+          str_pierdere_compensata: 0,
+          str_venit_recalculat: Math.round(Rd7),
+          str_impozit_datorat_Ro: Math.round(Rd8),
+          str_impozit_platit: Math.round(Rd9),
+          str_credit_fiscal: Math.round(Rd10),
+          str_dif_impozit_datorat: Math.round(Rd11),
+        });
+      }
+      if (capGainsSaleRON > 0 || usNetGainsRON > 0) {
+        const Rd1 = capGainsSaleRON;
+        const Rd2 = capGainsCostRON + salaryTaxedRON;
+        const Rd3 = Math.max(0, Rd1 - Rd2);
+        const Rd9 = 0;
+        const Rd7 = Rd3;
+        const Rd8 = Rd7 * capGainsTaxRate;
+        const Rd10 = Math.min(Rd8, Rd9);
+        const Rd11 = Math.max(0, Rd8 - Rd10);
+        cap14Rows.push({
+          str_stat_realiz_v: 'US',
+          den_stat: 'Statele Unite ale Americii',
+          str_categ_venit: '2012',
+          den_categ_venit: 'Câștiguri din transferul titlurilor de valoare',
+          dubla_impunere: '1',
+          str_venit_brut: Math.round(Rd1),
+          str_chelt_deduc: Math.round(Rd2),
+          str_venit_net_anual: Math.round(Rd3),
+          str_pierdere_anuala: 0,
+          str_pierdere_precedenta: 0,
+          str_pierdere_compensata: 0,
+          str_venit_recalculat: Math.round(Rd7),
+          str_impozit_datorat_Ro: Math.round(Rd8),
+          str_impozit_platit: Math.round(Rd9),
+          str_credit_fiscal: Math.round(Rd10),
+          str_dif_impozit_datorat: Math.round(Rd11),
+        });
+      }
+    }
+
     return {
       dividendsUSD,
       dividendsRON,
@@ -1081,7 +1150,9 @@ const App = (() => {
       priorLossesRemaining,
       maxLossOffset,
       // D212 Cap. I §1.1 — Romanian-source income block (gap D-6)
-      cap11Rows
+      cap11Rows,
+      // D212 Cap. I §2.1 — Foreign-source income block (gap D-7 prep)
+      cap14Rows
     };
   }
 
@@ -3470,6 +3541,51 @@ const App = (() => {
     document.getElementById('input-ro-capgains-long-rate').value = tr.roCapGainsLongRate ?? (selectedYear >= 2026 ? 3 : selectedYear >= 2023 ? 1 : 10);
     document.getElementById('input-ro-capgains-short-rate').value = tr.roCapGainsShortRate ?? (selectedYear >= 2026 ? 6 : selectedYear >= 2023 ? 3 : 10);
     document.getElementById('input-ro-interest-rate').value = tr.roInterestRate ?? (selectedYear >= 2026 ? 16 : 10);
+  }
+
+  // ============ D-7: D212 XML EXPORT ============
+  /**
+   * Build a D212 XML skeleton for the given year and trigger a download.
+   * The XML carries the computed cap11 + cap14 elements; required personal
+   * data attributes (nume_c, prenume_c, cif, nerezident) are placeholders
+   * that the user replaces in the official ANAF tool before submission.
+   *
+   * Server endpoint: POST /api/d212-xml/:year with { cap11Rows, cap14Rows }
+   * — server calls lib/d212-xml-builder.js (canonical, tested) and returns
+   * the XML with the right Content-Disposition for browser download.
+   */
+  async function exportD212Xml(year) {
+    try {
+      const data = computeYearData(year);
+      const cap11Rows = data.cap11Rows || [];
+      const cap14Rows = data.cap14Rows || [];
+      if (cap11Rows.length === 0 && cap14Rows.length === 0) {
+        showToast(I18n.t('taxes.exportXmlEmpty') || 'Nu există venituri de declarat pentru acest an.', 'error');
+        return;
+      }
+      const resp = await fetch(`/api/d212-xml/${year}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cap11Rows, cap14Rows }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const xml = await resp.text();
+      const blob = new Blob([xml], { type: 'application/xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `D212_${year}_skeleton.xml`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(I18n.t('taxes.exportXmlDone') || `XML salvat: D212_${year}_skeleton.xml`, 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   }
 
   // ============ YEAR PICKER ============

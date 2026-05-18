@@ -10,6 +10,7 @@ const db = require('./db');
 let Tesseract = null; // lazy-loaded on first OCR use
 const { BNR_EXCHANGE_RATES, parseNumber } = require('./lib/rates');
 const { parseXtbDividends, parseXtbPortfolio } = require('./lib/parsers/xtb');
+const { buildD212Xml } = require('./lib/d212-xml-builder');
 
 // ============ PaddleOCR CONFIGURATION ============
 const PADDLEOCR_SCRIPT = path.join(__dirname, 'ocr_service.py');
@@ -345,6 +346,27 @@ app.put('/api/data/:year', (req, res) => {
     }
 
     res.json({ success: true, data: merged });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/d212-xml/:year - Build a D212 XML for the year using precomputed
+// row data sent in the request body. The client (computeYearData in app.js)
+// already produces cap11Rows / cap14Rows; we just package them into the
+// schema-conforming XML envelope. Personal data is optional — see
+// lib/d212-xml-builder.js for the placeholder behavior.
+app.post('/api/d212-xml/:year', (req, res) => {
+  try {
+    const year = parseInt(req.params.year, 10);
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ error: 'Invalid year' });
+    }
+    const { cap11Rows = [], cap14Rows = [], personalData = null } = req.body || {};
+    const xml = buildD212Xml({ year, cap11Rows, cap14Rows, personalData });
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="D212_${year}_skeleton.xml"`);
+    res.send(xml);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

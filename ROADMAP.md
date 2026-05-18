@@ -193,7 +193,7 @@ XTB/Tradeville/BT Trade withhold tax at source ("impozit final"), but the income
 - ✅ Tests: 8 cases in `test/d212-cap11.test.js` covering empty / gain-only / prior-loss / cross-bucket-loss / over-withholding / loss-only / prior-loss-only / categ_venit format.
 - Dividends + interest with "impozit final" deliberately remain off cap11 — they are not in Nomenclator_venituri_RO for individuals; they feed only the CASS base (Cap. II), already covered.
 
-### D-7 — D212 XML export 🔴 High · 🔴 High · `open` <a id="d-7"></a>
+### D-7 — D212 XML export 🔴 High · 🔴 High · `done — skeleton level` <a id="d-7"></a>
 
 Emit a partial XML conforming to `docs/anaf/d212-2025/D212.xsd` that the user can import directly into the official ANAF PDF tool.
 
@@ -228,6 +228,18 @@ Emit a partial XML conforming to `docs/anaf/d212-2025/D212.xsd` that the user ca
 - Build a sample XML for the user's 2025 data; import it into the official ANAF PDF tool with no errors.
 - All 76 BR-D212-* rules pass (where applicable to the data).
 - The user fills in only personal data ANAF-side and signs.
+
+**Status (shipped — skeleton level)**
+- ✅ `lib/d212-xml-builder.js: buildD212Xml({...})` — emits `<d212>` root with all 13 required `bifa*` flags (auto-set based on presence of capitols), placeholder personal data with a leading TODO comment, and a self-closing `<cap11>` / `<cap14>` element per row.
+- ✅ `lib/d212-cap14.js: buildCap14Rows(data)` — pure helper producing 0-2 cap14 rows (US dividends categ_venit=2018, US capgains categ_venit=2012). Tested.
+- ✅ `server.js` — POST `/api/d212-xml/:year` packages the client's precomputed `cap11Rows + cap14Rows` into the XML; Content-Disposition triggers a browser download as `D212_{year}_skeleton.xml`.
+- ✅ `public/js/app.js: exportD212Xml(year)` + button on the Calcul Impozite tab.
+- ✅ Tests: 5 cap14 + 9 xml-builder cases including special-char escaping, multi-row, personal-data-fill, totalPlata_A digit sum.
+
+**Known limitations (next iterations):**
+- Personal data attributes are emitted as placeholders (NUME / PRENUME / 0000000000000) — the user MUST replace them in the ANAF tool. D-8 will add an optional local form.
+- Per-country grouping (D-3) is not yet wired: all foreign income goes under `str_stat_realiz_v="US"`. Multi-jurisdiction users (e.g. EU dividends via XTB) need to split the row manually for now.
+- Schematron full re-validation pre-download is not wired (would require xslt2 or a JS schematron impl). Importing the generated XML into the official ANAF tool surfaces any issues at validation time.
 
 ### D-8 — Optional personal data step 🟢 Low · 🟢 Low · `open` <a id="d-8"></a>
 
