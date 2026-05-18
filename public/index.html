@@ -26,6 +26,7 @@
         <button class="nav-btn active" data-tab="dashboard" data-i18n="nav.dashboard">Dashboard</button>
         <button class="nav-btn" data-tab="income" data-i18n="nav.income">Income Details</button>
         <button class="nav-btn" data-tab="taxes" data-i18n="nav.taxes">Tax Calculation</button>
+        <button class="nav-btn" data-tab="submit" data-i18n="nav.submit">D212 Submission Guide</button>
         <button class="nav-btn" data-tab="input" data-i18n="nav.input">Add Data</button>
         <button class="nav-btn" data-tab="import" data-i18n="nav.import">Import Document</button>
         <button class="nav-btn" data-tab="raw" data-i18n="nav.raw">Raw Data</button>
@@ -751,6 +752,64 @@
           <button type="submit" id="upload-submit-btn" class="btn-primary" data-i18n="import.upload">Upload & Process</button>
         </form>
         <div id="upload-result" class="hidden"></div>
+      </div>
+    </section>
+
+    <!-- D212 Submission Guide Tab -->
+    <section id="tab-submit" class="tab-content">
+      <div class="card">
+        <h2 data-i18n="submit.title">🧭 Cum depui D212 — ghid pas cu pas</h2>
+        <p class="subtitle" data-i18n="submit.subtitle">Sursa: <em>Ghid de precompletare D212 v2026.1 (ANAF, mai 2026)</em>. Acest tool este un calculator — depunerea efectivă se face prin ANAF.</p>
+
+        <div class="dcl-section" style="border-left:3px solid var(--accent);padding-left:1rem;">
+          <h3 data-i18n="submit.recommended">⭐ Fluxul recomandat: portal DUF (online, în SPV)</h3>
+          <p data-i18n="submit.recommendedFor"><strong>Pentru cine:</strong> orice persoană fizică cu cont SPV (utilizator+parolă, NU certificat digital). Funcționează pentru investitori, PFA, multi-CNP — toate.</p>
+          <ol style="margin-top:0.5rem;line-height:1.7;">
+            <li data-i18n="submit.step1">Login pe <a href="https://www.anaf.ro/declaratii/duf" target="_blank" rel="noopener" style="color:var(--accent);">anaf.ro/declaratii/duf</a> cu credențialele SPV.</li>
+            <li data-i18n="submit.step2">Apare popup-ul „Precompletare din SPV" — click <strong>„Precompletare (recomandat)"</strong>.</li>
+            <li data-i18n="submit.step3">Parcurgi wizard-ul pas-cu-pas. ANAF arată ce știe deja despre tine (D205 venituri cu reținere la sursă, contracte chirie C168, D212 anterior). Pentru fiecare alegi: <em>„Include cu sume"</em> · <em>„Include fără sume"</em> · <em>„Nu include"</em>.</li>
+            <li data-i18n="submit.step4"><strong>⚠️ Veniturile din străinătate (cap14) POT SĂ NU FIE PRECOMPLETATE.</strong> Le adaugi manual în formularul web DUF după wizard.</li>
+            <li data-i18n="submit.step5">După wizard, ești în formularul web complet editabil. Navighezi în meniul stâng la <em>„Venituri realizate"</em> și completezi câmpurile pe baza tabelului din secțiunea de mai jos.</li>
+            <li data-i18n="submit.step6">Click butonul roșu <strong>„Generează fișier PDF pentru depunere"</strong> (panou dreapta). Sistemul validează și produce PDF-ul gata de depus.</li>
+            <li data-i18n="submit.step7">PDF-ul se depune electronic prin SPV. Vei primi recipisa în secțiunea „Mesaje" din SPV.</li>
+          </ol>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;" data-i18n="submit.dufCaveat">💡 <strong>Atenție:</strong> Funcționalitatea de precompletare DUF nu este disponibilă pentru autentificarea cu certificat digital calificat — doar cu utilizator+parolă SPV.</p>
+        </div>
+
+        <div class="dcl-section" style="border-left:3px solid var(--text-muted);padding-left:1rem;">
+          <h3 data-i18n="submit.fallback">🛠️ Flux alternativ: PDF inteligent (Adobe Reader, fără SPV interactiv)</h3>
+          <p data-i18n="submit.fallbackFor"><strong>Pentru cine:</strong> users care preferă să lucreze offline sau care nu pot accesa wizard-ul DUF. Mai laborios, dar suportă import XML direct.</p>
+          <ol style="margin-top:0.5rem;line-height:1.7;">
+            <li data-i18n="submit.fbStep1">Descarcă PDF-ul oficial D212 de pe <a href="https://www.anaf.ro/declaratii/" target="_blank" rel="noopener" style="color:var(--accent);">anaf.ro/declaratii</a>. <strong>Salvează pe disc</strong>, nu deschide în browser.</li>
+            <li data-i18n="submit.fbStep2">Deschide PDF-ul exclusiv în <strong>Adobe Acrobat Reader</strong> (Chrome/Edge nu pot rula formularele XFA).</li>
+            <li data-i18n="submit.fbStep3">Exportă XML-ul nostru: tab <em>„Calcul Impozite"</em> → buton 📤 <em>„Exportă D212 XML (skeleton)"</em>.</li>
+            <li data-i18n="submit.fbStep4">În Adobe Reader, caută butonul „Importă date" (sus, în zona de formular) și selectează XML-ul nostru.</li>
+            <li data-i18n="submit.fbStep5">Completează manual datele lipsă: nume, CNP, IBAN, eventual PFA dacă ai.</li>
+            <li data-i18n="submit.fbStep6">Click „Validare" în PDF — corectează erorile semnalate.</li>
+            <li data-i18n="submit.fbStep7">Salvează PDF-ul completat și depune-l prin SPV (secțiunea „Depunere declarații").</li>
+          </ol>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;" data-i18n="submit.fbWarning">⚠️ Acest flux nu beneficiază de precompletarea automată DUF. Riscă să completezi greșit datele pe care ANAF le are deja (D205, D112). Recomandat doar dacă DUF nu funcționează pentru tine.</p>
+        </div>
+
+        <div class="dcl-section" id="submit-duf-values-section">
+          <h3 data-i18n="submit.valuesTitle">📋 Valorile de introdus în formularul DUF pentru anul curent</h3>
+          <p class="subtitle" data-i18n="submit.valuesSubtitle">Aceste valori vin direct din calculele tool-ului nostru. Copiază-le în câmpurile corespunzătoare ale formularului web DUF în secțiunea „Venituri realizate".</p>
+          <div id="submit-duf-values"></div>
+        </div>
+
+        <div class="dcl-section" style="background:rgba(255,193,7,0.08);border-left:3px solid var(--warning,#b35900);padding:0.75rem 1rem;border-radius:var(--radius);">
+          <h3 style="margin-top:0;" data-i18n="submit.responsibility">⚖️ Responsabilitatea ta</h3>
+          <p data-i18n="submit.responsibilityText">Conform Ghidului ANAF: <em>„Responsabilitatea pentru corectitudinea informațiilor din cuprinsul declarației aparține în totalitate contribuabilului. Precompletarea este un instrument de asistență, NU o confirmare a situației fiscale reale."</em></p>
+          <p style="font-size:0.85rem;color:var(--text-muted);" data-i18n="submit.responsibilityNote">Verifică valorile noastre înainte să le introduci în DUF. Acest tool este un calculator open-source, nu un substitut pentru consultanță fiscală.</p>
+        </div>
+
+        <div class="dcl-section">
+          <h3 data-i18n="submit.deadlines">📅 Termene cheie</h3>
+          <ul>
+            <li data-i18n="submit.deadlineBonus"><strong>15 aprilie 2026</strong> — termen pentru bonificație 3% (depunere + plată integrală). Dacă te încadrezi, bifezi opțiunea de bonificație în DUF.</li>
+            <li data-i18n="submit.deadlineFinal"><strong>25 mai 2026</strong> — termen normal de depunere D212 pentru anul fiscal 2025.</li>
+          </ul>
+        </div>
       </div>
     </section>
 

@@ -516,6 +516,106 @@ const App = (() => {
 
     if (tabName === 'raw') loadRawFiles();
     if (tabName === 'input') populateForm();
+    if (tabName === 'submit') renderSubmissionGuide();
+  }
+
+  // ============ D212 SUBMISSION GUIDE TAB ============
+  /**
+   * Render the "Valorile de introdus în DUF" table on the submission guide tab.
+   * Maps our computed numbers to the DUF web form's field labels so the user
+   * has a one-screen reference while filling the form online.
+   *
+   * Per the official ANAF guide (Ghid_Precompletare_D212_2026 v1, May 2026),
+   * the DUF portal does NOT accept external XML upload — values are typed
+   * into the web form. This panel is the bridge between our calculations
+   * and the user's keyboard.
+   */
+  function renderSubmissionGuide() {
+    const container = document.getElementById('submit-duf-values');
+    if (!container) return;
+    const data = computeYearData(selectedYear);
+    const fmtRON = (n) => Math.round(n || 0).toLocaleString('ro-RO') + ' RON';
+
+    const sections = [];
+
+    // cap14 — Foreign-source income (Venituri din străinătate, secțiunea cap14)
+    if ((data.cap14Rows || []).length > 0) {
+      const rows = [];
+      for (const r of data.cap14Rows) {
+        const isDividends = r.str_categ_venit === '2018';
+        const catLabel = isDividends
+          ? (I18n.t('submit.catDividends') || 'Dividende (cod 2018)')
+          : (I18n.t('submit.catCapGains') || 'Câștiguri din transferul titlurilor de valoare (cod 2012)');
+        rows.push({ section: `🌍 cap14 — ${r.str_stat_realiz_v} · ${catLabel}`, items: [
+          { duf: 'Țara realizării venitului', val: r.str_stat_realiz_v },
+          { duf: 'Categoria de venit', val: `${r.str_categ_venit} — ${isDividends ? 'Dividende' : 'Câștiguri titluri'}` },
+          { duf: 'Metoda dublei impuneri', val: r.dubla_impunere === '1' ? 'Credit fiscal (1)' : 'Scutire (2)' },
+          { duf: 'Rd.1 Venit brut (RON)', val: fmtRON(r.str_venit_brut) },
+          { duf: 'Rd.2 Cheltuieli deductibile (RON)', val: fmtRON(r.str_chelt_deduc) },
+          { duf: 'Rd.3 Venit net anual (RON)', val: fmtRON(r.str_venit_net_anual) },
+          { duf: 'Rd.7 Venit recalculat (RON)', val: fmtRON(r.str_venit_recalculat) },
+          { duf: 'Rd.8 Impozit datorat în RO (RON)', val: fmtRON(r.str_impozit_datorat_Ro) },
+          { duf: 'Rd.9 Impozit plătit în străinătate (RON)', val: fmtRON(r.str_impozit_platit) },
+          { duf: 'Rd.10 Credit fiscal recunoscut (RON)', val: fmtRON(r.str_credit_fiscal) },
+          { duf: 'Rd.11 Diferență impozit datorat (RON)', val: fmtRON(r.str_dif_impozit_datorat) },
+        ]});
+      }
+      sections.push(...rows);
+    }
+
+    // cap11 — Romanian-source investment income
+    if ((data.cap11Rows || []).length > 0) {
+      const r = data.cap11Rows[0];
+      sections.push({ section: '🇷🇴 cap11 — Câștiguri RO (titluri de valoare, cod 1012)', items: [
+        { duf: 'Categoria de venit', val: '1012 — Câștiguri din transferul titlurilor de valoare' },
+        { duf: 'Rd.1 Venit brut (RON)', val: fmtRON(r.venit_brut) },
+        { duf: 'Rd.3 Venit net anual (RON)', val: fmtRON(r.venit_net_anual) },
+        { duf: 'Rd.5 Pierdere precedentă (RON)', val: fmtRON(r.pierdere_precedenta) },
+        { duf: 'Rd.6 Pierdere compensată (RON)', val: fmtRON(r.pierdere_compensata) },
+        { duf: 'Rd.7 Venit recalculat (RON)', val: fmtRON(r.venit_recalculat) },
+        { duf: 'Rd.8 Impozit anual (RON)', val: fmtRON(r.impozit11) },
+        { duf: 'Rd.9 Impozit reținut la sursă (RON)', val: fmtRON(r.impozit_retinut) },
+      ]});
+    }
+
+    // CASS investments (Capitolul II)
+    if (data.obligRealizat && data.obligRealizat.cass_ven_inv > 0) {
+      const o = data.obligRealizat;
+      sections.push({ section: '💊 CASS pe venituri din investiții (Capitolul II)', items: [
+        { duf: 'Total venituri din investiții (RON)', val: fmtRON(o.cass_ven_inv) },
+        { duf: 'Bază anuală de calcul CASS (RON)', val: fmtRON(o.cass_baza) + (o.cass_baza > 0 ? ' (' + (o.cass_baza / 4050).toFixed(0) + ' × salariu minim)' : '') },
+        { duf: 'CASS anuală 10% (RON)', val: fmtRON(o.cass_anuala) },
+        { duf: 'CASS datorat (RON)', val: fmtRON(o.cass_datorat) },
+        { duf: 'CASS reținut la sursă (RON)', val: fmtRON(o.cass_retinut) },
+        { duf: 'CASS de plată (RON)', val: fmtRON(o.cass_dif_plus) },
+        { duf: 'Bifa "sistem real, plafon 24 SM"', val: 'Da (cod 3)' },
+      ]});
+    }
+
+    if (sections.length === 0) {
+      container.innerHTML = `<p style="color:var(--text-muted);font-style:italic;">${esc(I18n.t('submit.noValues') || 'Nu există valori de introdus în DUF pentru acest an — adaugă mai întâi date sau importă documente.')}</p>`;
+      return;
+    }
+
+    let html = '';
+    for (const s of sections) {
+      html += `<div style="margin:1rem 0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <header style="background:var(--bg-secondary);padding:0.6rem 1rem;font-weight:600;font-size:0.95rem;">${esc(s.section)}</header>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
+            <th style="padding:0.5rem 1rem;text-align:left;">${esc(I18n.t('submit.dufField') || 'Câmpul din DUF')}</th>
+            <th style="padding:0.5rem 1rem;text-align:right;">${esc(I18n.t('submit.dufValue') || 'Valoare')}</th>
+          </tr></thead>
+          <tbody>`;
+      for (const it of s.items) {
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.45rem 1rem;font-size:0.9rem;">${esc(it.duf)}</td>
+          <td style="padding:0.45rem 1rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${esc(it.val)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+    container.innerHTML = html;
   }
 
   async function render() {
