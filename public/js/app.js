@@ -152,6 +152,9 @@ const App = (() => {
     navToggle.addEventListener('click', () => navMenu.classList.toggle('open'));
     document.querySelectorAll('.nav-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        // Skip nav-btn-styled buttons that aren't actual top-level tabs (e.g. the
+        // Add Data sub-tab switcher uses .nav-btn for visual parity but no data-tab).
+        if (!btn.dataset.tab) return;
         navMenu.classList.remove('open');
         switchTab(btn.dataset.tab);
       });
@@ -499,7 +502,10 @@ const App = (() => {
   }
 
   function switchTab(tabName) {
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    // Only clear .active on real top-level tabs (those with a data-tab attribute).
+    // Sub-tab buttons (e.g. Add Data mode switcher) share the .nav-btn class for
+    // styling and manage their own .active state via applyAddDataMode().
+    document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelector(`.nav-btn[data-tab="${tabName}"]`)?.classList.add('active');
     document.getElementById(`tab-${tabName}`)?.classList.add('active');
