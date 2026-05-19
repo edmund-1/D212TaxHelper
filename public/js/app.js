@@ -4176,10 +4176,12 @@ const App = (() => {
     const rate = exchangeRates[selectedYear]?.usdRon || 4.57;
     const defaultMinSalary = (cassThresholds[selectedYear] || cassThresholds[2025]).minSalary;
 
-    // Show year banner
+    // Show year banner with a "Reset year" button on the right.
     const banner = document.getElementById('input-year-banner');
     if (banner) {
-      banner.innerHTML = `<span class="year-badge">${selectedYear}</span><span>${I18n.t('misc.editingBanner')} <strong>${selectedYear}</strong>. ${I18n.t('misc.rateAndSalaryApply')}</span>`;
+      banner.innerHTML = `<span class="year-badge">${selectedYear}</span><span style="flex:1;">${I18n.t('misc.editingBanner')} <strong>${selectedYear}</strong>. ${I18n.t('misc.rateAndSalaryApply')}</span><button type="button" id="reset-year-btn" class="btn-primary" style="background:var(--danger); font-size:0.8rem; padding:0.35rem 0.7rem; margin-left:auto;" title="${I18n.t('resetYear.tooltip') || ''}">🗑 ${I18n.t('resetYear.button') || 'Reset an'}</button>`;
+      const resetBtn = document.getElementById('reset-year-btn');
+      if (resetBtn) resetBtn.addEventListener('click', () => openResetYearModal(selectedYear));
     }
 
     document.getElementById('input-us-broker').value = yd.usBroker || '';
@@ -4901,6 +4903,170 @@ const App = (() => {
     const num = parseFloat(value);
     if (!isNaN(num)) return Math.round(num).toLocaleString('ro-RO') + ' RON';
     return String(value);
+  }
+
+  /**
+   * Open the "Reset year" confirmation modal. Fetches the server-side
+   * manifest first so the user sees the exact list of files / data the
+   * action will wipe, then requires typing the year before the destructive
+   * button enables. On confirm, calls DELETE /api/year/:year and reloads
+   * appData so every tab reflects the cleared state.
+   */
+  async function openResetYearModal(year) {
+    const modal = document.getElementById('reset-year-modal');
+    const body = document.getElementById('reset-year-modal-body');
+    const confirmBtn = document.getElementById('reset-year-confirm-btn');
+    const cancelBtn = document.getElementById('reset-year-cancel-btn');
+    const closeBtn = document.getElementById('reset-year-modal-close');
+    if (!modal || !body || !confirmBtn) return;
+
+    body.innerHTML = `<p style="color:var(--text-muted)">${esc(I18n.t('resetYear.loading') || 'Loading…')}</p>`;
+    confirmBtn.disabled = true;
+    modal.classList.remove('hidden');
+
+    let preview;
+    try {
+      const resp = await fetch(`/api/year/${year}/reset-preview`);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      preview = await resp.json();
+    } catch (err) {
+      body.innerHTML = `<p style="color:var(--danger)">${esc(I18n.t('resetYear.previewError') || 'Could not load reset preview.')} ${esc(err.message)}</p>`;
+      return;
+    }
+
+    const t = (k, fallback) => I18n.t(k) || fallback;
+    const hasAnything =
+      (preview.rawFiles && preview.rawFiles.length) ||
+      (preview.yearDataFields && preview.yearDataFields.length) ||
+      preview.tradeCount > 0 ||
+      preview.stockAwardsAssigned > 0 ||
+      preview.ledgerVests > 0 ||
+      preview.ledgerSales > 0;
+
+    if (!hasAnything) {
+      body.innerHTML = `
+        <p>${esc(t('resetYear.nothingToReset', `Nothing to reset for year ${year}. No documents, trades, or manual entries are stored for this year.`).replace('{year}', year))}</p>
+      `;
+      confirmBtn.disabled = true;
+      // Allow closing only.
+      const cleanup = () => {
+        modal.classList.add('hidden');
+        cancelBtn.removeEventListener('click', cleanup);
+        closeBtn.removeEventListener('click', cleanup);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+      };
+      const onBackdrop = (e) => { if (e.target === modal) cleanup(); };
+      const onKey = (e) => { if (e.key === 'Escape') cleanup(); };
+      cancelBtn.addEventListener('click', cleanup);
+      closeBtn.addEventListener('click', cleanup);
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey);
+      return;
+    }
+
+    const rawList = (preview.rawFiles || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
+    const fieldsList = (preview.yearDataFields || []).map(f => `<code style="background:var(--bg-secondary); padding:0.1rem 0.3rem; border-radius:3px; margin-right:0.3rem; display:inline-block; margin-bottom:0.2rem;">${esc(f)}</code>`).join('');
+
+    body.innerHTML = `
+      <p style="margin-top:0;">${esc(t('resetYear.intro', `You are about to permanently wipe everything stored for year ${year}. This cannot be undone.`).replace('{year}', year))}</p>
+
+      <h4 style="margin:1rem 0 0.5rem; font-size:0.9rem;">${esc(t('resetYear.willDelete', 'Will be deleted:'))}</h4>
+      <ul style="margin:0; padding-left:1.2rem; font-size:0.85rem;">
+        ${(preview.rawFiles || []).length > 0 ? `<li>${esc(t('resetYear.rawFiles', '{n} raw document file(s):').replace('{n}', preview.rawFiles.length))}<ul style="margin-top:0.3rem;">${rawList}</ul></li>` : ''}
+        ${(preview.yearDataFields || []).length > 0 ? `<li>${esc(t('resetYear.yearDataFields', '{n} parsed/manual field(s):').replace('{n}', preview.yearDataFields.length))}<div style="margin-top:0.3rem;">${fieldsList}</div></li>` : ''}
+        ${preview.tradeCount > 0 ? `<li>${esc(t('resetYear.trades', '{n} trade record(s)').replace('{n}', preview.tradeCount))}</li>` : ''}
+        ${preview.ledgerVests > 0 ? `<li>${esc(t('resetYear.ledgerVests', '{n} stock-vest ledger entry/entries').replace('{n}', preview.ledgerVests))}</li>` : ''}
+        ${preview.ledgerSales > 0 ? `<li>${esc(t('resetYear.ledgerSales', '{n} sale ledger entry/entries').replace('{n}', preview.ledgerSales))}</li>` : ''}
+        ${preview.stockAwardsAssigned > 0 ? `<li>${esc(t('resetYear.stockAwards', '{n} stock award(s) will be unassigned from this year (records kept for other years).').replace('{n}', preview.stockAwardsAssigned))}</li>` : ''}
+      </ul>
+
+      <p style="margin:1rem 0 0.5rem; font-size:0.85rem; color:var(--text-muted);">${esc(t('resetYear.preserved', 'Stock award records, ledger entries from other years, BNR rates, and CASS thresholds are NOT affected.'))}</p>
+
+      <p style="margin:1rem 0 0.3rem; font-size:0.9rem;"><strong>${esc(t('resetYear.typeToConfirm', 'Type {year} to confirm:').replace('{year}', year))}</strong></p>
+      <input type="text" id="reset-year-confirm-input" autocomplete="off" style="width:100%; padding:0.5rem; font-size:1rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-primary); color:var(--text-primary);">
+    `;
+
+    const input = document.getElementById('reset-year-confirm-input');
+    const updateBtn = () => {
+      confirmBtn.disabled = (input.value || '').trim() !== String(year);
+    };
+    if (input) {
+      input.addEventListener('input', updateBtn);
+      setTimeout(() => input.focus(), 50);
+    }
+    updateBtn();
+
+    const cleanup = (result) => {
+      modal.classList.add('hidden');
+      confirmBtn.removeEventListener('click', onConfirm);
+      cancelBtn.removeEventListener('click', onCancel);
+      closeBtn.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKey);
+      if (input) input.removeEventListener('input', updateBtn);
+      if (result === 'confirm') performResetYear(year);
+    };
+    const onConfirm = () => { if (!confirmBtn.disabled) cleanup('confirm'); };
+    const onCancel = () => cleanup('cancel');
+    const onBackdrop = (e) => { if (e.target === modal) cleanup('cancel'); };
+    const onKey = (e) => { if (e.key === 'Escape') cleanup('cancel'); };
+    confirmBtn.addEventListener('click', onConfirm);
+    cancelBtn.addEventListener('click', onCancel);
+    closeBtn.addEventListener('click', onCancel);
+    modal.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey);
+  }
+
+  /**
+   * Execute the year reset on the server and refresh local app state.
+   */
+  async function performResetYear(year) {
+    try {
+      const resp = await fetch(`/api/year/${year}`, { method: 'DELETE' });
+      if (!resp.ok) {
+        const errPayload = await resp.json().catch(() => ({}));
+        throw new Error(errPayload.error || `HTTP ${resp.status}`);
+      }
+      const summary = await resp.json();
+      // Invalidate the compute cache and any DUF picks for the year so the UI
+      // re-renders cleanly.
+      _computeDataVersion++;
+      if (typeof _dufImports !== 'undefined' && _dufImports.delete) _dufImports.delete(year);
+      if (typeof _dufPicks !== 'undefined' && _dufPicks.delete) _dufPicks.delete(year);
+      if (typeof _d205Entries !== 'undefined' && _d205Entries.delete) _d205Entries.delete(year);
+
+      // Re-fetch the global app state so every tab reflects the wipe.
+      try {
+        const dataResp = await fetch('/api/data');
+        if (dataResp.ok) {
+          appData = await dataResp.json();
+        }
+      } catch (_) { /* best-effort refresh */ }
+
+      // Reload stock awards (since some may now be unassigned).
+      try {
+        const swResp = await fetch('/api/stock-awards');
+        if (swResp.ok) window._cachedStockAwards = await swResp.json();
+      } catch (_) { /* best-effort */ }
+
+      // Re-render the form for the cleared year and refresh tabs.
+      try { populateForm(); } catch (_) {}
+      try { if (typeof renderTaxes === 'function') renderTaxes(); } catch (_) {}
+      try { if (typeof renderImportsPanel === 'function') renderImportsPanel(detectActiveImports(year)); } catch (_) {}
+
+      const parts = [];
+      if (summary.rawFilesDeleted) parts.push(`${summary.rawFilesDeleted} ${I18n.t('resetYear.summaryRawFiles') || 'fișiere'}`);
+      if (summary.yearDataDeleted) parts.push(I18n.t('resetYear.summaryYearData') || 'date an');
+      if (summary.tradesDeleted) parts.push(`${summary.tradesDeleted} ${I18n.t('resetYear.summaryTrades') || 'tranzacții'}`);
+      if (summary.vestsDeleted || summary.salesDeleted) parts.push(`${summary.vestsDeleted + summary.salesDeleted} ${I18n.t('resetYear.summaryLedger') || 'ledger'}`);
+      if (summary.awardsUnassigned) parts.push(`${summary.awardsUnassigned} ${I18n.t('resetYear.summaryAwards') || 'awards'}`);
+      const msg = (I18n.t('resetYear.success') || 'Year {year} reset.').replace('{year}', year)
+        + (parts.length ? ' ' + parts.join(', ') + '.' : '');
+      alert(msg);
+    } catch (err) {
+      alert((I18n.t('resetYear.error') || 'Reset failed:') + ' ' + err.message);
+    }
   }
 
   /**

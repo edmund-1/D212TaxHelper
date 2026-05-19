@@ -786,5 +786,32 @@
   "bik": {
     "assignSuccess": "{count} stock award(uri) asignat(e) la {year}",
     "unassignSuccess": "{count} stock award(uri) deasignat(e)"
+  },
+  "resetYear": {
+    "button": "Reset an",
+    "tooltip": "Șterge toate documentele importate și datele pentru anul selectat",
+    "modalTitle": "Reset an",
+    "loading": "Se încarcă lista…",
+    "previewError": "Nu s-a putut încărca lista pentru reset.",
+    "nothingToReset": "Nimic de șters pentru anul {year}. Nu există documente, tranzacții sau date manuale pentru acest an.",
+    "intro": "Vei șterge definitiv tot ce este stocat pentru anul {year}. Acțiunea nu poate fi anulată.",
+    "willDelete": "Se va șterge:",
+    "rawFiles": "{n} fișier(e) document brut:",
+    "yearDataFields": "{n} câmp(uri) parsate/manuale:",
+    "trades": "{n} înregistrare/înregistrări de tranzacții",
+    "ledgerVests": "{n} intrare/intrări vest în ledger",
+    "ledgerSales": "{n} intrare/intrări vânzare în ledger",
+    "stockAwards": "{n} stock award(uri) vor fi deasignate de la acest an (înregistrările rămân pentru alți ani).",
+    "preserved": "Stock awards, intrările ledger din alți ani, cursurile BNR și pragurile CASS NU sunt afectate.",
+    "typeToConfirm": "Tastează {year} pentru a confirma:",
+    "cancel": "Renunță",
+    "confirm": "Resetează anul",
+    "success": "Anul {year} resetat.",
+    "error": "Resetarea a eșuat:",
+    "summaryRawFiles": "fișiere brute",
+    "summaryYearData": "date an",
+    "summaryTrades": "tranzacții",
+    "summaryLedger": "intrări ledger",
+    "summaryAwards": "awards deasignate"
   }
 }

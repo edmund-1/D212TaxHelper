@@ -788,5 +788,32 @@
   "bik": {
     "assignSuccess": "{count} stock award(s) assigned to {year}",
     "unassignSuccess": "{count} stock award(s) unassigned"
+  },
+  "resetYear": {
+    "button": "Reset year",
+    "tooltip": "Wipe all imported documents and data for the selected year",
+    "modalTitle": "Reset year",
+    "loading": "Loading manifest…",
+    "previewError": "Could not load reset preview.",
+    "nothingToReset": "Nothing to reset for year {year}. No documents, trades, or manual entries are stored for this year.",
+    "intro": "You are about to permanently wipe everything stored for year {year}. This cannot be undone.",
+    "willDelete": "Will be deleted:",
+    "rawFiles": "{n} raw document file(s):",
+    "yearDataFields": "{n} parsed/manual field(s):",
+    "trades": "{n} trade record(s)",
+    "ledgerVests": "{n} stock-vest ledger entry/entries",
+    "ledgerSales": "{n} sale ledger entry/entries",
+    "stockAwards": "{n} stock award(s) will be unassigned from this year (records kept for other years).",
+    "preserved": "Stock award records, ledger entries from other years, BNR rates, and CASS thresholds are NOT affected.",
+    "typeToConfirm": "Type {year} to confirm:",
+    "cancel": "Cancel",
+    "confirm": "Reset year",
+    "success": "Year {year} reset.",
+    "error": "Reset failed:",
+    "summaryRawFiles": "raw file(s)",
+    "summaryYearData": "year data",
+    "summaryTrades": "trade(s)",
+    "summaryLedger": "ledger entry/entries",
+    "summaryAwards": "award(s) unassigned"
   }
 }

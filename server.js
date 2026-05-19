@@ -410,6 +410,96 @@ app.get('/api/raw', (req, res) => {
   }
 });
 
+// GET /api/year/:year/reset-preview
+//
+// Returns a manifest of EVERYTHING that the "Reset year" action would wipe,
+// without actually changing any state. Used by the confirmation modal so the
+// user can see exactly what they are about to lose (raw files, trades, ledger
+// entries, assigned stock awards, parsed year_data).
+app.get('/api/year/:year/reset-preview', (req, res) => {
+  try {
+    const year = parseInt(req.params.year, 10);
+    if (!year || year < 2019 || year > 2099) {
+      return res.status(400).json({ error: 'Invalid year' });
+    }
+    const rawSuffix = `_${year}_raw.txt`;
+    let rawFiles = [];
+    try {
+      rawFiles = fs.readdirSync(DATA_DIR).filter(f => f.endsWith(rawSuffix)).sort();
+    } catch (_) { /* DATA_DIR may not exist yet */ }
+    const yearData = db.getYearData(year) || {};
+    const yearDataFields = Object.keys(yearData).filter(k => k !== 'year');
+    const tradeCount = db.getTradesByYear(year).length;
+    const stockAwards = (db.getAllStockAwards() || []).filter(a => a._assignedYear === year);
+    const ledgerEntries = (ledger.load().entries || []).filter(e => !e.deleted && e.year === year);
+    const vestCount = ledgerEntries.filter(e => e.type === 'stock_vest').length;
+    const saleCount = ledgerEntries.filter(e => e.type === 'sale').length;
+    res.json({
+      year,
+      rawFiles,
+      yearDataFields,
+      tradeCount,
+      stockAwardsAssigned: stockAwards.length,
+      ledgerVests: vestCount,
+      ledgerSales: saleCount,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/year/:year
+//
+// "Reset year" action. Wipes every piece of state tied to the year:
+//   1. Removes all data/{type}_{year}_raw.txt files (source-of-truth uploads)
+//   2. Deletes the year_data row (parsed Fidelity, XTB, 1042-S, manual entries)
+//   3. Deletes trades whose intrinsic year matches
+//   4. Soft-deletes ledger vest + sale entries for the year
+//   5. Unassigns stock awards manually assigned to this year (kept in DB so
+//      other years are not affected; user can reassign on Add Data)
+// Stock awards records themselves are NOT deleted because they are global
+// (multi-year). Documents from other years remain untouched.
+app.delete('/api/year/:year', (req, res) => {
+  try {
+    const year = parseInt(req.params.year, 10);
+    if (!year || year < 2019 || year > 2099) {
+      return res.status(400).json({ error: 'Invalid year' });
+    }
+
+    const summary = { rawFilesDeleted: 0, yearDataDeleted: false, tradesDeleted: 0,
+      vestsDeleted: 0, salesDeleted: 0, awardsUnassigned: 0 };
+
+    // 1. Raw files
+    const rawSuffix = `_${year}_raw.txt`;
+    try {
+      const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith(rawSuffix));
+      for (const f of files) {
+        try { fs.unlinkSync(path.join(DATA_DIR, f)); summary.rawFilesDeleted++; } catch (_) { /* ignore */ }
+      }
+    } catch (_) { /* DATA_DIR missing - nothing to delete */ }
+
+    // 2. year_data
+    const existing = db.getYearData(year);
+    if (existing) {
+      db.deleteYear(year);
+      summary.yearDataDeleted = true;
+    }
+
+    // 3. Trades (intrinsic year)
+    summary.tradesDeleted = db.deleteTradesByYear(year);
+
+    // 4 + 5. Ledger + stock awards
+    const purge = ledger.purgeYear(year);
+    summary.vestsDeleted = purge.vestsDeleted;
+    summary.salesDeleted = purge.salesDeleted;
+    summary.awardsUnassigned = purge.awardsUnassigned;
+
+    res.json({ ok: true, year, ...summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/raw/:filename - Delete a raw file and its parsed data
 app.delete('/api/raw/:filename', (req, res) => {
   try {
