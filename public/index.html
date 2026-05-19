@@ -782,13 +782,32 @@
           <p class="subtitle" data-i18n="validate.d205Subtitle"><strong>De ce manual:</strong> XML-ul DUF conține totalul agregat <code>cass_ven_inv</code> (ex. 513.258 lei) pentru CASS, dar NU și breakdown-ul per plătitor. Detaliile (XTB / ING / SALT etc.) sunt vizibile doar în portal la „Sursa informațiilor în detaliu → Toate sursele". Introdu-le aici manual ca să le putem pune față în față cu PDF-urile tale de la brokeri.</p>
 
           <details style="margin-top:0.5rem;">
-            <summary style="cursor:pointer;color:var(--accent);" data-i18n="validate.d205HowToCollect">📖 Cum colectez detaliile din portalul DUF?</summary>
-            <ol style="font-size:0.85rem;margin-top:0.5rem;line-height:1.6;">
-              <li data-i18n="validate.d205Step1">În wizardul DUF, după precompletare, la fiecare sursă de venit există butonul <strong>„Sursa informațiilor în detaliu"</strong>.</li>
-              <li data-i18n="validate.d205Step2">Click pe el → un dialog modal cu tab <strong>„Toate sursele"</strong> arată întregul tabel D205.</li>
-              <li data-i18n="validate.d205Step3">Pentru fiecare rând: <em>Cod fiscal plătitor</em>, <em>Nume firmă</em>, <em>Categoria de venit</em> (09 dobânzi, 26 capgains ≥1y, 27 capgains &lt;1y), <em>Venit brut</em>, <em>Impozit</em>.</li>
-              <li data-i18n="validate.d205Step4">Folosește butoanele de mai jos sau lipește direct dintr-un copy-paste pentru a le adăuga aici.</li>
-            </ol>
+            <summary style="cursor:pointer;color:var(--accent);" data-i18n="validate.d205HowToCollect">📖 Cum colectez detaliile din portalul DUF? (2 căi)</summary>
+            <div style="margin-top:0.75rem;padding:0.5rem 0;border-top:1px solid var(--border);">
+              <p style="font-weight:600;margin:0.3rem 0;" data-i18n="validate.d205PathA">Calea A — în wizardul „Preluare/modificare date"</p>
+              <ol style="font-size:0.85rem;margin:0.3rem 0 0.6rem;line-height:1.6;">
+                <li data-i18n="validate.d205PathA1">În pagina <strong>Preluare/modificare date</strong> (după ce ai apăsat „Precompletare (recomandat)"), comutatorul din dreapta sus arată <strong>„Modific/Vizualizez"</strong>.</li>
+                <li data-i18n="validate.d205PathA2">Pentru fiecare pas al wizardului există butonul albastru <strong>„Sursa informațiilor în detaliu"</strong> (sub bara de progres).</li>
+                <li data-i18n="validate.d205PathA3">Click → modal cu 2 tab-uri: <strong>„Acest pas"</strong> (doar sursa curentă) și <strong>„Toate sursele"</strong> (D205 cumulat, ce ai nevoie tu pentru breakdown).</li>
+              </ol>
+              <p style="margin:0 0 0.5rem;"><img src="assets/screenshots/duf-step1-prelaure-modificare.png" alt="Pasul Preluare/modificare date cu butonul Sursa informațiilor în detaliu" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius);"></p>
+              <p style="margin:0 0 0.5rem;"><img src="assets/screenshots/duf-step4-sursa-modal.png" alt="Modalul Sursa informațiilor în detaliu cu tab-urile Acest pas / Toate sursele" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius);"></p>
+            </div>
+
+            <div style="margin-top:0.75rem;padding:0.5rem 0;border-top:1px solid var(--border);">
+              <p style="font-weight:600;margin:0.3rem 0;" data-i18n="validate.d205PathB">Calea B — via „Centralizator"</p>
+              <ol style="font-size:0.85rem;margin:0.3rem 0 0.6rem;line-height:1.6;">
+                <li data-i18n="validate.d205PathB1">Tot pe pagina precompletării, comută din dreapta sus pe butonul <strong>„Centralizator"</strong>.</li>
+                <li data-i18n="validate.d205PathB2">Apasă <strong>„Deschide toate"</strong> ca să expandezi toate sursele de venit.</li>
+                <li data-i18n="validate.d205PathB3">La fiecare sursă apare un buton <strong>„Sursa informațiilor în detaliu"</strong> (acolaș modal cu „Toate sursele").</li>
+                <li data-i18n="validate.d205PathB4">Tabelul „Toate sursele" cuprinde: <em>Cod fiscal plătitor</em>, <em>Nume firmă plătitor</em>, <em>Categoria de venit (d205/C168)</em> — coduri ca <code>09</code> (dobânzi), <code>26</code> (capgains ≥1y), <code>27</code> (capgains &lt;1y), <em>Venit brut</em>, <em>Impozit</em>.</li>
+              </ol>
+              <p style="margin:0 0 0.5rem;"><img src="assets/screenshots/duf-step2-centralizator.png" alt="Pagina Centralizator cu toate sursele expandate" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius);"></p>
+              <p style="margin:0 0 0.5rem;"><img src="assets/screenshots/duf-step3-cap14-detail.png" alt="Detaliu sursă de venit cu butonul Sursa informațiilor în detaliu" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius);"></p>
+            </div>
+
+            <p style="font-size:0.8rem;color:var(--text-muted);font-style:italic;margin-top:0.5rem;" data-i18n="validate.d205ScreenshotNote">Capturi de ecran anonimizate, doar pentru referință. Sumele și datele de identificare reale au fost mascate.</p>
+            <p style="font-size:0.85rem;margin-top:0.5rem;" data-i18n="validate.d205Step4">După ce ai datele, folosește butoanele de mai jos: <strong>+ Adaugă rând</strong> pentru introducere manuală, sau <strong>📋 Lipește din clipboard</strong> dacă ai copiat direct din tabel.</p>
           </details>
 
           <div style="margin-top:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
