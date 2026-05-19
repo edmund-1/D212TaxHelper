@@ -1535,28 +1535,82 @@ const App = (() => {
     // Capital gains tax rate: 16% from 2026, 10% for 2025 and earlier
     const capGainsTaxRate = year >= 2026 ? 0.16 : 0.10;
 
-    // From US broker data > declaratie > fidelity statement YTD > 1042-S > investment report
-    let dividendsUSD = fd.dividends?.grossUSD || decl.dividends?.grossUSD || yd.fidelityDividendsYTD || f1042sDivUSD || inv.totalDividends || 0;
-    let usDivTaxPaidUSD = fd.dividends?.foreignTaxUSD || yd.fidelityTaxWithheldYTD || f1042sTaxUSD || inv.taxWithheld || 0;
-    let dividendsRON = fd.dividends?.grossRON || decl.dividends?.grossRON || 0;
-    // Auto-compute dividendsRON from USD if no RON value available (e.g. 1042-S only)
-    if (!dividendsRON && dividendsUSD > 0) dividendsRON = dividendsUSD * rate;
-    let capitalGainsTaxableRON = fd.capitalGains?.taxableRON || decl.capitalGains?.taxableRON || 0;
-    let capitalGainsSaleUSD = fd.capitalGains?.saleUSD || decl.capitalGains?.saleUSD || 0;
-    let capitalGainsCostUSD = fd.capitalGains?.costUSD || decl.capitalGains?.costUSD || 0;
-    let salaryDeduction = fd.capitalGains?.salaryDeductionRON || decl.capitalGains?.salaryDeductionRON || 0;
-    let interestIncomeRON = adv.interestIncome || 0;
-    let interestTaxRON = adv.interestTax || 0;
+    // ---- Trade aggregation + yearly stock-award filtering (used as inputs to the resolvers below) ----
+    const yearAlloc = ledgerAllocations[year] || {};
+    const allAwardsForCalc = (window._cachedStockAwards || []);
+    const yearAwards = allAwardsForCalc.filter(r => r._assignedYear === year);
+    const tradeProceedsUSD = (yd.fidelityTrades && yd.fidelityTrades.totalNet) || 0;
+    const tvPort = yd.tradevillePortfolio || {};
+
+    // ---- Phase 3 calc-engine refactor (2026-05-19) ----
+    // The inline `||` priority chains that used to live here are now driven
+    // by per-category resolvers in lib/income-resolvers.js. The resolvers
+    // implement the tier model documented in lib/source-resolver.js and
+    // produce a sourceMap that the UI consumes for 📄 / ✋ / 🛠️ badges.
+    //
+    // Resolvers are loaded via <script src="/lib/income-resolvers.js"> in
+    // index.html; the same module is require()d by the server-side tests
+    // (test/income-resolvers.test.js + test/source-resolver.test.js) so the
+    // browser and the test runner exercise identical code.
+    const _Resolvers = (typeof window !== 'undefined' ? window.IncomeResolvers : null);
+    if (!_Resolvers) {
+      throw new Error('IncomeResolvers global missing — was /lib/income-resolvers.js loaded?');
+    }
+    const _ctx = {
+      year, usdRate: rate, eurRate,
+      yearAlloc, yearAwards,
+      trades: yd.fidelityTrades || {},
+    };
+    const _resUsDiv = _Resolvers.resolveUsDividends(yd, _ctx);
+    const _resRoDiv = _Resolvers.resolveRoBrokerDividends(yd, _ctx);
+    const _resInt = _Resolvers.resolveInterest(yd, _ctx);
+    const _resUsCG = _Resolvers.resolveUsCapitalGains(yd, _ctx);
+    const _resRoCG = _Resolvers.resolveRoBrokerGains(yd, _ctx);
+    const _resBIK = _Resolvers.resolveSalaryBIK(yd, _ctx);
+
+    let dividendsUSD = _resUsDiv.grossUSD;
+    let usDivTaxPaidUSD = _resUsDiv.foreignTaxUSD;
+    let dividendsRON = _resUsDiv.grossRON;
+    let capitalGainsSaleUSD = _resUsCG.saleUSD;
+    let capitalGainsCostUSD = _resUsCG.costUSD;
+    let capitalGainsTaxableRON = _resUsCG.taxableRON;
+    let salaryDeduction = _resUsCG.salaryDeductionRON;
+    let interestIncomeRON = _resInt.incomeRON;
+    let interestTaxRON = _resInt.taxWithheldRON;
+    // Foreign-only portion exposed for the legacy renderer that displays
+    // bank + foreign as distinct rows in the income breakdown.
+    let roInterestRON = _resInt.foreignIncomeRON;
+    let dividendsRON_ro = _resRoDiv.grossRON;
+    let roDivTaxWithheld = _resRoDiv.taxWithheldRON;
+    let roLongTermGainRON = _resRoCG.longGainRON;
+    let roShortTermGainRON = _resRoCG.shortGainRON;
+    let capitalGainsRON_ro = _resRoCG.totalGainRON;
+    let currentYearLossRON = _resRoCG.currentYearLossRON;
+    let roPortTaxWithheld = _resRoCG.taxWithheldRON;
+    let salaryTaxedRON = _resBIK.taxedRON;
+    let withholding = _resBIK.withholdingRON;
+
     let usCassTax = fd.cass?.cassRON || 0;
     let usTotalPaid = fd.totalPaid || 0;
 
-    // From trade confirmations (US sold activity)
-    let tradeProceedsUSD = trades.totalNet || 0;
+    // Romania-broker EUR/USD income & tax components are still surfaced in the
+    // result object because several downstream renderers display them as
+    // distinct rows (Income Details "EUR" / "USD" lines, manual-country
+    // breakdown, etc.). The resolver already sums them into the totals; these
+    // standalone constants are display-only.
+    const roEurDiv = parseFloat(yd.roEurDividends) || 0;
+    const roEurDivTax = parseFloat(yd.roEurDivTaxPaid) || 0;
+    const roUsdDiv = parseFloat(yd.roUsdDividends) || 0;
+    const roUsdDivTax = parseFloat(yd.roUsdDivTaxPaid) || 0;
+    const roEurInt = parseFloat(yd.roEurInterest) || 0;
+    const roEurIntTax = parseFloat(yd.roEurInterestTaxPaid) || 0;
+    const roUsdInt = parseFloat(yd.roUsdInterest) || 0;
+    const roUsdIntTax = parseFloat(yd.roUsdInterestTaxPaid) || 0;
 
     // Determine US broker sources from trades
     const tradeSources = new Set();
-    if (Array.isArray(trades.trades)) {
-      for (const t of trades.trades) {
+    if (Array.isArray(yd.fidelityTrades && yd.fidelityTrades.trades)) {
+      for (const t of yd.fidelityTrades.trades) {
         if (t.source === 'ms_statement') tradeSources.add('Morgan Stanley');
         else if (t.source === 'fidelity_statement') tradeSources.add('Fidelity');
         else tradeSources.add('Fidelity');
@@ -1584,135 +1638,22 @@ const App = (() => {
     if (yd.tradevillePortfolio) roSources.add('Tradeville');
     if (yd.roBroker) roSources.add(yd.roBroker);
     const roBrokerLabel = roSources.size > 0 ? ' (' + [...roSources].join(' & ') + ')' : '';
-    // Use ledger allocations for ESPP cost basis (FIFO-computed server-side)
-    const yearAlloc = ledgerAllocations[year] || {};
-    // ANAF: only ESPP contributions (actual money paid) are deductible as cost basis
-    // Fidelity cost basis (vest FMV) is NOT deductible — RSU shares are taxed on full sale proceeds
-    if (!capitalGainsCostUSD && yearAlloc.esppCostUSD > 0) {
-      capitalGainsCostUSD = yearAlloc.esppCostUSD;
-    }
-    if (!capitalGainsSaleUSD && tradeProceedsUSD > 0) {
-      capitalGainsSaleUSD = trades.totalProceeds || 0;
-    }
-    if (!capitalGainsTaxableRON && tradeProceedsUSD > 0) {
-      const costUSD = capitalGainsCostUSD || 0;
-      capitalGainsTaxableRON = (tradeProceedsUSD - costUSD) * rate;
-    }
 
-    // Romania broker data from imported reports (XTB + Tradeville).
-    // Per Romanian fiscal rules (Cod fiscal art. 119 + D212), capital gains from
-    // transferul titlurilor de valoare are taxed on the NET amount (gain - loss)
-    // for each holding-period bucket (long >= 1yr / short < 1yr) within the year.
-    // Net losses are surfaced as currentYearLossRON for explicit carry-forward.
-    const tvPort = yd.tradevillePortfolio || {};
-    let dividendsRON_ro = xtbDiv.dividends?.grossRON || 0;
-    const xtbLongGain = xtbPort.longTerm?.gainRON || 0;
-    const xtbLongLoss = xtbPort.longTerm?.lossRON || 0;
-    const xtbShortGain = xtbPort.shortTerm?.gainRON || 0;
-    const xtbShortLoss = xtbPort.shortTerm?.lossRON || 0;
-    const tvLongGain = tvPort.longTerm?.gainRON || 0;
-    const tvLongLoss = tvPort.longTerm?.lossRON || 0;
-    const tvShortGain = tvPort.shortTerm?.gainRON || 0;
-    const tvShortLoss = tvPort.shortTerm?.lossRON || 0;
-    const roLongNet = (xtbLongGain - xtbLongLoss) + (tvLongGain - tvLongLoss);
-    const roShortNet = (xtbShortGain - xtbShortLoss) + (tvShortGain - tvShortLoss);
-    let roLongTermGainRON = Math.max(0, roLongNet);
-    let roShortTermGainRON = Math.max(0, roShortNet);
-    // Loss in either bucket carries forward; expose total for D212 Rd.5-6 next year.
-    let currentYearLossRON = Math.max(0, -roLongNet) + Math.max(0, -roShortNet);
-    let capitalGainsRON_ro = roLongTermGainRON + roShortTermGainRON;
-    let roDivTaxWithheld = xtbDiv.dividends?.taxWithheldRON || 0;
-    let roInterestRON = xtbDiv.interest?.grossRON || 0;
-    let roPortTaxWithheld = (xtbPort.totalTaxWithheldRON || 0) + (tvPort.totalTaxWithheldRON || 0);
-    // Stock withholding: sum only from entries assigned to this year
-    const allAwardsForCalc = (window._cachedStockAwards || []);
-    const yearAwards = allAwardsForCalc.filter(r => r._assignedYear === year);
-    let withholding = yearAwards.reduce((s, r) => s + (parseFloat(r.stock_withholding) || 0), 0);
+    // Surface 1042-S US-source interest separately so cap14 can emit a
+    // categ_venit=2010 row without re-deriving it. Resolver path. The
+    // per-year-rate tax due/credit/toPay values are computed later, once
+    // `interestTaxRate` is in scope.
+    const usForeignInterestRON = _resInt.usForeignInterestRON;
+    const usForeignInterestTaxRON = _resInt.usForeignInterestTaxRON;
 
-    // BIK (stock_award_bik + espp_gain_bik) = income already taxed as salary in Romania
-    // This is the COST BASIS deducted from capital gains (D212 Rd.2 "Cheltuieli deductibile")
-    // stock_withholding = TAX paid on BIK through payroll (shown as "already paid", NOT deducted from base)
-    let salaryTaxedRON = yearAwards.reduce((s, r) => s + (parseFloat(r.stock_award_bik) || 0) + (parseFloat(r.espp_gain_bik) || 0), 0);
-
-    // Manual overrides
-    if (yd.salaryTaxedIncome !== undefined && yd.salaryTaxedIncome !== '') {
-      salaryTaxedRON = parseFloat(yd.salaryTaxedIncome) || 0;
-    }
-    if (yd.fidelityCost !== undefined && yd.fidelityCost !== '') {
-      capitalGainsCostUSD = parseFloat(yd.fidelityCost) || 0;
-    }
-    if (yd.fidelityDividends !== undefined && yd.fidelityDividends !== '') {
-      dividendsUSD = parseFloat(yd.fidelityDividends) || 0;
-      dividendsRON = dividendsUSD * rate;
-    }
-    if (yd.xtbDividends !== undefined && yd.xtbDividends !== '') dividendsRON_ro = parseFloat(yd.xtbDividends) || 0;
-    if (yd.roDivTaxPaid !== undefined && yd.roDivTaxPaid !== '') roDivTaxWithheld = parseFloat(yd.roDivTaxPaid) || 0;
-
-    // Romania broker dividends/interest denominated in EUR or USD -> convert and add
-    const roEurDiv = parseFloat(yd.roEurDividends) || 0;
-    const roEurDivTax = parseFloat(yd.roEurDivTaxPaid) || 0;
-    const roUsdDiv = parseFloat(yd.roUsdDividends) || 0;
-    const roUsdDivTax = parseFloat(yd.roUsdDivTaxPaid) || 0;
-    if (roEurDiv) dividendsRON_ro += roEurDiv * eurRate;
-    if (roUsdDiv) dividendsRON_ro += roUsdDiv * rate;
-    if (roEurDivTax) roDivTaxWithheld += roEurDivTax * eurRate;
-    if (roUsdDivTax) roDivTaxWithheld += roUsdDivTax * rate;
-
-    const roEurInt = parseFloat(yd.roEurInterest) || 0;
-    const roEurIntTax = parseFloat(yd.roEurInterestTaxPaid) || 0;
-    const roUsdInt = parseFloat(yd.roUsdInterest) || 0;
-    const roUsdIntTax = parseFloat(yd.roUsdInterestTaxPaid) || 0;
-    if (roEurInt) roInterestRON += roEurInt * eurRate;
-    if (roUsdInt) roInterestRON += roUsdInt * rate;
-    // 1042-S code 01 (US-source interest): per IRC §871(h) portfolio interest
-    // exemption the US typically withholds 0% to a foreign individual; RO
-    // taxes it as worldwide income at the standard interest rate (10% / 16%
-    // from 2026). The withheld amount (usually 0) is added to the foreign
-    // tax credit pool further down so any non-zero withholding offsets RO tax.
-    if (f1042sIntUSD) roInterestRON += f1042sIntUSD * rate;
-    // Interest tax withheld in foreign currency gets added to interestTaxPaid further below
-    const roForeignInterestTaxRON = (roEurIntTax * eurRate) + (roUsdIntTax * rate) + (f1042sIntTaxUSD * rate);
-
-    if (yd.fidelityGains !== undefined && yd.fidelityGains !== '') {
-      const gainsUSD = parseFloat(yd.fidelityGains) || 0;
-      capitalGainsSaleUSD = gainsUSD;
-      capitalGainsTaxableRON = (gainsUSD - capitalGainsCostUSD) * rate;
-    }
-    // Manual override: RO gains from country rows (with per-row currency: RON/EUR/USD)
-    if (yd.roGainsCountries && yd.roGainsCountries.length > 0) {
-      let manualLong = 0, manualShort = 0, manualTax = 0;
-      for (const c of yd.roGainsCountries) {
-        const cur = (c.currency || 'RON').toUpperCase();
-        const fx = cur === 'EUR' ? eurRate : (cur === 'USD' ? rate : 1);
-        manualLong += (c.longGain || 0) * fx;
-        manualShort += (c.shortGain || 0) * fx;
-        manualTax += (c.taxWithheld || 0) * fx;
-      }
-      roLongTermGainRON = manualLong;
-      roShortTermGainRON = manualShort;
-      capitalGainsRON_ro = manualLong + manualShort;
-      roPortTaxWithheld = manualTax;
-    }
-    // Legacy single-field overrides (backward compat)
-    if (yd.roGainsLong !== undefined && yd.roGainsLong !== '') roLongTermGainRON = parseFloat(yd.roGainsLong) || 0;
-    if (yd.roGainsShort !== undefined && yd.roGainsShort !== '') roShortTermGainRON = parseFloat(yd.roGainsShort) || 0;
-    if (yd.roGainsLong !== undefined || yd.roGainsShort !== undefined) capitalGainsRON_ro = roLongTermGainRON + roShortTermGainRON;
-    if (yd.roGainsTaxWithheld !== undefined && yd.roGainsTaxWithheld !== '') roPortTaxWithheld = parseFloat(yd.roGainsTaxWithheld) || 0;
-    if (yd.interestIncome !== undefined && yd.interestIncome !== '') interestIncomeRON = parseFloat(yd.interestIncome) || 0;
-    if (yd.exchangeRate !== undefined && yd.exchangeRate !== '') {
-      // recalc with new rate if manually entered
-    }
-    if (yd.stockWithholdingPaid !== undefined && yd.stockWithholdingPaid !== '') withholding = parseFloat(yd.stockWithholdingPaid) || 0;
-
-    // Add Romania broker interest to total interest
-    interestIncomeRON += roInterestRON;
 
     // Tax from declaration or US broker data (source of truth)
     // US dividends: US withholds 10% at source per RO-US treaty.
     // Romania taxes at divTaxRate. Credit fiscal = min(RO tax, US tax paid).
     // Difference to pay = max(0, RO tax - US credit).
-    const usForeignTaxUSD = (yd.usDivTaxPaid !== undefined && yd.usDivTaxPaid !== '' ? parseFloat(yd.usDivTaxPaid) : null) ?? fd.dividends?.foreignTaxUSD ?? usDivTaxPaidUSD ?? 0;
-    const usForeignTaxRON = fd.dividends?.foreignTaxRON || decl.dividends?.foreignTaxRON || (usForeignTaxUSD * rate);
+    // Resolver path: `_resUsDiv` already prioritizes override > ANAF > parsed > manual.
+    const usForeignTaxUSD = _resUsDiv.foreignTaxUSD;
+    const usForeignTaxRON = _resUsDiv.foreignTaxRON;
     // US dividends: RO tax due minus credit for US tax already paid
     // If D-212 has been imported (ANAF-validated), use its values directly
     const usDivTaxDueRON = dividendsRON * divTaxRate;
@@ -1782,19 +1723,17 @@ const App = (() => {
     }
     const interestTaxRate = (tr.roInterestRate != null ? tr.roInterestRate / 100 : (year >= 2026 ? 0.16 : 0.10));
     const interestTaxGross = interestIncomeRON * interestTaxRate;
-    const interestTaxPaidManual = (yd.interestTaxPaid !== undefined && yd.interestTaxPaid !== '' ? parseFloat(yd.interestTaxPaid) : null) ?? adv.interestTax ?? 0;
-    // Add tax withheld in EUR/USD on Romania broker interest (converted to RON)
-    const interestTaxPaid = interestTaxPaidManual + roForeignInterestTaxRON;
+    // Resolver-path: _resInt.taxWithheldRON already combines bank-style tax
+    // (override yd.interestTaxPaid OR adv.interestTax) with foreign tax (EUR
+    // + USD broker + 1042-S code 01). Preserves the pre-refactor formula.
+    const interestTaxPaid = _resInt.taxWithheldRON;
     const interestTax = Math.max(0, interestTaxGross - interestTaxPaid);
 
     // Foreign-source interest (US) split out so D212 cap14 can emit a separate
-    // categ_venit=2010 row. For 1042-S code 01 the US typically withholds 0%
-    // (IRC §871(h) portfolio interest exemption) so the credit is usually 0 —
-    // RO taxes the gross at the standard interest rate.
-    const usForeignInterestRON = f1042sIntUSD * rate;
-    const usForeignInterestTaxRON = f1042sIntTaxUSD * rate;
-    const usForeignInterestTaxDueRON = usForeignInterestRON * interestTaxRate;
-    const usForeignInterestCreditRON = Math.min(usForeignInterestTaxDueRON, usForeignInterestTaxRON);
+    // categ_venit=2010 row. Recompute using the proper interestTaxRate (the
+    // raw values above were a placeholder before we knew the per-year rate).
+    const usForeignInterestTaxDueRON = _resInt.usForeignInterestRON * interestTaxRate;
+    const usForeignInterestCreditRON = Math.min(usForeignInterestTaxDueRON, _resInt.usForeignInterestTaxRON);
     const usForeignInterestTaxToPayRON = Math.max(0, usForeignInterestTaxDueRON - usForeignInterestCreditRON);
 
     // ---- Additional income types ----
@@ -2135,7 +2074,17 @@ const App = (() => {
       // D212 Cap. I §2.1 — Foreign-source income block (gap D-7 prep)
       cap14Rows,
       // D212 oblig_realizat — CASS investments + global summary (etapa 2)
-      obligRealizat
+      obligRealizat,
+      // Phase 3 source map: per-field tier + label so the UI can render
+      // 📄 / ✋ / 🛠️ / 🏛️ badges and the Phase 4 conflict-detection banner.
+      sourceMap: {
+        usDividends: _resUsDiv.sources,
+        roBrokerDividends: _resRoDiv.sources,
+        interest: _resInt.sources,
+        usCapitalGains: _resUsCG.sources,
+        roBrokerGains: _resRoCG.sources,
+        salaryBIK: _resBIK.sources,
+      }
     };
   }
 

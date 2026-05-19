@@ -160,25 +160,33 @@ test('resolveInterest: bank adeverință + XTB + EUR + 1042-S all sum together',
     form1042s: [{ incomeCode: '01', grossIncomeUSD: 2, federalTaxWithheldUSD: 0 }],
   };
   const r = R.resolveInterest(yd, { usdRate: 4.9, eurRate: 5 });
+  // Income: bank 100 + XTB 50 + EUR 20*5 + 1042-S 2*4.9 = 259.80
   assert.equal(r.incomeRON, 100 + 50 + 20 * 5 + 2 * 4.9);
-  assert.equal(r.taxWithheldRON, 10 + 5 + 2 * 5 + 0);
+  // Tax: bank 10 + EUR 2*5 + 1042-S 0 = 20. XTB tax (5) is INTENTIONALLY NOT
+  // included — the existing semantic relies on the user saving it via the
+  // fillInputWithImport-populated input.
+  assert.equal(r.taxWithheldRON, 10 + 2 * 5 + 0);
 });
 
-test('resolveInterest: override replaces the total', () => {
+test('resolveInterest: override replaces bank-only; foreign still adds on top', () => {
+  // Existing semantic (preserved): yd.interestIncome OVERRIDES adv.interestIncome
+  // (the bank-style base), but foreign sources (XTB, EUR/USD, 1042-S) still
+  // accumulate on top. yd.interestTaxPaid behaves the same way for tax.
   const yd = {
     interestIncome: 500,
     interestTaxPaid: 50,
-    adeverinta: { interestIncome: 100 },
+    adeverinta: { interestIncome: 100, interestTax: 10 },  // overridden
+    xtbDividendsReport: { interest: { grossRON: 30 } },
     form1042s: [{ incomeCode: '01', grossIncomeUSD: 2, federalTaxWithheldUSD: 0 }],
   };
   const r = R.resolveInterest(yd, { usdRate: 4.9 });
-  assert.equal(r.incomeRON, 500);
+  // Income: override 500 + XTB 30 + 1042-S 2*4.9 = 539.80
+  assert.equal(r.incomeRON, 500 + 30 + 2 * 4.9);
+  // Tax: override 50 + 1042-S 0 = 50 (XTB tax not in pool)
   assert.equal(r.taxWithheldRON, 50);
-  // usForeignInterestRON is still surfaced (it's the 1042-S contribution
-  // that cap14 needs to emit a 2010 row, independent of the user's total
-  // override).
+  // usForeignInterestRON is still surfaced for cap14 emission.
   assert.equal(r.usForeignInterestRON, 2 * 4.9);
-  assert.equal(r.sources.incomeRON.tier, TIER.OVERRIDE);
+  assert.equal(r.sources.incomeRON.tier, 'override');
 });
 
 // ---------- resolveUsCapitalGains ----------

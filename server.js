@@ -200,6 +200,24 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+// Expose specific lib/ modules to the browser so the calc engine in app.js
+// can consume the SAME code path the server-side tests cover (no inline
+// mirror to keep in sync). Whitelisted to known dual-target modules — any
+// new lib/ module that should be browser-callable must be added here AND
+// gain a guarded `if (typeof window !== 'undefined') window.X = ...` shim.
+const BROWSER_LIB_FILES = new Set([
+  'source-resolver.js',
+  'income-resolvers.js',
+]);
+app.get('/lib/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename);
+  if (!BROWSER_LIB_FILES.has(filename)) {
+    return res.status(404).end();
+  }
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'lib', filename));
+});
+
 // File upload config - accept PDFs and images
 const upload = multer({
   dest: UPLOADS_DIR,
