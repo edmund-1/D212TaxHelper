@@ -1511,10 +1511,17 @@ const App = (() => {
     const fd = yd.fidelityData || {};
     const xtbDiv = yd.xtbDividendsReport || {};
     const xtbPort = yd.xtbPortfolio || {};
-    // Form 1042-S: aggregate dividend forms (income code 06)
-    const form1042s = (yd.form1042s || []).filter(f => f.incomeCode === '06');
+    // Form 1042-S: aggregate by income code so each code feeds the right
+    // line item. Code 06 = dividends, code 01 = interest (typically subject
+    // to the US "portfolio interest exemption" so withholding is 0; the
+    // gross is still taxable in RO as worldwide income for a fiscal resident).
+    const form1042sAll = (yd.form1042s || []);
+    const form1042s = form1042sAll.filter(f => f.incomeCode === '06');
     const f1042sDivUSD = form1042s.reduce((s, f) => s + (f.grossIncomeUSD || 0), 0);
     const f1042sTaxUSD = form1042s.reduce((s, f) => s + (f.federalTaxWithheldUSD || 0), 0);
+    const form1042sInt = form1042sAll.filter(f => f.incomeCode === '01');
+    const f1042sIntUSD = form1042sInt.reduce((s, f) => s + (f.grossIncomeUSD || 0), 0);
+    const f1042sIntTaxUSD = form1042sInt.reduce((s, f) => s + (f.federalTaxWithheldUSD || 0), 0);
     const savedRate = yd.exchangeRate ? parseFloat(yd.exchangeRate) : null;
     const defaultRate = exchangeRates[year]?.usdRon || 4.57;
     const rate = savedRate || decl.exchangeRate || defaultRate;
@@ -1657,8 +1664,14 @@ const App = (() => {
     const roUsdIntTax = parseFloat(yd.roUsdInterestTaxPaid) || 0;
     if (roEurInt) roInterestRON += roEurInt * eurRate;
     if (roUsdInt) roInterestRON += roUsdInt * rate;
+    // 1042-S code 01 (US-source interest): per IRC §871(h) portfolio interest
+    // exemption the US typically withholds 0% to a foreign individual; RO
+    // taxes it as worldwide income at the standard interest rate (10% / 16%
+    // from 2026). The withheld amount (usually 0) is added to the foreign
+    // tax credit pool further down so any non-zero withholding offsets RO tax.
+    if (f1042sIntUSD) roInterestRON += f1042sIntUSD * rate;
     // Interest tax withheld in foreign currency gets added to interestTaxPaid further below
-    const roForeignInterestTaxRON = (roEurIntTax * eurRate) + (roUsdIntTax * rate);
+    const roForeignInterestTaxRON = (roEurIntTax * eurRate) + (roUsdIntTax * rate) + (f1042sIntTaxUSD * rate);
 
     if (yd.fidelityGains !== undefined && yd.fidelityGains !== '') {
       const gainsUSD = parseFloat(yd.fidelityGains) || 0;
@@ -1773,6 +1786,16 @@ const App = (() => {
     // Add tax withheld in EUR/USD on Romania broker interest (converted to RON)
     const interestTaxPaid = interestTaxPaidManual + roForeignInterestTaxRON;
     const interestTax = Math.max(0, interestTaxGross - interestTaxPaid);
+
+    // Foreign-source interest (US) split out so D212 cap14 can emit a separate
+    // categ_venit=2010 row. For 1042-S code 01 the US typically withholds 0%
+    // (IRC §871(h) portfolio interest exemption) so the credit is usually 0 —
+    // RO taxes the gross at the standard interest rate.
+    const usForeignInterestRON = f1042sIntUSD * rate;
+    const usForeignInterestTaxRON = f1042sIntTaxUSD * rate;
+    const usForeignInterestTaxDueRON = usForeignInterestRON * interestTaxRate;
+    const usForeignInterestCreditRON = Math.min(usForeignInterestTaxDueRON, usForeignInterestTaxRON);
+    const usForeignInterestTaxToPayRON = Math.max(0, usForeignInterestTaxDueRON - usForeignInterestCreditRON);
 
     // ---- Additional income types ----
     // Rental income: 10% on net income (40% flat rate deduction per Cod Fiscal art. 84)
@@ -2023,6 +2046,13 @@ const App = (() => {
       capitalGainsTaxRON,
       interestTax,
       interestTaxPaid,
+      // Foreign-source interest (US 1042-S code 01) — surfaced separately so
+      // D212 cap14 can emit a categ_venit=2010 row without re-deriving it.
+      usForeignInterestRON,
+      usForeignInterestTaxRON,
+      usForeignInterestTaxDueRON,
+      usForeignInterestCreditRON,
+      usForeignInterestTaxToPayRON,
       salaryTaxedRON,
       cassTax,
       cassApplies,
