@@ -2072,16 +2072,19 @@ function parseForm1042S(text, year) {
     const trMatch = t.match(/3b Tax rate\s+(\d+\.\d+)/i);
     if (trMatch) f.taxRate = parseFloat(trMatch[1]);
 
-    // Federal tax withheld: try the numeric block pattern first (consistent on
-    // NFS-rendered copies), then fall back to a label search.
-    const numBlock = t.match(/1 9 7 4 1 2[\s\d]+\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)/);
+    // Federal tax withheld lives in the trailing numeric block, after an OCR
+    // identifier line (single digits separated by spaces, e.g. "1 9 7 9 1 00 3"
+    // or "1 9 7 4 1 2"). The six values that follow correspond to boxes
+    //   [1]=5 Withholding allowance, [2]=6 Net income, [3]=7a Federal tax withheld,
+    //   [4]=8  Tax by other agents,  [5]=9 Overwithheld,  [6]=10 Total credit.
+    // The label "7a Federal tax withheld" appears BEFORE the value block in the
+    // extracted text, so a naive `7a Federal tax withheld[\s\S]*?\d+\.\d{2}`
+    // greedy-skips into the gross-income line and captures the wrong number.
+    const numBlock = t.match(/\n((?:\d+\s){4,}\d+)\s*\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)/);
     if (numBlock) {
-      f.federalTaxWithheldUSD = parseFloat(numBlock[3]) || 0;
-      f.totalWithholdingCreditUSD = parseFloat(numBlock[6]) || 0;
-    }
-    if (!f.federalTaxWithheldUSD) {
-      const ftMatch = t.match(/7a Federal tax withheld[\s\S]*?(\d+\.\d{2})/i);
-      if (ftMatch) f.federalTaxWithheldUSD = parseFloat(ftMatch[1]) || 0;
+      // Capture groups are shifted by 1 (the OCR identifier captured at [1]).
+      f.federalTaxWithheldUSD = parseFloat(numBlock[4]) || 0;
+      f.totalWithholdingCreditUSD = parseFloat(numBlock[7]) || 0;
     }
 
     const waMatch = t.match(/12d Withholding agent.+name\s*\n(.+)/i);

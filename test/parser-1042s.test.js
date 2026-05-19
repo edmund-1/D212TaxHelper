@@ -211,3 +211,44 @@ code
   // first form's code while overwriting with the later non-zero gross.
   assert.equal(r.forms.length, 1);
 });
+
+// Regression: real NFS PDFs render the federal-tax-withheld value AFTER all
+// the labels, in a trailing numeric block. A naive `7a Federal tax withheld
+// [\s\S]*?\d+\.\d{2}` regex greedy-skips into the gross-income line and
+// captures the wrong number (e.g. $215 gross instead of $21 withheld).
+// This test pins the value-block parser to the NFS layout shape.
+test('parseForm1042S: federalTaxWithheld is read from the trailing numeric value block, not from the label position', () => {
+  const fixture = `
+UNIQUE FORM IDENTIFIER
+2 5 0 1 6 3 1 5 2 2
+1 Income
+code
+06
+2 Gross income
+215.00
+3b Tax rate 10.00
+7a Federal tax withheld
+12d Withholding agent's name
+EXAMPLE BROKER LLC
+13a Recipient's name
+JANE DOE
+13b Recipient's country code
+RO
+15c Ch. 4 status code15b Ch. 3 status code
+1 9 7 9 1 00 3
+0.00
+0.00
+21.00
+0.00
+0.00
+21.00
+COPY B
+`;
+  const r = parseForm1042S(fixture, 2025);
+  assert.equal(r.forms.length, 1);
+  const f = r.forms[0];
+  assert.equal(f.grossIncomeUSD, 215, 'gross income must come from box 2 (label-adjacent)');
+  assert.equal(f.taxRate, 10, 'tax rate must come from box 3b (label-adjacent)');
+  assert.equal(f.federalTaxWithheldUSD, 21, 'withheld must be 21 (box 7a), NOT 215 (gross)');
+  assert.equal(f.totalWithholdingCreditUSD, 21, 'total credit must be box 10 in the value block');
+});
