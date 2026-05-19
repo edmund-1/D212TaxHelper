@@ -26,6 +26,7 @@
         <button class="nav-btn active" data-tab="dashboard" data-i18n="nav.dashboard">Dashboard</button>
         <button class="nav-btn" data-tab="income" data-i18n="nav.income">Income Details</button>
         <button class="nav-btn" data-tab="taxes" data-i18n="nav.taxes">Tax Calculation</button>
+        <button class="nav-btn" data-tab="validate" data-i18n="nav.validate">Validate &amp; Prepare D212</button>
         <button class="nav-btn" data-tab="submit" data-i18n="nav.submit">D212 Submission Guide</button>
         <button class="nav-btn" data-tab="input" data-i18n="nav.input">Add Data</button>
         <button class="nav-btn" data-tab="import" data-i18n="nav.import">Import Document</button>
@@ -755,6 +756,60 @@
       </div>
     </section>
 
+    <!-- Validate & Prepare D212 Tab -->
+    <section id="tab-validate" class="tab-content">
+      <div class="card">
+        <h2 data-i18n="validate.title">🔬 Validare &amp; Pregătire D212</h2>
+        <p class="subtitle" data-i18n="validate.subtitle">Loc unic pentru: (1) validare cu XML-ul DUF, (2) tabelul cu valorile de introdus în portal, (3) detaliu D205 per plătitor (introdus manual din portal). Datele rămân local — nimic nu se salvează pe disc.</p>
+
+        <!-- 1. Import + validation -->
+        <div class="dcl-section" id="validate-duf-import-section" style="border-left:3px solid var(--accent);padding-left:1rem;">
+          <h3 data-i18n="validate.importTitle">📥 Import XML de la DUF</h3>
+          <p class="subtitle" data-i18n="validate.importSubtitle">Descarcă XML-ul din portalul DUF (cu datele tale precompletate) și încarcă-l aici. Validăm rând cu rând ce știe ANAF vs ce calculăm noi din PDF-urile broker.</p>
+
+          <div id="validate-duf-dropzone" style="margin-top:0.75rem;border:2px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;cursor:pointer;transition:background 0.15s;">
+            <p style="margin:0;color:var(--text-muted);font-size:0.95rem;" data-i18n="submit.dropzoneHint">📁 Trage XML-ul aici sau click pentru a-l selecta</p>
+            <p style="margin:0.3rem 0 0;color:var(--text-muted);font-size:0.75rem;" data-i18n="submit.dropzoneSubhint">Acceptă fișiere .xml de maxim 5 MB. Doar parser în memorie — fișierul nu părăsește calculatorul.</p>
+            <input type="file" id="validate-duf-file-input" accept=".xml,application/xml,text/xml" style="display:none;">
+          </div>
+
+          <div id="validate-duf-compare-result" style="margin-top:1rem;"></div>
+        </div>
+
+        <!-- 2. D205 detailed breakdown — manual entry because the XML aggregates everything -->
+        <div class="dcl-section" id="validate-d205-section" style="border-left:3px solid var(--warning,#b35900);padding-left:1rem;">
+          <h3 data-i18n="validate.d205Title">📑 Detaliu D205 per plătitor (manual)</h3>
+          <p class="subtitle" data-i18n="validate.d205Subtitle"><strong>De ce manual:</strong> XML-ul DUF conține totalul agregat <code>cass_ven_inv</code> (ex. 513.258 lei) pentru CASS, dar NU și breakdown-ul per plătitor. Detaliile (XTB / ING / SALT etc.) sunt vizibile doar în portal la „Sursa informațiilor în detaliu → Toate sursele". Introdu-le aici manual ca să le putem pune față în față cu PDF-urile tale de la brokeri.</p>
+
+          <details style="margin-top:0.5rem;">
+            <summary style="cursor:pointer;color:var(--accent);" data-i18n="validate.d205HowToCollect">📖 Cum colectez detaliile din portalul DUF?</summary>
+            <ol style="font-size:0.85rem;margin-top:0.5rem;line-height:1.6;">
+              <li data-i18n="validate.d205Step1">În wizardul DUF, după precompletare, la fiecare sursă de venit există butonul <strong>„Sursa informațiilor în detaliu"</strong>.</li>
+              <li data-i18n="validate.d205Step2">Click pe el → un dialog modal cu tab <strong>„Toate sursele"</strong> arată întregul tabel D205.</li>
+              <li data-i18n="validate.d205Step3">Pentru fiecare rând: <em>Cod fiscal plătitor</em>, <em>Nume firmă</em>, <em>Categoria de venit</em> (09 dobânzi, 26 capgains ≥1y, 27 capgains &lt;1y), <em>Venit brut</em>, <em>Impozit</em>.</li>
+              <li data-i18n="validate.d205Step4">Folosește butoanele de mai jos sau lipește direct dintr-un copy-paste pentru a le adăuga aici.</li>
+            </ol>
+          </details>
+
+          <div style="margin-top:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+            <button type="button" id="validate-d205-add" class="btn-primary" style="font-size:0.85rem;padding:0.4rem 0.9rem;" data-i18n="validate.d205AddRow">+ Adaugă rând</button>
+            <button type="button" id="validate-d205-paste" class="btn-secondary" style="font-size:0.85rem;padding:0.4rem 0.9rem;" data-i18n="validate.d205Paste">📋 Lipește din clipboard</button>
+            <button type="button" id="validate-d205-clear" class="btn-secondary" style="font-size:0.85rem;padding:0.4rem 0.9rem;background:var(--danger,#c53030);color:#fff;" data-i18n="validate.d205Clear">🗑 Șterge toate</button>
+          </div>
+
+          <div id="validate-d205-table" style="margin-top:0.75rem;"></div>
+          <div id="validate-d205-match-summary" style="margin-top:0.75rem;"></div>
+        </div>
+
+        <!-- 3. Per-DUF-field copy-paste table (kept here, this is what users actually use) -->
+        <div class="dcl-section" id="validate-duf-values-section">
+          <h3 data-i18n="submit.valuesTitle">📋 Valorile de introdus în formularul DUF pentru anul curent</h3>
+          <p class="subtitle" data-i18n="submit.valuesSubtitle">Aceste valori vin direct din calculele tool-ului nostru. Copiază-le în câmpurile corespunzătoare ale formularului web DUF în secțiunea „Venituri realizate".</p>
+          <div id="validate-duf-values"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- D212 Submission Guide Tab -->
     <section id="tab-submit" class="tab-content">
       <div class="card">
@@ -791,23 +846,9 @@
           <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;" data-i18n="submit.fbWarning">⚠️ Acest flux nu beneficiază de precompletarea automată DUF. Riscă să completezi greșit datele pe care ANAF le are deja (D205, D112). Recomandat doar dacă DUF nu funcționează pentru tine.</p>
         </div>
 
-        <div class="dcl-section" id="submit-duf-values-section">
-          <h3 data-i18n="submit.valuesTitle">📋 Valorile de introdus în formularul DUF pentru anul curent</h3>
-          <p class="subtitle" data-i18n="submit.valuesSubtitle">Aceste valori vin direct din calculele tool-ului nostru. Copiază-le în câmpurile corespunzătoare ale formularului web DUF în secțiunea „Venituri realizate".</p>
-          <div id="submit-duf-values"></div>
-        </div>
-
-        <div class="dcl-section" id="submit-duf-compare-section" style="border-left:3px solid var(--accent);padding-left:1rem;">
-          <h3 data-i18n="submit.compareTitle">🔍 Validare cu XML-ul de la DUF</h3>
-          <p class="subtitle" data-i18n="submit.compareSubtitle">Descarcă XML-ul din portalul DUF (cu datele tale precompletate) și încarcă-l aici. Comparăm rând cu rând ce știe ANAF cu ce calculăm noi din PDF-urile broker. Datele rămân local — nimic nu se salvează pe disc.</p>
-
-          <div id="submit-duf-dropzone" style="margin-top:0.75rem;border:2px dashed var(--border);border-radius:var(--radius);padding:1.5rem;text-align:center;cursor:pointer;transition:background 0.15s;">
-            <p style="margin:0;color:var(--text-muted);font-size:0.95rem;" data-i18n="submit.dropzoneHint">📁 Trage XML-ul aici sau click pentru a-l selecta</p>
-            <p style="margin:0.3rem 0 0;color:var(--text-muted);font-size:0.75rem;" data-i18n="submit.dropzoneSubhint">Acceptă fișiere .xml de maxim 5 MB. Doar parser în memorie — fișierul nu părăsește calculatorul.</p>
-            <input type="file" id="submit-duf-file-input" accept=".xml,application/xml,text/xml" style="display:none;">
-          </div>
-
-          <div id="submit-duf-compare-result" style="margin-top:1rem;"></div>
+        <div class="dcl-section" style="background:rgba(88,166,255,0.06);border-left:3px solid var(--accent);padding:0.75rem 1rem;border-radius:var(--radius);">
+          <h3 style="margin-top:0;" data-i18n="submit.crossRefValidate">🔬 Validare + Pregătire D212</h3>
+          <p data-i18n="submit.crossRefValidateText">Validarea cu XML-ul DUF și tabelul „Valori de introdus în DUF" au fost mutate în tab-ul <a href="#" id="submit-goto-validate" style="color:var(--accent);">🔬 Validare &amp; Pregătire D212</a> pentru a separa clar fluxul procedural (ghidul ăsta) de fluxul de lucru cu datele tale (validarea și pregătirea).</p>
         </div>
 
         <div class="dcl-section" style="background:rgba(255,193,7,0.08);border-left:3px solid var(--warning,#b35900);padding:0.75rem 1rem;border-radius:var(--radius);">

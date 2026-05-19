@@ -516,7 +516,20 @@ const App = (() => {
 
     if (tabName === 'raw') loadRawFiles();
     if (tabName === 'input') populateForm();
-    if (tabName === 'submit') renderSubmissionGuide();
+    if (tabName === 'submit') wireSubmitTabLinks();
+    if (tabName === 'validate') renderSubmissionGuide();
+  }
+
+  /** Wire the "Go to Validate & Prepare" link inside Submission Guide. */
+  function wireSubmitTabLinks() {
+    const link = document.getElementById('submit-goto-validate');
+    if (link && !link.dataset.wired) {
+      link.dataset.wired = '1';
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchTab('validate');
+      });
+    }
   }
 
   // ============ D212 SUBMISSION GUIDE TAB ============
@@ -531,7 +544,7 @@ const App = (() => {
    * and the user's keyboard.
    */
   function renderSubmissionGuide() {
-    const container = document.getElementById('submit-duf-values');
+    const container = document.getElementById('validate-duf-values');
     if (!container) return;
     const data = computeYearData(selectedYear);
     const fmtRON = (n) => Math.round(n || 0).toLocaleString('ro-RO') + ' RON';
@@ -677,6 +690,344 @@ const App = (() => {
 
     // Wire the DUF XML drop-zone (idempotent — replaces handlers each render)
     setupDufImportZone();
+    setupD205Editor();
+  }
+
+  // ============ D205 PER-PAYER MANUAL ENTRY + MATCHING ============
+  /**
+   * Per-year list of D205 entries the user manually transcribed from the
+   * portal's "Sursa informațiilor în detaliu → Toate sursele" dialog.
+   * Map<year, Array<{id, payerName, payerCif, category, grossRON, taxRON, regNumber?}>>.
+   * In-memory only — cleared on reload, by design (PII safety).
+   */
+  const _d205Entries = new Map();
+  function _getD205EntriesForYear(year) {
+    if (!_d205Entries.has(year)) _d205Entries.set(year, []);
+    return _d205Entries.get(year);
+  }
+
+  function setupD205Editor() {
+    const addBtn = document.getElementById('validate-d205-add');
+    const pasteBtn = document.getElementById('validate-d205-paste');
+    const clearBtn = document.getElementById('validate-d205-clear');
+    if (!addBtn || !pasteBtn || !clearBtn) return;
+    if (addBtn.dataset.wired === '1') {
+      _renderD205Table();
+      return;
+    }
+    addBtn.dataset.wired = '1';
+    addBtn.addEventListener('click', () => {
+      const list = _getD205EntriesForYear(selectedYear);
+      list.push({ id: 'd205-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), payerName: '', payerCif: '', category: '', grossRON: 0, taxRON: 0, regNumber: '' });
+      _renderD205Table();
+    });
+    pasteBtn.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        const added = _ingestD205Paste(text, selectedYear);
+        showToast(`${added} ${I18n.t('validate.d205PasteOk') || 'rânduri adăugate din clipboard'}`, added > 0 ? 'success' : 'error');
+        _renderD205Table();
+      } catch (err) {
+        showToast(err.message || (I18n.t('validate.d205PasteErr') || 'Eroare lipire clipboard'), 'error');
+      }
+    });
+    clearBtn.addEventListener('click', () => {
+      if (!confirm(I18n.t('validate.d205ClearConfirm') || 'Ștergi toate rândurile D205 pentru anul curent?')) return;
+      _d205Entries.set(selectedYear, []);
+      _renderD205Table();
+    });
+    _renderD205Table();
+  }
+
+  /**
+   * Ingest a tab-separated paste (typical when copying from a web table) and
+   * try to map columns by header keywords. Returns how many rows were added.
+   *
+   * Expected columns (any order, case-insensitive):
+   *   cod fiscal / cif / payer  → payerCif
+   *   nume / payer name         → payerName
+   *   categoria / cat            → category
+   *   venit brut / brut / suma   → grossRON
+   *   impozit                    → taxRON
+   *   numar inregistrare / nr    → regNumber
+   *
+   * If no header row is detected, falls back to a positional guess:
+   *   [regNumber?, date?, cif, name, category, ..., gross, tax, ...]
+   */
+  function _ingestD205Paste(text, year) {
+    if (!text || !text.trim()) return 0;
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return 0;
+    const list = _getD205EntriesForYear(year);
+    let added = 0;
+    // Detect a header row by looking for known keywords.
+    const headerRe = /\b(cod fiscal|cif|categori|venit brut|brut|impozit|platit)/i;
+    let hasHeader = headerRe.test(lines[0]);
+    let cols = null;
+    if (hasHeader) {
+      const header = lines[0].split(/\t|\s{2,}|;|,/).map((c) => c.trim().toLowerCase());
+      cols = {
+        cif: header.findIndex((h) => /cod fiscal|^cif$/.test(h)),
+        name: header.findIndex((h) => /nume firm|nume|denumire|payer/.test(h)),
+        cat: header.findIndex((h) => /categori|^cat$/.test(h)),
+        gross: header.findIndex((h) => /venit brut|brut|baza|suma/.test(h)),
+        tax: header.findIndex((h) => /impozit/.test(h)),
+        reg: header.findIndex((h) => /num.?r ?inreg|registratur|^nr$/.test(h)),
+      };
+    }
+    for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
+      const parts = lines[i].split(/\t|\s{2,}|;/).map((p) => p.trim());
+      if (parts.length < 3) continue;
+      let payerName, payerCif, category, grossRON, taxRON, regNumber;
+      if (cols) {
+        payerCif = cols.cif >= 0 ? (parts[cols.cif] || '') : '';
+        payerName = cols.name >= 0 ? (parts[cols.name] || '') : '';
+        category = cols.cat >= 0 ? (parts[cols.cat] || '').replace(/[^\d]/g, '') : '';
+        grossRON = cols.gross >= 0 ? _parsePasteNumber(parts[cols.gross]) : 0;
+        taxRON = cols.tax >= 0 ? _parsePasteNumber(parts[cols.tax]) : 0;
+        regNumber = cols.reg >= 0 ? (parts[cols.reg] || '') : '';
+      } else {
+        // Positional fallback: heuristic detect cif (long digits) + name (longest token).
+        const cifIdx = parts.findIndex((p) => /^\d{7,10}$/.test(p));
+        payerCif = cifIdx >= 0 ? parts[cifIdx] : '';
+        // Name = the longest non-numeric token after cif.
+        let nameCandidate = '';
+        for (let j = cifIdx + 1; j < parts.length; j++) {
+          if (/^\d/.test(parts[j])) continue;
+          if (parts[j].length > nameCandidate.length) nameCandidate = parts[j];
+        }
+        payerName = nameCandidate;
+        // Category = a 2-digit number near the name.
+        const catIdx = parts.findIndex((p) => /^\d{1,2}$/.test(p) && Number(p) > 0 && Number(p) < 60);
+        category = catIdx >= 0 ? parts[catIdx].padStart(2, '0') : '';
+        // Gross + tax: try to find the two largest numbers.
+        const nums = parts.map(_parsePasteNumber).filter((n) => n > 0).sort((a, b) => b - a);
+        grossRON = nums[0] || 0;
+        taxRON = nums[1] || 0;
+        regNumber = '';
+      }
+      if (!payerName && !payerCif && !grossRON) continue;
+      list.push({
+        id: 'd205-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + i,
+        payerName, payerCif, category, grossRON, taxRON, regNumber,
+      });
+      added++;
+    }
+    return added;
+  }
+
+  function _parsePasteNumber(s) {
+    if (!s) return 0;
+    const cleaned = String(s).replace(/[^\d,.\-]/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.');
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function _renderD205Table() {
+    const tableEl = document.getElementById('validate-d205-table');
+    const summaryEl = document.getElementById('validate-d205-match-summary');
+    if (!tableEl || !summaryEl) return;
+    const list = _getD205EntriesForYear(selectedYear);
+    if (list.length === 0) {
+      tableEl.innerHTML = `<p style="color:var(--text-muted);font-style:italic;font-size:0.9rem;">${esc(I18n.t('validate.d205Empty') || 'Niciun rând D205 introdus. Folosește butoanele de mai sus.')}</p>`;
+      summaryEl.innerHTML = '';
+      return;
+    }
+    let html = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);">
+        <th style="padding:0.4rem;text-align:left;">${esc(I18n.t('validate.d205Payer') || 'Plătitor')}</th>
+        <th style="padding:0.4rem;text-align:left;">${esc(I18n.t('validate.d205Cif') || 'CIF')}</th>
+        <th style="padding:0.4rem;text-align:left;">${esc(I18n.t('validate.d205Category') || 'Cod')}</th>
+        <th style="padding:0.4rem;text-align:right;">${esc(I18n.t('validate.d205Gross') || 'Venit brut (RON)')}</th>
+        <th style="padding:0.4rem;text-align:right;">${esc(I18n.t('validate.d205Tax') || 'Impozit (RON)')}</th>
+        <th style="padding:0.4rem;"></th>
+      </tr></thead><tbody>`;
+    for (const r of list) {
+      html += `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.3rem;"><input type="text" data-id="${esc(r.id)}" data-field="payerName" value="${esc(r.payerName)}" style="width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:0.25rem;border-radius:var(--radius);font-size:0.85rem;" placeholder="ex: XTB SA"></td>
+        <td style="padding:0.3rem;"><input type="text" data-id="${esc(r.id)}" data-field="payerCif" value="${esc(r.payerCif)}" style="width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:0.25rem;border-radius:var(--radius);font-size:0.85rem;" placeholder="ex: 24270192"></td>
+        <td style="padding:0.3rem;"><input type="text" data-id="${esc(r.id)}" data-field="category" value="${esc(r.category)}" style="width:60px;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:0.25rem;border-radius:var(--radius);font-size:0.85rem;" placeholder="09"></td>
+        <td style="padding:0.3rem;text-align:right;"><input type="number" step="any" data-id="${esc(r.id)}" data-field="grossRON" value="${esc(String(r.grossRON))}" style="width:120px;text-align:right;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:0.25rem;border-radius:var(--radius);font-variant-numeric:tabular-nums;font-size:0.85rem;"></td>
+        <td style="padding:0.3rem;text-align:right;"><input type="number" step="any" data-id="${esc(r.id)}" data-field="taxRON" value="${esc(String(r.taxRON || 0))}" style="width:100px;text-align:right;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:0.25rem;border-radius:var(--radius);font-variant-numeric:tabular-nums;font-size:0.85rem;"></td>
+        <td style="padding:0.3rem;text-align:center;"><button type="button" data-id="${esc(r.id)}" class="d205-row-delete" style="background:transparent;border:0;color:var(--danger,#c53030);cursor:pointer;font-size:1rem;">🗑</button></td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+    tableEl.innerHTML = html;
+
+    // Wire inputs
+    tableEl.querySelectorAll('input').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const row = list.find((x) => x.id === inp.dataset.id);
+        if (!row) return;
+        const f = inp.dataset.field;
+        if (f === 'grossRON' || f === 'taxRON') row[f] = parseFloat(inp.value) || 0;
+        else row[f] = inp.value;
+        _renderD205MatchSummary();
+      });
+    });
+    tableEl.querySelectorAll('.d205-row-delete').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = list.findIndex((x) => x.id === btn.dataset.id);
+        if (idx >= 0) list.splice(idx, 1);
+        _renderD205Table();
+      });
+    });
+    _renderD205MatchSummary();
+  }
+
+  /** Render the match table below the editor — calls the inline matcher. */
+  function _renderD205MatchSummary() {
+    const summaryEl = document.getElementById('validate-d205-match-summary');
+    if (!summaryEl) return;
+    const list = _getD205EntriesForYear(selectedYear);
+    if (list.length === 0) {
+      summaryEl.innerHTML = '';
+      return;
+    }
+    const yd = appData.years?.[selectedYear] || {};
+    const result = _d205MatchInline(list, yd);
+    const fmt = (n) => Math.round(n || 0).toLocaleString('ro-RO') + ' RON';
+    const badge = (status) => {
+      const cfg = {
+        'matched-exact':   { c: 'var(--success)',                t: '✓ Match exact' },
+        'matched-amount':  { c: 'var(--warning,#b35900)',         t: '≈ Match (≈)' },
+        'possible':        { c: 'var(--accent)',                  t: '❓ Posibil' },
+        'unmatched-anaf':  { c: 'var(--danger,#c53030)',          t: '🆕 Doar ANAF' },
+        'unmatched-local': { c: 'var(--text-muted)',              t: '⚠ Doar local' },
+      }[status] || { c: 'var(--text-muted)', t: status };
+      return `<span style="background:${cfg.c};color:#fff;font-size:0.7rem;padding:0.15rem 0.5rem;border-radius:var(--radius);white-space:nowrap;">${esc(cfg.t)}</span>`;
+    };
+
+    let html = `<div style="background:var(--bg-secondary);padding:0.5rem 1rem;border-radius:var(--radius);font-size:0.85rem;margin-bottom:0.5rem;">
+      <strong>${esc(I18n.t('validate.d205MatchSummary') || 'Rezumat potrivire:')}</strong>
+      ${result.totals.exactCount} ${esc(I18n.t('validate.d205Exact') || 'exact')} · ${result.totals.nearCount} ${esc(I18n.t('validate.d205Near') || 'aproape')} · ${result.totals.possibleCount} ${esc(I18n.t('validate.d205Possible') || 'posibil')} · ${result.totals.unmatchedAnafCount} ${esc(I18n.t('validate.d205OnlyAnaf') || 'doar ANAF')} · ${result.totals.unmatchedLocalCount} ${esc(I18n.t('validate.d205OnlyLocal') || 'doar local')}
+    </div>`;
+    if (result.matches.length > 0) {
+      html += `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+        <thead><tr style="border-bottom:1px solid var(--border);background:var(--bg-secondary);color:var(--text-muted);">
+          <th style="padding:0.35rem;text-align:left;">ANAF</th>
+          <th style="padding:0.35rem;text-align:right;">${esc(fmt(0).replace('0', I18n.t('validate.d205AnafGross') || 'Sumă ANAF'))}</th>
+          <th style="padding:0.35rem;text-align:left;">Local</th>
+          <th style="padding:0.35rem;text-align:right;">${esc(I18n.t('validate.d205LocalGross') || 'Sumă local')}</th>
+          <th style="padding:0.35rem;text-align:center;">${esc(I18n.t('submit.colStatus') || 'Stare')}</th>
+        </tr></thead><tbody>`;
+      for (const m of result.matches) {
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.35rem;"><strong>${esc(m.anaf.payerName || '?')}</strong> · cat ${esc(m.anaf.category || '?')}${m.anaf.broker ? ` · <small>(${esc(m.anaf.broker)})</small>` : ''}${m.hint ? `<br><small style="color:var(--text-muted);">${esc(m.hint)}</small>` : ''}</td>
+          <td style="padding:0.35rem;text-align:right;font-variant-numeric:tabular-nums;">${esc(fmt(m.anaf.grossRON))}</td>
+          <td style="padding:0.35rem;">${m.local ? `<strong>${esc(m.local.broker)}</strong> · ${esc(m.local.label)} <small style="color:var(--text-muted);">(${esc(m.local.source)})</small>` : '—'}</td>
+          <td style="padding:0.35rem;text-align:right;font-variant-numeric:tabular-nums;">${m.local ? esc(fmt(m.local.grossRON)) : '—'}</td>
+          <td style="padding:0.35rem;text-align:center;">${badge(m.status)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+    if (result.unmatchedLocal.length > 0) {
+      html += `<details style="border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem 0.75rem;background:rgba(255,193,7,0.04);">
+        <summary style="cursor:pointer;font-size:0.85rem;font-weight:500;">⚠ ${result.unmatchedLocal.length} ${esc(I18n.t('validate.d205UnmatchedLocalSummary') || 'surse locale fără potrivire ANAF')}</summary>
+        <ul style="margin:0.5rem 0 0;padding-left:1.2rem;font-size:0.8rem;">`;
+      for (const u of result.unmatchedLocal) {
+        html += `<li><strong>${esc(u.broker)}</strong> · ${esc(u.label)} · ${esc(fmt(u.grossRON))} — <small style="color:var(--text-muted);">${esc(u.hint || '')}</small></li>`;
+      }
+      html += `</ul></details>`;
+    }
+    summaryEl.innerHTML = html;
+  }
+
+  /**
+   * Inline mirror of lib/d205-matcher.js — see that file for full docs.
+   * Kept in sync; lib is canonical and tested.
+   */
+  function _d205MatchInline(d205Entries, yd) {
+    const MATCH_EPS = 1, NEAR_ABS = 50, NEAR_REL = 0.005;
+    const norm = (s) => !s ? '' : String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+      .replace(/\b(s\.?\s?a\.?|s\.?\s?r\.?\s?l\.?|n\.?\s?v\.?)\b/g, ' ')
+      .replace(/\b(sa|srl|nv|sucursala|bucuresti|romania|amsterdam|warsaw|varsovia|partners|trust|group)\b/g, ' ')
+      .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const fps = [
+      [/^xtb\b|xtrade brokers/, 'XTB'], [/^bt capital|bt securities/, 'BT Capital'],
+      [/tradeville/, 'Tradeville'], [/goldring/, 'Goldring'],
+      [/^ing\b/, 'ING Bank'], [/^salt\b/, 'SALT Bank'], [/^bcr\b/, 'BCR'],
+      [/^bt\b|banca transilvania/, 'Banca Transilvania'],
+      [/raiffeisen/, 'Raiffeisen'], [/unicredit/, 'UniCredit'],
+    ];
+    const identifyBroker = (name) => {
+      const n = norm(name); if (!n) return null;
+      for (const [re, label] of fps) if (re.test(n)) return label;
+      return null;
+    };
+    const local = [];
+    if (yd && yd.xtbDividendsReport) {
+      const d = yd.xtbDividendsReport;
+      if (d.dividends && d.dividends.grossRON > 0) local.push({ broker: 'XTB', category: '20', label: 'Dividende', grossRON: d.dividends.grossRON, taxRON: d.dividends.taxWithheldRON || 0, source: 'xtbDividendsReport.dividends' });
+      if (d.interest && d.interest.grossRON > 0) local.push({ broker: 'XTB', category: '09', label: 'Dobânzi', grossRON: d.interest.grossRON, taxRON: d.interest.taxWithheldRON || 0, source: 'xtbDividendsReport.interest' });
+    }
+    for (const [src, key] of [['XTB', 'xtbPortfolio'], ['Tradeville', 'tradevillePortfolio']]) {
+      const p = yd && yd[key]; if (!p || !Array.isArray(p.countries)) continue;
+      let lg = 0, lt = 0, sg = 0, st = 0;
+      for (const c of p.countries) {
+        lg += (c.longGainRON || c.longGain || 0) - (c.longLossRON || c.longLoss || 0);
+        lt += c.longTaxRON || c.longTax || 0;
+        sg += (c.shortGainRON || c.shortGain || 0) - (c.shortLossRON || c.shortLoss || 0);
+        st += c.shortTaxRON || c.shortTax || 0;
+      }
+      if (lg > 0 || lt > 0) local.push({ broker: src, category: '26', label: 'Capgains ≥1y', grossRON: lg, taxRON: lt, source: `${key}.long` });
+      if (sg > 0 || st > 0) local.push({ broker: src, category: '27', label: 'Capgains <1y', grossRON: sg, taxRON: st, source: `${key}.short` });
+    }
+    const pool = local.map((l) => ({ ...l, _matched: false }));
+    const matches = [];
+    for (const a of d205Entries) {
+      const aGross = Number(a.grossRON) || 0;
+      const aBroker = identifyBroker(a.payerName);
+      const aCat = String(a.category || '');
+      let best = null, status = null, delta = null;
+      for (const l of pool) {
+        if (l._matched || l.broker !== aBroker || l.category !== aCat) continue;
+        const d = Math.abs((l.grossRON || 0) - aGross);
+        if (d <= MATCH_EPS) { best = l; status = 'matched-exact'; delta = d; break; }
+      }
+      if (!best) for (const l of pool) {
+        if (l._matched || l.broker !== aBroker || l.category !== aCat) continue;
+        const d = Math.abs((l.grossRON || 0) - aGross);
+        const denom = Math.max(Math.abs(l.grossRON || 0), Math.abs(aGross), 1);
+        if (d <= NEAR_ABS || d / denom <= NEAR_REL) { best = l; status = 'matched-amount'; delta = d; break; }
+      }
+      if (!best) for (const l of pool) {
+        if (l._matched || l.category !== aCat) continue;
+        const d = Math.abs((l.grossRON || 0) - aGross);
+        const denom = Math.max(Math.abs(l.grossRON || 0), Math.abs(aGross), 1);
+        if (d <= NEAR_ABS || d / denom <= NEAR_REL) { best = l; status = 'possible'; delta = d; break; }
+      }
+      if (best) {
+        best._matched = true;
+        matches.push({
+          anaf: { ...a, broker: aBroker },
+          local: best,
+          status, delta,
+          hint: status === 'matched-exact' ? null
+              : status === 'matched-amount' ? `Diferență mică (~${Math.round(delta)} RON) — probabil rotunjire.`
+              : `Posibil match prin categorie + sumă, dar plătitorul nu a putut fi identificat sigur.`,
+        });
+      } else {
+        matches.push({
+          anaf: { ...a, broker: aBroker }, local: null, status: 'unmatched-anaf', delta: null,
+          hint: `ANAF a primit D205 de la "${a.payerName}" pentru categoria ${aCat} (${aGross.toLocaleString('ro-RO')} RON), dar nu avem date locale care să acopere această sumă. Importă PDF-ul broker/banca corespunzător sau adaugă-l în „Adaugă date".`,
+        });
+      }
+    }
+    const unmatchedLocal = pool.filter((l) => !l._matched).map(({ _matched, ...rest }) => ({
+      ...rest, status: 'unmatched-local',
+      hint: `Avem date locale (${rest.broker} · ${rest.label} · ${Math.round(rest.grossRON || 0).toLocaleString('ro-RO')} RON) dar nu apare D205 corespunzător la ANAF.`,
+    }));
+    const totals = {
+      exactCount: matches.filter((m) => m.status === 'matched-exact').length,
+      nearCount: matches.filter((m) => m.status === 'matched-amount').length,
+      possibleCount: matches.filter((m) => m.status === 'possible').length,
+      unmatchedAnafCount: matches.filter((m) => m.status === 'unmatched-anaf').length,
+      unmatchedLocalCount: unmatchedLocal.length,
+    };
+    return { matches, unmatchedLocal, totals };
   }
 
   // ============ DUF XML IMPORT + VALIDATION ============
@@ -714,8 +1065,8 @@ const App = (() => {
   }
 
   function setupDufImportZone() {
-    const dz = document.getElementById('submit-duf-dropzone');
-    const input = document.getElementById('submit-duf-file-input');
+    const dz = document.getElementById('validate-duf-dropzone');
+    const input = document.getElementById('validate-duf-file-input');
     if (!dz || !input) return;
 
     // Avoid double-binding when renderSubmissionGuide is called again
@@ -788,7 +1139,7 @@ const App = (() => {
 
   /** Render the comparison table below the dropzone for the current year. */
   function _renderDufCompare() {
-    const out = document.getElementById('submit-duf-compare-result');
+    const out = document.getElementById('validate-duf-compare-result');
     if (!out) return;
     const entry = _dufImports.get(selectedYear);
     if (!entry) {
