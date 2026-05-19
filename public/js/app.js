@@ -4851,12 +4851,13 @@ const App = (() => {
         out.fidelityGains = { formatted: fmtUSDv(totalProceeds) + ' (' + parsed.sales.length + ' sales)' };
       }
     } else if (uploadType === 'form_1042s') {
-      if (parsed.grossIncomeUSD) {
-        out.fidelityDividends = { formatted: fmtUSDv(parsed.grossIncomeUSD) };
-      }
-      if (parsed.federalTaxWithheldUSD) {
-        out.usDivTaxPaid = { formatted: fmtUSDv(parsed.federalTaxWithheldUSD) };
-      }
+      // Sum all forms in the batch: 1042-S PDFs commonly carry 2+ forms
+      // (e.g. one for interest code 01, one for dividends code 06).
+      const forms = (parsed && Array.isArray(parsed.forms)) ? parsed.forms : (parsed && parsed.grossIncomeUSD != null ? [parsed] : []);
+      const totalGross = forms.reduce((s, f) => s + (Number(f.grossIncomeUSD) || 0), 0);
+      const totalTax = forms.reduce((s, f) => s + (Number(f.federalTaxWithheldUSD) || 0), 0);
+      if (totalGross) out.fidelityDividends = { formatted: fmtUSDv(totalGross) + (forms.length > 1 ? ` (${forms.length} forms)` : '') };
+      if (totalTax) out.usDivTaxPaid = { formatted: fmtUSDv(totalTax) + (forms.length > 1 ? ` (${forms.length} forms)` : '') };
     } else if (uploadType === 'stock_award') {
       if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
         const totalBik = parsed.rows.reduce((s, r) => s + (parseFloat(r.stock_award_bik) || 0) + (parseFloat(r.espp_gain_bik) || 0), 0);
@@ -5139,13 +5140,24 @@ const App = (() => {
             </div>`;
           }
         } else if (result.type === 'form_1042s') {
-          const p = result.parsed;
-          resultHtml += `<div style="margin-top:0.5rem;">
-            <p><strong>Form 1042-S</strong> - ${esc(p.incomeType)} (code ${esc(p.incomeCode)})</p>
-            <p>Gross Income: <strong>$${p.grossIncomeUSD?.toFixed(2)}</strong> | Tax Rate: ${p.taxRate}% | Tax Withheld: <strong>$${p.federalTaxWithheldUSD?.toFixed(2)}</strong></p>
-            <p>Agent: ${esc(p.withholdingAgent)} | Recipient: ${esc(p.recipientName)} (${esc(p.recipientCountry)})</p>
-            ${result.isDuplicate ? '<p style="color:var(--warning)">\u26a0 Duplicate detected (same form identifier already imported)</p>' : ''}
-          </div>`;
+          // result.parsed is now {forms: [...]} (refactored to support PDFs that
+          // bundle multiple distinct 1042-S forms — one per income code).
+          const forms = (result.parsed && result.parsed.forms) || (result.forms || []);
+          if (forms.length === 0) {
+            resultHtml += `<p style="color:var(--warning);margin-top:0.5rem;">⚠ Nu am extras nicio formă 1042-S din PDF.</p>`;
+          } else {
+            const fmtN = (n) => Number(n || 0).toFixed(2);
+            resultHtml += `<div style="margin-top:0.5rem;">
+              <p><strong>Form 1042-S</strong> — ${forms.length} ${forms.length === 1 ? 'formă' : 'forme'} extrase${result.duplicates ? ` (${result.duplicates} duplicate${result.duplicates === 1 ? '' : 's'} ignorate)` : ''}</p>`;
+            for (const p of forms) {
+              resultHtml += `<div style="margin-left:0.5rem;padding:0.4rem 0.5rem;border-left:2px solid var(--border);margin-bottom:0.35rem;">
+                <p style="margin:0;"><strong>${esc(p.incomeType)}</strong> (code ${esc(p.incomeCode)}) — UID <code>${esc(p.uniqueFormId || '?')}</code></p>
+                <p style="margin:0;font-size:0.9em;">Gross Income: <strong>$${fmtN(p.grossIncomeUSD)}</strong> · Tax Rate: ${p.taxRate}% · Tax Withheld: <strong>$${fmtN(p.federalTaxWithheldUSD)}</strong></p>
+                <p style="margin:0;font-size:0.85em;color:var(--text-muted);">Agent: ${esc(p.withholdingAgent)} · Recipient: ${esc(p.recipientName)} (${esc(p.recipientCountry)})</p>
+              </div>`;
+            }
+            resultHtml += `</div>`;
+          }
         } else if (result.type === 'fidelity_statement') {
           const p = result.parsed || {};
           const parts = [];

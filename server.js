@@ -828,21 +828,29 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
     }
 
-    // Form 1042-S (US tax withholding on foreign person's income)
+    // Form 1042-S (US tax withholding on foreign person's income).
+    // A single PDF can contain multiple distinct forms (one per income code)
+    // each printed across 3 copies (A/B/C). parseForm1042S returns a deduped
+    // {forms: [...]} array; we then dedup again against the year's existing
+    // stored forms by uniqueFormId.
     if (type === 'form_1042s') {
       const parsed = parseForm1042S(text, parsedYear);
+      const forms = (parsed && parsed.forms) || [];
       if (dryRun) {
         return res.json({ success: true, dryRun, year: parsedYear, type, parsed });
       }
       const yearData = db.getYearData(parsedYear) || { year: parsedYear };
       if (!yearData.form1042s) yearData.form1042s = [];
-      // Dedup by unique form identifier
-      const isDuplicate = parsed.uniqueFormId && yearData.form1042s.some(f => f.uniqueFormId === parsed.uniqueFormId);
-      if (!isDuplicate) {
-        yearData.form1042s.push(parsed);
+      let added = 0;
+      let duplicates = 0;
+      for (const f of forms) {
+        const isDup = f.uniqueFormId && yearData.form1042s.some(x => x.uniqueFormId === f.uniqueFormId);
+        if (isDup) { duplicates++; continue; }
+        yearData.form1042s.push(f);
+        added++;
       }
       db.setYearData(parsedYear, yearData);
-      return res.json({ success: true, year: parsedYear, type, parsed, isDuplicate });
+      return res.json({ success: true, year: parsedYear, type, parsed, forms, added, duplicates });
     }
 
     // Morgan Stanley Stock Plan Statement (yearly)
@@ -1999,73 +2007,120 @@ function parseMSStatement(text, year) {
 // XTB Romania parsers (parseXtbDividends, parseXtbPortfolio) and detectCurrency
 // live in ./lib/parsers/xtb.js (imported at the top of this file).
 
-// Parse IRS Form 1042-S (Foreign Person's U.S. Source Income Subject to Withholding)
+// Parse IRS Form 1042-S (Foreign Person's U.S. Source Income Subject to Withholding).
+//
+// The PDF that NFS/Fidelity emits to the recipient typically contains MULTIPLE
+// distinct forms (one per income code) and EACH form is printed THREE times
+// for Copy A / B / C. A previous version of this parser captured only the first
+// match for every field; that meant a PDF with two income codes (e.g. 01 Interest
+// AND 06 Dividends) silently dropped the second one.
+//
+// This function now returns `{forms: [...]}` where every element is a self-
+// contained form record with the same shape as the original single-result. The
+// caller dedups by uniqueFormId across the file (so the three copies collapse
+// to one entry) and across prior imports.
 function parseForm1042S(text, year) {
-  const result = {
-    year,
-    source: 'IRS Form 1042-S',
-    uniqueFormId: '',
-    incomeCode: '',
-    incomeType: '',
-    grossIncomeUSD: 0,
-    taxRate: 0,
-    federalTaxWithheldUSD: 0,
-    totalWithholdingCreditUSD: 0,
-    withholdingAgent: '',
-    recipientName: '',
-    recipientCountry: '',
-    accountNumber: ''
-  };
+  // Find every UNIQUE FORM IDENTIFIER occurrence + the offset right after it.
+  // Each match marks the START of a copy of a form; we slice from there to
+  // the next UID (or end of text) and parse that slice as a single form.
+  const uidRe = /UNIQUE FORM IDENTIFIER[\s\n]+(\d(?: \d)+)/gi;
+  const segments = [];
+  let m;
+  const starts = [];
+  while ((m = uidRe.exec(text)) !== null) {
+    starts.push({ uid: m[1].replace(/\s/g, ''), at: m.index });
+  }
+  if (starts.length === 0) {
+    // No UID anchors — fall back to the whole text as one segment so we still
+    // attempt extraction. This matches the legacy behavior for non-NFS layouts.
+    segments.push({ uid: '', slice: text });
+  } else {
+    for (let i = 0; i < starts.length; i++) {
+      const end = i + 1 < starts.length ? starts[i + 1].at : text.length;
+      segments.push({ uid: starts[i].uid, slice: text.slice(starts[i].at, end) });
+    }
+  }
 
-  // Unique form identifier (spaced digits on a single line after UNIQUE FORM IDENTIFIER)
-  const uidMatch = text.match(/UNIQUE FORM IDENTIFIER[\s\n]+(\d(?: \d)+)/i);
-  if (uidMatch) result.uniqueFormId = uidMatch[1].replace(/\s/g, '');
-
-  // Income code (1 or 2 digit code after "1 Income\ncode")
-  const icMatch = text.match(/1 Income\s*\n?code\s*\n?(\d{2})/i);
-  if (icMatch) result.incomeCode = icMatch[1];
-  // Map common income codes
   const incomeCodes = { '01': 'Interest', '06': 'Dividends', '15': 'Pensions', '27': 'Capital Gains', '34': 'Substitute dividends' };
-  result.incomeType = incomeCodes[result.incomeCode] || 'Other (' + result.incomeCode + ')';
+  const formsByUid = new Map();
 
-  // Gross income (the first dollar amount after "2 Gross income")
-  const giMatch = text.match(/2 Gross income\s*\n?([\d,]+\.\d{2})/i);
-  if (giMatch) result.grossIncomeUSD = parseNumber(giMatch[1]);
+  for (const seg of segments) {
+    const t = seg.slice;
+    const f = {
+      year,
+      source: 'IRS Form 1042-S',
+      uniqueFormId: seg.uid,
+      incomeCode: '',
+      incomeType: '',
+      grossIncomeUSD: 0,
+      taxRate: 0,
+      federalTaxWithheldUSD: 0,
+      totalWithholdingCreditUSD: 0,
+      withholdingAgent: '',
+      recipientName: '',
+      recipientCountry: '',
+      accountNumber: '',
+    };
 
-  // Tax rate: prefer 3b (withholding rate applied to income)
-  const trMatch = text.match(/3b Tax rate\s+(\d+\.\d+)/i);
-  if (trMatch) result.taxRate = parseFloat(trMatch[1]);
+    const icMatch = t.match(/1 Income\s*\n?code\s*\n?(\d{2})/i);
+    if (icMatch) f.incomeCode = icMatch[1];
+    f.incomeType = incomeCodes[f.incomeCode] || ('Other (' + f.incomeCode + ')');
 
-  // Federal tax withheld (field 7a)
-  // The amounts appear as a block of numbers after the form fields
-  // Pattern: after "COPY B" or before page break, find the numeric block
-  const numBlock = text.match(/1 9 7 4 1 2[\s\d]+\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)/);
-  if (numBlock) {
-    // Fields: 5=withholding allowance, 6=net income, 7a=fed tax withheld, 8=tax by other, 9=overwithholding, 10=total credit
-    result.federalTaxWithheldUSD = parseFloat(numBlock[3]) || 0;
-    result.totalWithholdingCreditUSD = parseFloat(numBlock[6]) || 0;
+    const giMatch = t.match(/2 Gross income\s*\n?([\d,]+\.\d{2})/i);
+    if (giMatch) f.grossIncomeUSD = parseNumber(giMatch[1]);
+
+    const trMatch = t.match(/3b Tax rate\s+(\d+\.\d+)/i);
+    if (trMatch) f.taxRate = parseFloat(trMatch[1]);
+
+    // Federal tax withheld: try the numeric block pattern first (consistent on
+    // NFS-rendered copies), then fall back to a label search.
+    const numBlock = t.match(/1 9 7 4 1 2[\s\d]+\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)\n([\d.]+)/);
+    if (numBlock) {
+      f.federalTaxWithheldUSD = parseFloat(numBlock[3]) || 0;
+      f.totalWithholdingCreditUSD = parseFloat(numBlock[6]) || 0;
+    }
+    if (!f.federalTaxWithheldUSD) {
+      const ftMatch = t.match(/7a Federal tax withheld[\s\S]*?(\d+\.\d{2})/i);
+      if (ftMatch) f.federalTaxWithheldUSD = parseFloat(ftMatch[1]) || 0;
+    }
+
+    const waMatch = t.match(/12d Withholding agent.+name\s*\n(.+)/i);
+    if (waMatch) f.withholdingAgent = waMatch[1].trim();
+
+    const rnMatch = t.match(/13a Recipient.+name\s*\n(.+)/i);
+    if (rnMatch) f.recipientName = rnMatch[1].trim();
+
+    const rcMatch = t.match(/13b Recipient.+country code\s*\n?(\w+)/i);
+    if (rcMatch) f.recipientCountry = rcMatch[1].trim();
+
+    const acMatch = t.match(/13k Recipient.+account number\s*\n?([\w-]+)/i);
+    if (acMatch) f.accountNumber = acMatch[1].trim();
+
+    // Skip segments where we extracted nothing useful — those are usually
+    // accompanying instruction pages, not actual form data.
+    if (!f.incomeCode && f.grossIncomeUSD === 0 && !f.uniqueFormId) continue;
+
+    // Within a single import, collapse the 3 copies (A/B/C) of the same form
+    // by keeping the first parse that populated the most fields.
+    const key = f.uniqueFormId || `noid-${f.incomeCode}-${f.grossIncomeUSD}`;
+    const existing = formsByUid.get(key);
+    if (!existing) {
+      formsByUid.set(key, f);
+    } else {
+      // Merge: prefer non-zero / non-empty values from the new segment.
+      const merged = { ...existing };
+      for (const k of Object.keys(f)) {
+        const cur = merged[k];
+        const next = f[k];
+        const curEmpty = cur === '' || cur === 0 || cur == null;
+        const nextNonEmpty = !(next === '' || next === 0 || next == null);
+        if (curEmpty && nextNonEmpty) merged[k] = next;
+      }
+      formsByUid.set(key, merged);
+    }
   }
-  // Fallback: try to find "7a Federal tax withheld" followed by amount
-  if (!result.federalTaxWithheldUSD) {
-    const ftMatch = text.match(/7a Federal tax withheld[\s\S]*?(\d+\.\d{2})/i);
-    if (ftMatch) result.federalTaxWithheldUSD = parseFloat(ftMatch[1]) || 0;
-  }
 
-  // Withholding agent
-  const waMatch = text.match(/12d Withholding agent.+name\s*\n(.+)/i);
-  if (waMatch) result.withholdingAgent = waMatch[1].trim();
-
-  // Recipient
-  const rnMatch = text.match(/13a Recipient.+name\s*\n(.+)/i);
-  if (rnMatch) result.recipientName = rnMatch[1].trim();
-
-  const rcMatch = text.match(/13b Recipient.+country code\s*\n?(\w+)/i);
-  if (rcMatch) result.recipientCountry = rcMatch[1].trim();
-
-  const acMatch = text.match(/13k Recipient.+account number\s*\n?([\w-]+)/i);
-  if (acMatch) result.accountNumber = acMatch[1].trim();
-
-  return result;
+  return { forms: Array.from(formsByUid.values()) };
 }
 
 // parseXtbPortfolio is imported from ./lib/parsers/xtb.js at the top of this file.
